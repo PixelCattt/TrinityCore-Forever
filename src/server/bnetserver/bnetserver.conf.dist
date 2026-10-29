@@ -80,6 +80,16 @@ LoginREST.LocalAddress=127.0.0.1
 LoginREST.TicketDuration=3600
 
 #
+#    Realm.AlsoAcceptBuilds
+#        Description: Comma-separated client builds that every realm also lists for and lets in, besides its own
+#                     realmlist.gamebuild. Use it only for builds with the same game data and protocol as the realm's
+#                     build; each one also needs a row in auth.build_info.
+#        Example:     "70634,70630,70532" (a realm on 70658 that older clients may also join)
+#        Default:     "" - (only the realm's own build)
+
+Realm.AlsoAcceptBuilds = ""
+
+#
 #
 #    BindIP
 #        Description: Bind auth server to IP/hostname
@@ -147,6 +157,31 @@ ProcessPriority = 0
 #                     0  - (Disabled)
 
 RealmsStateUpdateDelay = 10
+
+#
+#    Network.ConnectionsPerIp
+#        Description: Open Battle.net connections allowed from one address. Connections from this PC (127.0.0.1) are never
+#                     limited. Raise it when many players share one internet address (LAN party, one household).
+#        Default:     16
+#                     0 - (No limit)
+
+Network.ConnectionsPerIp = 16
+
+#
+#    Network.HandshakeTimeout
+#        Description: Seconds a new connection has to finish the TLS handshake before it is closed.
+#        Default:     30
+#                     0 - (No limit)
+
+Network.HandshakeTimeout = 30
+
+#
+#    Network.LoginTimeout
+#        Description: Seconds a connection has to log in before it is closed.
+#        Default:     600
+#                     0 - (No limit)
+
+Network.LoginTimeout = 600
 
 #
 #    WrongPass.MaxCount

@@ -2,8 +2,14 @@
 
 ## This fork: WoW Classic beta 1.60.1.70338 ("Forever")
 
+> **Not an official TrinityCore branch.** This is a community fork run by the Forever project. It is not made, supported or
+> endorsed by the TrinityCore team, and it is up to them whether they support it or take any of it upstream. Please don't
+> ask the TrinityCore team for help with this fork: questions and bug reports go to the
+> [Forever Discord](https://discord.gg/9GdBGrWPfj).
+
 Branch `forever` runs TrinityCore master against the **WoW Classic beta client 1.60.1.70338** (`_classic_beta_\WowB.exe`)
 with a vanilla world (converted from VMaNGOS) and the Skyborne / Zephras Isle content.
+Preliminary support for client 1.60.1.70450: see [doc/Classic70450.md](doc/Classic70450.md).
 
 **Just want to play?** Use the Windows repack from the releases: extract, run `Setup.bat`, start the servers in the
 Forever Launcher, press Play. No MySQL or compiling needed.
@@ -191,4 +197,4 @@ Read file [AUTHORS](AUTHORS).
 * [Website](https://www.trinitycore.org)
 * [Wiki](https://www.trinitycore.info)
 * [Forums](https://talk.trinitycore.org/)
-* [Discord](https://discord.trinitycore.org/)
+* [Discord (Forever)](https://discord.gg/9GdBGrWPfj)

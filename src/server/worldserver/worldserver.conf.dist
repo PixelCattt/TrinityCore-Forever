@@ -3197,6 +3197,24 @@ Network.SkipBuildAuthKeyCheck = 0
 Network.EnterEncryptedModeDelay = 1500
 
 #
+#    Network.ConnectionsPerIp
+#        Description: Open game connections allowed from one address. A player uses two (realm and instance). Connections
+#                     from this PC (127.0.0.1) are never limited. Raise it when many players share one internet address
+#                     (LAN party, one household).
+#        Default:     16
+#                     0 - (No limit)
+
+Network.ConnectionsPerIp = 16
+
+#
+#    Network.AuthTimeout
+#        Description: Seconds a new game connection has to log in before it is closed.
+#        Default:     60
+#                     0 - (No limit)
+
+Network.AuthTimeout = 60
+
+#
 ###################################################################################################
 
 ###################################################################################################
@@ -4646,6 +4664,14 @@ Classic.OfficialFeatureFlags = 1
 #                     0 - (Disabled)
 
 Classic.MountIndoorsRules = 1
+
+#    Classic.SecuredBagSlotsForAll
+#        Description: Every account gets the 4 extra backpack slots (and no "attach an Authenticator" prompt) that the
+#                     client otherwise shows locked until the Battle.net account has an authenticator.
+#        Default:     1 - (Enabled)
+#                     0 - (Disabled, only accounts with an authenticator)
+
+Classic.SecuredBagSlotsForAll = 1
 
 #    Classic.Shop.Enabled
 #        Description: In-game Store: shop points, products from world.shop_* (.shop reload), the Gold Market, character

@@ -16,6 +16,7 @@
  */
 
 #include "DB2Stores.h"
+#include "ByteBuffer.h"
 #include "ClassicOpcodes.h"
 #include "Containers.h"
 #include "DB2LoadInfo.h"
@@ -1818,6 +1819,27 @@ void DB2Manager::LoadHotfixData(uint32 localeMask)
         hotfixRecord.RecordID = recordId;
         hotfixRecord.ID.PushID = id;
         hotfixRecord.ID.UniqueID = uniqueId;
+        // the client keeps a hotfix it has cached under the same push and unique id, so a record whose content changed
+        // (an item name that used to go out empty in ruRU) never reached it: mix the content into the unique id
+        if (status == HotfixRecord::Status::Valid)
+        {
+            auto storeItr = _stores.find(tableHash);
+            if (storeItr != _stores.end() && storeItr->second->HasRecord(uint32(recordId)))
+            {
+                Trinity::HashFnv1a<uint32> contentHash;
+                contentHash.UpdateData(uniqueId);
+                for (std::size_t locale = 0; locale < TOTAL_LOCALES; ++locale)
+                {
+                    if (!availableDb2Locales[locale])
+                        continue;
+
+                    ByteBuffer content;
+                    storeItr->second->WriteRecord(uint32(recordId), LocaleConstant(locale), content);
+                    contentHash.UpdateData(std::span<uint8 const>(content.data(), content.size()));
+                }
+                hotfixRecord.ID.UniqueID = contentHash.Value;
+            }
+        }
         hotfixRecord.HotfixStatus = status;
         hotfixRecord.AvailableLocalesMask = availableDb2Locales.to_ulong();
 

@@ -19,6 +19,7 @@
 #include "DB2Stores.h"
 #include "FlatSet.h"
 #include "IteratorPair.h"
+#include "Log.h"
 #include "MapUtils.h"
 #include "TraitPacketsCommon.h"
 #include "UpdateFields.h"
@@ -257,6 +258,53 @@ void Load()
             continue;
 
         right->ParentNodes.emplace_back(left, static_cast<TraitEdgeType>(traitEdgeEntry->Type));
+    }
+
+    // Some trees have edges both ways between two nodes (Classic 1.60.1.70532: Nature's Majesty and Nature's Splendor, the first
+    // requiring the second and a visual edge back). Each node then waits on the other and neither can ever be learned. Keep one
+    // direction per pair: the stronger edge type, or for equal types the edge that points down the tree (lower PosY to higher).
+    auto edgeStrength = [](TraitEdgeType type)
+    {
+        switch (type)
+        {
+            case TraitEdgeType::RequiredForAvailability: return 2;
+            case TraitEdgeType::SufficientForAvailability: return 1;
+            default: return 0;
+        }
+    };
+    std::vector<std::pair<Node*, Node const*>> backEdges; // child, parent whose edge into child is dropped
+    for (auto& [nodeId, node] : _traitNodes)
+    {
+        for (auto const& [parent, type] : node.ParentNodes)
+        {
+            if (parent->Data->ID >= node.Data->ID)
+                continue; // each pair once
+
+            auto reverse = std::ranges::find(parent->ParentNodes, &node, &std::pair<Node const*, TraitEdgeType>::first);
+            if (reverse == parent->ParentNodes.end())
+                continue;
+
+            // `type` is parent -> node, reverse->second is node -> parent
+            bool keepParentToNode;
+            if (edgeStrength(type) != edgeStrength(reverse->second))
+                keepParentToNode = edgeStrength(type) > edgeStrength(reverse->second);
+            else if (parent->Data->PosY != node.Data->PosY)
+                keepParentToNode = parent->Data->PosY < node.Data->PosY;
+            else
+                keepParentToNode = true;
+
+            if (keepParentToNode)
+                backEdges.emplace_back(&_traitNodes[parent->Data->ID], &node);
+            else
+                backEdges.emplace_back(&node, parent);
+        }
+    }
+
+    for (auto const& [child, parent] : backEdges)
+    {
+        std::erase_if(child->ParentNodes, [parent](std::pair<Node const*, TraitEdgeType> const& edge) { return edge.first == parent; });
+        TC_LOG_DEBUG("misc", "TraitMgr: TraitNode {} and TraitNode {} have edges both ways, the edge into {} is ignored", parent->Data->ID, child->Data->ID,
+            child->Data->ID);
     }
 
     for (SkillLineXTraitTreeEntry const* skillLineXTraitTreeEntry : sSkillLineXTraitTreeStore)
@@ -905,7 +953,10 @@ LearnResult ValidateConfig(WorldPackets::Traits::TraitConfig& traitConfig, Playe
                 if (!isNodeFullyFilled(parentNode))
                 {
                     if (edgeType == TraitEdgeType::RequiredForAvailability)
+                    {
+                        TC_LOG_INFO("entities.player", "TraitMgr::ValidateConfig: node {} entry {} needs parent node {} filled", traitEntry.TraitNodeID, traitEntry.TraitNodeEntryID, parentNode->Data->ID);
                         return LearnResult::NotEnoughTalentsInPrimaryTree;
+                    }
 
                     continue;
                 }
@@ -914,7 +965,10 @@ LearnResult ValidateConfig(WorldPackets::Traits::TraitConfig& traitConfig, Playe
             }
 
             if (!hasAnyParentTrait)
+            {
+                TC_LOG_INFO("entities.player", "TraitMgr::ValidateConfig: node {} entry {} has no filled parent node", traitEntry.TraitNodeID, traitEntry.TraitNodeEntryID);
                 return LearnResult::NotEnoughTalentsInPrimaryTree;
+            }
         }
 
         return LearnResult::Ok;
@@ -992,7 +1046,10 @@ LearnResult ValidateConfig(WorldPackets::Traits::TraitConfig& traitConfig, Playe
 
         int32* grantedCount = Trinity::Containers::MapGetValuePtr(grantedCurrencies, traitCurrencyId);
         if (!grantedCount || *grantedCount < spentAmount.Total)
+        {
+            TC_LOG_INFO("entities.player", "TraitMgr::ValidateConfig: trait currency {} spent {} but owned {}", traitCurrencyId, spentAmount.Total, grantedCount ? *grantedCount : -1);
             return LearnResult::NotEnoughTalentsInPrimaryTree;
+        }
     }
 
     if (requireSpendingAllCurrencies && traitConfig.Type == TraitConfigType::Combat)

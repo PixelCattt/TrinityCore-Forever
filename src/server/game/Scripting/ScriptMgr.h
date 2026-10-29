@@ -436,6 +436,9 @@ class TC_GAME_API UnitScript : public ScriptObject
         // Called when a unit deals damage to another unit
         virtual void OnDamage(Unit* attacker, Unit* victim, uint32& damage);
 
+        // Called just before OnDamage with the spell that dealt the damage (null for a melee swing)
+        virtual void OnDamageSpell(Unit* attacker, Unit* victim, uint32 damage, SpellInfo const* spellInfo);
+
         // Called when DoT's Tick Damage is being Dealt
         virtual void ModifyPeriodicDamageAurasTick(Unit* target, Unit* attacker, uint32& damage);
 
@@ -773,6 +776,11 @@ class TC_GAME_API PlayerScript : public ScriptObject
         virtual void OnAddonMessageSent(Player* player, uint32 type, std::string const& prefix, std::string const& text, Player* receiver);
 
         virtual void OnAddonMessageSent(Player* player, uint32 type, std::string const& prefix, std::string const& text, Group* group);
+
+        // Called after a group ping was relayed to the group (map thread). type is a PingSubjectType value.
+        virtual void OnPingUnit(Player* player, Group* group, Unit* target, uint8 type);
+
+        virtual void OnPingWorldPoint(Player* player, Group* group, Position const& point, uint8 type);
 
         // Both of the below are called on emote opcodes.
         virtual void OnClearEmote(Player* player);
@@ -1288,6 +1296,8 @@ class TC_GAME_API ScriptMgr
         void OnPlayerChatSent(Player* player, uint32 type, uint32 lang, std::string const& msg, Guild* guild);
         void OnPlayerAddonMessageSent(Player* player, uint32 type, std::string const& prefix, std::string const& text, Player* receiver);
         void OnPlayerAddonMessageSent(Player* player, uint32 type, std::string const& prefix, std::string const& text, Group* group);
+        void OnPlayerPingUnit(Player* player, Group* group, Unit* target, uint8 type);
+        void OnPlayerPingWorldPoint(Player* player, Group* group, Position const& point, uint8 type);
         void OnPlayerClearEmote(Player* player);
         void OnPlayerTextEmote(Player* player, uint32 textEmote, uint32 emoteNum, ObjectGuid guid);
         void OnPlayerSpellCast(Player* player, Spell* spell, bool skipCheck);
@@ -1347,6 +1357,7 @@ class TC_GAME_API ScriptMgr
 
         void OnHeal(Unit* healer, Unit* reciever, uint32& gain);
         void OnDamage(Unit* attacker, Unit* victim, uint32& damage);
+        void OnDamageSpell(Unit* attacker, Unit* victim, uint32 damage, SpellInfo const* spellInfo);
         void ModifyPeriodicDamageAurasTick(Unit* target, Unit* attacker, uint32& damage);
         void ModifyMeleeDamage(Unit* target, Unit* attacker, uint32& damage);
         void ModifySpellDamageTaken(Unit* target, Unit* attacker, int32& damage, SpellInfo const* spellInfo);

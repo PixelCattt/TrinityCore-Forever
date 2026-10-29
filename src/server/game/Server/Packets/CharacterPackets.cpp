@@ -924,11 +924,18 @@ void SetPlayerDeclinedNames::Read()
 {
     _worldPacket >> Player;
 
+    // Classic 1.60 (captured on 1.60.1.70291): each case carries the name and then the surname, lengths first
     for (uint8 i = 0; i < MAX_DECLINED_NAME_CASES; ++i)
+    {
         _worldPacket >> SizedString::BitsSize<7>(DeclinedNames.name[i]);
+        _worldPacket >> SizedString::BitsSize<7>(SurnameDeclinedNames.name[i]);
+    }
 
     for (uint8 i = 0; i < MAX_DECLINED_NAME_CASES; ++i)
+    {
         _worldPacket >> SizedString::Data(DeclinedNames.name[i]);
+        _worldPacket >> SizedString::Data(SurnameDeclinedNames.name[i]);
+    }
 }
 
 WorldPacket const * SetPlayerDeclinedNamesResult::Write()

@@ -848,6 +848,8 @@ bool Unit::HasBreakableByDamageCrowdControlAura(Unit const* excludeCasterChannel
         if (UnitAI* attackerAI = attacker ? attacker->GetAI() : nullptr)
             attackerAI->DamageDealt(victim, tmpDamage, damagetype);
 
+        sScriptMgr->OnDamageSpell(attacker, victim, tmpDamage, spellProto);
+
         // Hook for OnDamage Event
         sScriptMgr->OnDamage(attacker, victim, tmpDamage);
 
@@ -11618,7 +11620,10 @@ void Unit::SetMeleeAnimKitId(uint16 animKitId)
                 else if (!tappers.empty())
                 {
                     Group* group = !groups.empty() ? *groups.begin() : nullptr;
-                    Player* looter = group ? ASSERT_NOTNULL(ObjectAccessor::GetPlayer(*creature, group->GetLooterGuid())) : tappers[0];
+                    Player* looter = tappers[0];
+                    if (group)
+                        if (Player* groupLooter = ObjectAccessor::GetPlayer(*creature, group->GetLooterGuid()))
+                            looter = groupLooter;
 
                     Loot* loot = new Loot(creature->GetMap(), creature->GetGUID(), LOOT_CORPSE, dungeonEncounter ? group : nullptr);
 

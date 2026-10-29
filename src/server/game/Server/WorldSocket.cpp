@@ -67,7 +67,7 @@ std::array<uint8, 32> const WorldSocket::EncryptionKeySeed = { 0x71, 0xC9, 0xED,
 
 WorldSocket::WorldSocket(Trinity::Net::IoContextTcpSocket&& socket) : BaseSocket(std::move(socket)),
     _type(CONNECTION_TYPE_REALM), _key(0), _serverChallenge(), _sessionKey(), _encryptKey(), _overSpeedPings(0),
-    _worldSession(nullptr), _authed(false), _canRequestHotfixes(true), _headerBuffer(sizeof(IncomingPacketHeader)), _sendBufferSize(4096), _compressionStream(nullptr)
+    _worldSession(nullptr), _authed(false), _canRequestHotfixes(true), _authDeadline(TimePoint::max()), _headerBuffer(sizeof(IncomingPacketHeader)), _sendBufferSize(4096), _compressionStream(nullptr)
 {
 }
 
@@ -121,8 +121,27 @@ private:
     MessageBuffer _packetBuffer;
 };
 
+namespace
+{
+Trinity::Net::IpConnectionLimit WorldConnectionLimit;
+}
+
 void WorldSocket::Start()
 {
+    // connections per address: a player uses two (realm and instance); the server's own PC is never limited
+    boost::asio::ip::address const& address = GetRemoteIpAddress();
+    _ipConnectionSlot = WorldConnectionLimit.TryAcquire(address.to_string(), address.is_loopback(),
+        uint32(std::max(sConfigMgr->GetIntDefault("Network.ConnectionsPerIp", 16), 0)));
+    if (!_ipConnectionSlot)
+    {
+        TC_LOG_ERROR("network", "WorldSocket::Start: {} already has Network.ConnectionsPerIp open connections, refusing another", address.to_string());
+        CloseSocket();
+        return;
+    }
+
+    int32 const authTimeout = sConfigMgr->GetIntDefault("Network.AuthTimeout", 60);
+    _authDeadline = authTimeout > 0 ? TimePoint::clock::now() + Seconds(authTimeout) : TimePoint::max();
+
     // build initializer chain
     std::array<std::shared_ptr<Trinity::Net::SocketConnectionInitializer>, 3> initializers =
     { {
@@ -204,6 +223,14 @@ bool WorldSocket::InitializeCompression()
 
 bool WorldSocket::Update()
 {
+    // a connection that never logs in only holds a slot
+    if (!_authed && _authDeadline != TimePoint::max() && TimePoint::clock::now() > _authDeadline)
+    {
+        TC_LOG_DEBUG("network", "WorldSocket::Update: {} did not log in within Network.AuthTimeout, closing", GetRemoteIpAddress().to_string());
+        CloseSocket();
+        return false;
+    }
+
     EncryptablePacket* queued;
     if (_bufferQueue.Dequeue(queued))
     {
@@ -342,6 +369,13 @@ bool WorldSocket::ReadHeaderHandler()
 
     IncomingPacketHeader* header = reinterpret_cast<IncomingPacketHeader*>(_headerBuffer.GetReadPointer());
     uint32 encryptedOpcode = header->EncryptedOpcode;
+
+    // the size covers the opcode that is written into the buffer below
+    if (header->Size < sizeof(encryptedOpcode))
+    {
+        TC_LOG_ERROR("network", "WorldSocket::ReadHeaderHandler(): client {} sent malformed packet (size: {})", GetRemoteIpAddress(), header->Size);
+        return false;
+    }
 
     if (!header->IsValidSize())
     {

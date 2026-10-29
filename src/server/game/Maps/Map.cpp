@@ -2906,6 +2906,11 @@ InstanceMap::InstanceMap(uint32 id, time_t expiry, uint32 InstanceId, Difficulty
     {
         i_instanceLock->SetInUse(true);
         i_instanceExpireEvent = i_instanceLock->GetExpiryTime(); // ignore extension state for reset event (will ask players to accept extended save on expiration)
+        // an extended lock that has run out is still handed to the map: its expiry lies in the past, so the event would fire on the
+        // first update and tell everyone inside that their lock "has expired" the moment they enter. The instance lives until the
+        // next reset, as a fresh one would.
+        if (i_instanceLock->IsExpired())
+            i_instanceExpireEvent = sInstanceLockMgr.GetNextResetTime({ GetEntry(), GetMapDifficulty() });
     }
 }
 
@@ -3028,7 +3033,13 @@ void InstanceMap::Update(uint32 t_diff)
     if (i_instanceExpireEvent && i_instanceExpireEvent < GameTime::GetSystemTime())
     {
         Reset(InstanceResetMethod::Expire);
-        i_instanceExpireEvent = sInstanceLockMgr.GetNextResetTime({ GetEntry(), GetMapDifficulty() });
+        // a difficulty without a reset schedule has no next reset in the future: fire once, not on every update
+        // (each firing tells every player inside that the lock expired and offers the extension again)
+        InstanceResetTimePoint const nextReset = sInstanceLockMgr.GetNextResetTime({ GetEntry(), GetMapDifficulty() });
+        if (nextReset > GameTime::GetSystemTime())
+            i_instanceExpireEvent = nextReset;
+        else
+            i_instanceExpireEvent.reset();
     }
 }
 

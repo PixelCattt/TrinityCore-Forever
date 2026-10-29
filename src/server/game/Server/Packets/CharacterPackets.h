@@ -885,6 +885,7 @@ namespace WorldPackets
 
             ObjectGuid Player;
             DeclinedName DeclinedNames;
+            DeclinedName SurnameDeclinedNames; // read to keep the packet aligned, not stored
         };
 
         class SetPlayerDeclinedNamesResult final : public ServerPacket

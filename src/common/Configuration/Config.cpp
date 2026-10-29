@@ -39,13 +39,15 @@ namespace
     bpt::ptree _config;
     std::mutex _configLock;
 
-    bool LoadFile(std::string const& file, bpt::ptree& fullTree, std::string& error)
+    // allowEmpty: a file without any setting (only a section line and comments) is not an error. The main config file must have
+    // settings; an additional one (worldserver.conf.d) may be a template the player has not filled in yet.
+    bool LoadFile(std::string const& file, bpt::ptree& fullTree, std::string& error, bool allowEmpty = false)
     {
         try
         {
             bpt::ini_parser::read_ini(file, fullTree);
 
-            if (fullTree.empty())
+            if (fullTree.empty() && !allowEmpty)
             {
                 error = "empty file (" + file + ")";
                 return false;
@@ -155,13 +157,14 @@ bool ConfigMgr::LoadInitial(std::string file, std::vector<std::string> args,
 bool ConfigMgr::LoadAdditionalFile(std::string file, bool keepOnReload, std::string& error)
 {
     bpt::ptree fullTree;
-    if (!LoadFile(file, fullTree, error))
+    if (!LoadFile(file, fullTree, error, true))
         return false;
 
     std::scoped_lock lock(_configLock);
 
-    for (bpt::ptree::value_type const& child : fullTree.begin()->second)
-        _config.put_child(bpt::ptree::path_type(child.first, '/'), child.second);
+    if (!fullTree.empty())
+        for (bpt::ptree::value_type const& child : fullTree.begin()->second)
+            _config.put_child(bpt::ptree::path_type(child.first, '/'), child.second);
 
     if (keepOnReload)
         _additonalFiles.emplace_back(std::move(file));
