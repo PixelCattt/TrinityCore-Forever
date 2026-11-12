@@ -16,16 +16,19 @@
  */
 
 // Classic 1.60 port of VMaNGOS src/scripts/eastern_kingdoms/loch_modan/loch_modan.cpp (ScriptDev2 lineage, GPL-2)
-// Quest support: 309 (Protecting the Shipment)
-// Not ported here (not requested): at_huldar_miran (area trigger 171, quest 273).
+// Quest support: 273 (Resupplying the Excavation), 309 (Protecting the Shipment).
 
 #include "ScriptMgr.h"
+#include "Group.h"
+#include "Map.h"
+#include "ObjectAccessor.h"
 #include "Player.h"
 #include "QuestDef.h"
 #include "ScriptedCreature.h"
 #include "ScriptedEscortAI.h"
 #include "TemporarySummon.h"
 #include "classic_script_text.h"
+#include <set>
 
 /*######
 ## npc_miran
@@ -34,6 +37,22 @@
 enum MiranData
 {
     QUEST_PROTECTING_THE_SHIPMENT = 309,
+    QUEST_RESUPPLYING_EXCAVATION = 273,
+    NPC_HULDAR = 2057,
+    NPC_MIRAN = 1379,
+    NPC_SAEAN = 1380,
+    NPC_DARK_IRON_AMBUSHER = 1981,
+    SPAWN_GUID_HULDAR = 20008279,
+    SPAWN_GUID_MIRAN = 20008975,
+    SPAWN_GUID_SAEAN = 20100000,
+    QUEST_273_PROTECT_CREDIT = 900273,
+    FACTION_DARK_IRON = 54,
+    FACTION_SAEAN = 57,
+    ACTION_QUEST_273_SAEAN_DIED = 273,
+    ACTION_QUEST_273_ABORT = 274,
+    DATA_QUEST_273_DAMAGE_PLAYER = 275,
+    ACTION_QUEST_273_DAMAGE_PLAYER = 275,
+    ACTION_QUEST_273_START = 276,
 
     SAY_MIRAN_1           = 510,
     SAY_DARK_IRON_DWARF   = 1936,
@@ -89,6 +108,337 @@ ClassicEscortPoint const MiranPath[] =
     { 24, -5700.8f,  -3792.78f, 322.588f,     0 }
 };
 
+namespace
+{
+bool ClassicQuest273ObjectivesComplete(Player* player)
+{
+    return player->IsQuestObjectiveComplete(QUEST_RESUPPLYING_EXCAVATION, 9000273) &&
+        player->IsQuestObjectiveComplete(QUEST_RESUPPLYING_EXCAVATION, 90002730);
+}
+
+void ClassicFailQuest273OnGuardDeath(Creature* huldar)
+{
+    if (!huldar || !huldar->GetMap())
+        return;
+
+    Map::PlayerList const& players = huldar->GetMap()->GetPlayers();
+    for (Map::PlayerList::const_iterator itr = players.begin(); itr != players.end(); ++itr)
+    {
+        Player* player = itr->GetSource();
+        if (player && player->GetQuestStatus(QUEST_RESUPPLYING_EXCAVATION) == QUEST_STATUS_INCOMPLETE &&
+            huldar->IsWithinDistInMap(player, 75.0f) && !ClassicQuest273ObjectivesComplete(player))
+            player->FailQuest(QUEST_RESUPPLYING_EXCAVATION);
+    }
+}
+
+Creature* ClassicRestoreQuest273Actor(Creature* reference, uint32 entry, ObjectGuid::LowType spawnId, float range)
+{
+    Creature* actor = reference->FindNearestCreature(entry, range, false);
+    if (actor && actor->IsAlive())
+        return actor;
+
+    if (actor && actor->GetSpawnId())
+        spawnId = actor->GetSpawnId();
+
+    Map* map = reference->GetMap();
+    map->RemoveRespawnTime(SPAWN_TYPE_CREATURE, spawnId);
+    Creature* restored = new Creature();
+    if (!restored->LoadFromDB(spawnId, map, true, false))
+    {
+        delete restored;
+        return nullptr;
+    }
+    return restored;
+}
+}
+
+void ClassicRegisterQuest273Damage(Creature* attacker, Unit* damageSource);
+
+struct npc_quest_273_huldar : public ScriptedAI
+{
+    explicit npc_quest_273_huldar(Creature* creature) : ScriptedAI(creature), _summons(creature) { }
+
+    void Reset() override
+    {
+        if (_active || _resetInProgress)
+            return;
+
+        _remainingAttackers = 0;
+        _saeanDefeated = false;
+        _pendingDamagePlayer.Clear();
+        _participants.clear();
+    }
+
+    void MoveInLineOfSight(Unit* who) override
+    {
+        if (!who)
+            return;
+
+        Player* player = who->ToPlayer();
+        if (!player || player->GetQuestStatus(QUEST_RESUPPLYING_EXCAVATION) != QUEST_STATUS_INCOMPLETE ||
+            !me->IsWithinDistInMap(player, 75.0f))
+            return;
+
+        player->KilledMonsterCredit(NPC_HULDAR);
+        if (!_active && me->IsWithinDistInMap(player, 20.0f))
+            StartAmbush(player);
+    }
+
+    void JustSummoned(Creature* summon) override
+    {
+        _summons.Summon(summon);
+        if (_active && summon->GetEntry() == NPC_DARK_IRON_AMBUSHER)
+            ++_remainingAttackers;
+    }
+
+    void SummonedCreatureDies(Creature* summon, Unit* /*killer*/) override
+    {
+        if (_active && summon->GetEntry() == NPC_DARK_IRON_AMBUSHER)
+            AttackerDefeated();
+    }
+
+    void SetGUID(ObjectGuid const& guid, int32 id) override
+    {
+        if (id == DATA_QUEST_273_DAMAGE_PLAYER)
+            _pendingDamagePlayer = guid;
+    }
+
+    void DoAction(int32 action) override
+    {
+        if (_resetInProgress)
+            return;
+
+        if (action == ACTION_QUEST_273_SAEAN_DIED && _active && !_saeanDefeated)
+        {
+            _saeanDefeated = true;
+            AttackerDefeated();
+        }
+        else if (action == ACTION_QUEST_273_DAMAGE_PLAYER && _active)
+        {
+            if (Player* player = ObjectAccessor::GetPlayer(*me, _pendingDamagePlayer))
+                AddParticipantAndParty(player);
+            _pendingDamagePlayer.Clear();
+        }
+        else if (action == ACTION_QUEST_273_ABORT)
+            ResetAfterGuardDeath();
+    }
+
+    void JustDied(Unit* /*killer*/) override
+    {
+        if (!_resetInProgress)
+            ResetAfterGuardDeath();
+    }
+
+private:
+    void AddParticipantAndParty(Player* player)
+    {
+        auto add = [this](Player* member)
+        {
+            if (member && member->GetQuestStatus(QUEST_RESUPPLYING_EXCAVATION) == QUEST_STATUS_INCOMPLETE &&
+                me->IsWithinDistInMap(member, 75.0f) && _participants.insert(member->GetGUID()).second)
+                member->KilledMonsterCredit(NPC_HULDAR);
+        };
+
+        add(player);
+        if (Group* group = player->GetGroup())
+            for (GroupReference const& groupRef : group->GetMembers())
+                add(groupRef.GetSource());
+    }
+
+    void StartAmbush(Player* player)
+    {
+        if (_active)
+            return;
+
+        _active = true;
+        _remainingAttackers = 0;
+        _saeanDefeated = false;
+        _pendingDamagePlayer.Clear();
+        _summons.DespawnAll();
+
+        Creature* miran = ClassicRestoreQuest273Actor(me, NPC_MIRAN, SPAWN_GUID_MIRAN, 40.0f);
+        Creature* saean = ClassicRestoreQuest273Actor(me, NPC_SAEAN, SPAWN_GUID_SAEAN, 40.0f);
+        if (!miran || !saean)
+        {
+            _active = false;
+            return;
+        }
+
+        _remainingAttackers = 1;
+        AddParticipantAndParty(player);
+
+        saean->AI()->DoAction(ACTION_QUEST_273_START);
+        saean->AI()->AttackStart(player);
+
+        float x = me->GetPositionX();
+        float y = me->GetPositionY();
+        float z = me->GetPositionZ();
+        float o = me->GetOrientation();
+        if (Creature* ambusher = me->SummonCreature(NPC_DARK_IRON_AMBUSHER, x - 4.0f, y - 2.0f, z, o, TEMPSUMMON_CORPSE_TIMED_DESPAWN, 5min))
+            ambusher->AI()->AttackStart(me);
+        if (Creature* ambusher = me->SummonCreature(NPC_DARK_IRON_AMBUSHER, x + 4.0f, y + 2.0f, z, o, TEMPSUMMON_CORPSE_TIMED_DESPAWN, 5min))
+            ambusher->AI()->AttackStart(miran);
+
+        if (_remainingAttackers != 3)
+            AbortAmbush();
+    }
+
+    void AttackerDefeated()
+    {
+        if (_remainingAttackers > 0)
+            --_remainingAttackers;
+        if (_remainingAttackers)
+            return;
+
+        _active = false;
+        for (ObjectGuid const& guid : _participants)
+            if (Player* player = ObjectAccessor::GetPlayer(*me, guid))
+                if (player->GetQuestStatus(QUEST_RESUPPLYING_EXCAVATION) == QUEST_STATUS_INCOMPLETE &&
+                    !player->IsQuestObjectiveComplete(QUEST_RESUPPLYING_EXCAVATION, 90002730))
+                    player->KilledMonsterCredit(QUEST_273_PROTECT_CREDIT);
+
+        FailNearbyNonParticipants();
+        _participants.clear();
+        ResetAfterSuccessfulDefense();
+    }
+
+    void FailNearbyNonParticipants()
+    {
+        Map::PlayerList const& players = me->GetMap()->GetPlayers();
+        for (Map::PlayerList::const_iterator itr = players.begin(); itr != players.end(); ++itr)
+        {
+            Player* player = itr->GetSource();
+            if (!player || player->GetQuestStatus(QUEST_RESUPPLYING_EXCAVATION) != QUEST_STATUS_INCOMPLETE ||
+                !me->IsWithinDistInMap(player, 75.0f) || !player->IsQuestObjectiveComplete(QUEST_RESUPPLYING_EXCAVATION, 9000273) ||
+                player->IsQuestObjectiveComplete(QUEST_RESUPPLYING_EXCAVATION, 90002730))
+                continue;
+
+            if (_participants.find(player->GetGUID()) == _participants.end())
+                player->FailQuest(QUEST_RESUPPLYING_EXCAVATION);
+        }
+    }
+
+    void AbortAmbush()
+    {
+        _active = false;
+        _remainingAttackers = 0;
+        _pendingDamagePlayer.Clear();
+        _participants.clear();
+        _summons.DespawnAll();
+        if (Creature* saean = me->FindNearestCreature(NPC_SAEAN, 40.0f))
+            saean->AI()->DoAction(ACTION_QUEST_273_ABORT);
+    }
+
+    void ResetAfterGuardDeath()
+    {
+        if (_resetInProgress)
+            return;
+
+        _resetInProgress = true;
+        AbortAmbush();
+
+        if (!me->IsAlive())
+            me->Respawn(true);
+        ClassicRestoreQuest273Actor(me, NPC_MIRAN, SPAWN_GUID_MIRAN, 75.0f);
+        ClassicRestoreQuest273Actor(me, NPC_SAEAN, SPAWN_GUID_SAEAN, 75.0f);
+
+        ClassicFailQuest273OnGuardDeath(me);
+        _resetInProgress = false;
+    }
+
+    void ResetAfterSuccessfulDefense()
+    {
+        if (_resetInProgress)
+            return;
+
+        _resetInProgress = true;
+        AbortAmbush();
+
+        ClassicRestoreQuest273Actor(me, NPC_HULDAR, SPAWN_GUID_HULDAR, 75.0f);
+        ClassicRestoreQuest273Actor(me, NPC_MIRAN, SPAWN_GUID_MIRAN, 75.0f);
+        ClassicRestoreQuest273Actor(me, NPC_SAEAN, SPAWN_GUID_SAEAN, 75.0f);
+
+        _resetInProgress = false;
+    }
+
+    bool _active = false;
+    bool _saeanDefeated = false;
+    bool _resetInProgress = false;
+    uint8 _remainingAttackers = 0;
+    ObjectGuid _pendingDamagePlayer;
+    std::set<ObjectGuid> _participants;
+    SummonList _summons;
+};
+
+struct npc_quest_273_saean : public ScriptedAI
+{
+    explicit npc_quest_273_saean(Creature* creature) : ScriptedAI(creature) { }
+
+    void Reset() override
+    {
+        if (!_encounterActive)
+            me->SetFaction(FACTION_SAEAN);
+    }
+
+    void DoAction(int32 action) override
+    {
+        if (action == ACTION_QUEST_273_START)
+        {
+            _encounterActive = true;
+            me->SetFaction(FACTION_DARK_IRON);
+        }
+        else if (action == ACTION_QUEST_273_ABORT)
+        {
+            _encounterActive = false;
+            me->CombatStop(true);
+            me->SetFaction(FACTION_SAEAN);
+        }
+    }
+
+    void DamageTaken(Unit* attacker, uint32& damage, DamageEffectType /*damageType*/, SpellInfo const* /*spellInfo*/) override
+    {
+        if (damage > 0)
+            ClassicRegisterQuest273Damage(me, attacker);
+    }
+
+    void JustDied(Unit* /*killer*/) override
+    {
+        _encounterActive = false;
+        if (Creature* huldar = me->FindNearestCreature(NPC_HULDAR, 50.0f))
+            huldar->AI()->DoAction(ACTION_QUEST_273_SAEAN_DIED);
+    }
+
+private:
+    bool _encounterActive = false;
+};
+
+struct npc_quest_273_ambusher : public ScriptedAI
+{
+    explicit npc_quest_273_ambusher(Creature* creature) : ScriptedAI(creature) { }
+
+    void DamageTaken(Unit* attacker, uint32& damage, DamageEffectType /*damageType*/, SpellInfo const* /*spellInfo*/) override
+    {
+        if (damage > 0)
+            ClassicRegisterQuest273Damage(me, attacker);
+    }
+};
+
+void ClassicRegisterQuest273Damage(Creature* attacker, Unit* damageSource)
+{
+    if (!damageSource)
+        return;
+
+    Player* player = damageSource->GetCharmerOrOwnerPlayerOrPlayerItself();
+    if (!player)
+        return;
+
+    if (Creature* huldar = attacker->FindNearestCreature(NPC_HULDAR, 75.0f))
+    {
+        huldar->AI()->SetGUID(player->GetGUID(), DATA_QUEST_273_DAMAGE_PLAYER);
+        huldar->AI()->DoAction(ACTION_QUEST_273_DAMAGE_PLAYER);
+    }
+}
+
 struct classic_npc_miran : public EscortAI
 {
     classic_npc_miran(Creature* creature) : EscortAI(creature), _dwarves(0) { }
@@ -97,6 +447,12 @@ struct classic_npc_miran : public EscortAI
     {
         if (!HasEscortState(STATE_ESCORT_ESCORTING))
             _dwarves = 0;
+    }
+
+    void JustDied(Unit* /*killer*/) override
+    {
+        if (Creature* huldar = me->FindNearestCreature(NPC_HULDAR, 75.0f, false))
+            huldar->AI()->DoAction(ACTION_QUEST_273_ABORT);
     }
 
     void WaypointReached(uint32 waypointId, uint32 /*pathId*/) override
@@ -161,4 +517,7 @@ private:
 void AddSC_classic_loch_modan()
 {
     RegisterCreatureAI(classic_npc_miran);
+    RegisterCreatureAI(npc_quest_273_huldar);
+    RegisterCreatureAI(npc_quest_273_saean);
+    RegisterCreatureAI(npc_quest_273_ambusher);
 }
