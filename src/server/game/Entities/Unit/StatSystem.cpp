@@ -20,6 +20,7 @@
 #include "Item.h"
 #include "Player.h"
 #include "ClassicManaRegen.h"
+#include "ClassicSpellValue.h"
 #include "Pet.h"
 #include "GameTables.h"
 #include "GameTime.h"
