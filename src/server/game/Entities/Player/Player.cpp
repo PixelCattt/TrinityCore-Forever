@@ -11009,8 +11009,11 @@ bool Player::HasItemTotemCategory(uint32 TotemCategory) const
             return true;
     }
 
+    // Classic 1.60: a profession bag may sit in the reagent bag slot (ITEM_FLAG5_CLASSIC_FITS_REAGENT_BAG_SLOT), and a tool
+    // stored in it (skinning knife, mining pick) still counts, so the bag slots and the reagent bag slot are searched as one range
+    static_assert(uint8(INVENTORY_SLOT_BAG_END) == uint8(REAGENT_BAG_SLOT_START));
     Bag* bag;
-    for (uint8 i = INVENTORY_SLOT_BAG_START; i < INVENTORY_SLOT_BAG_END; ++i)
+    for (uint8 i = INVENTORY_SLOT_BAG_START; i < REAGENT_BAG_SLOT_END; ++i)
     {
         bag = GetBagByPos(i);
         if (bag)
