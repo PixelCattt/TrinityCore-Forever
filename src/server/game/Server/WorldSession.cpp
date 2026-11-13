@@ -1295,6 +1295,9 @@ bool WorldSession::IsAddonRegistered(std::string_view prefix) const
 void WorldSession::HandleUnregisterAllAddonPrefixesOpcode(WorldPackets::Chat::ChatUnregisterAllAddonPrefixes& /*packet*/) // empty packet
 {
     _registeredAddonPrefixes.clear();
+    // A UI reload or an add-on turned off: combat-only nameplates are the add-on's to ask for again (Player::SetCombatPlateFilter).
+    if (Player* player = GetPlayer())
+        player->SetCombatPlateFilter(false);
 }
 
 void WorldSession::HandleAddonRegisteredPrefixesOpcode(WorldPackets::Chat::ChatRegisterAddonPrefixes& packet)

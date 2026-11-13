@@ -381,6 +381,10 @@ public:
         if (flags & UNIT_FLAG3_ALREADY_SKINNED && unit->IsCreature() && !unit->ToCreature()->IsSkinnedBy(receiver))
             flags &= ~UNIT_FLAG3_ALREADY_SKINNED;
 
+        // Combat-only enemy nameplates: an NPC outside this viewer's fight shows its plain name (Player::SetCombatPlateFilter).
+        if (receiver->HidesNameplateOf(unit))
+            flags |= UNIT_FLAG3_FORCE_HIDE_NAMEPLATE;
+
         return flags;
     }
 };

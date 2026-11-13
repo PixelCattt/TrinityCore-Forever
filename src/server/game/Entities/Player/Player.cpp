@@ -967,6 +967,7 @@ void Player::Update(uint32 p_time)
     SetCanDelayTeleport(false);
 
     UpdateParkedPet(p_time);
+    UpdateCombatPlates(p_time);
 
     // The pet remembered at login comes back a moment after the player is in the world, as a summon during play does. Created while the
     // Classic 1.60 client is still on its loading screen, the client froze on the pet (warlock demon out at logout, 20 Oct).
@@ -25801,6 +25802,78 @@ bool Player::HaveAtClient(BaseEntity const* u) const
     return u == this || m_clientGUIDs.find(u->GetGUID()) != m_clientGUIDs.end();
 }
 
+// Combat-only enemy nameplates: a plate is hidden for an attackable NPC that is in no live (unsuppressed) fight with this player, his
+// pet or a member of his group on this map. Standing near it or selecting it is not a fight. NPCs a script forces a plate on or off,
+// and units a player controls, keep what they have.
+bool Player::CombatPlateHidden(Unit const* unit, Pet const* pet) const
+{
+    if (!_combatPlateOn || !unit->GetGUID().IsCreatureOrVehicle() || unit->IsControlledByPlayer())
+        return false;
+    if (unit->HasUnitFlag(UNIT_FLAG_FORCE_NAMEPLATE) || unit->HasUnitFlag3(UNIT_FLAG3_FORCE_HIDE_NAMEPLATE))
+        return false;
+    if (!IsValidAttackTarget(unit))
+        return false;
+    auto fights = [unit](Unit const* side)
+    {
+        auto const& refs = side->GetCombatManager().GetPvECombatRefs();
+        auto const itr = refs.find(unit->GetGUID());
+        return itr != refs.end() && !itr->second->IsSuppressedFor(side);
+    };
+    if (fights(this) || (pet && fights(pet)))
+        return false;
+    if (Group const* group = GetGroup())
+        for (GroupReference const& ref : group->GetMembers())
+            if (Player const* member = ref.GetSource(); member && member != this && member->IsInMap(this))
+                if (fights(member) || (member->GetPet() && fights(member->GetPet())))
+                    return false;
+    return true;
+}
+
+// Records the plate state of one NPC this client knows; true when it changed (the client needs the new flags).
+bool Player::RefreshCombatPlate(Unit const* unit, Pet const* pet)
+{
+    if (CombatPlateHidden(unit, pet))
+        return _combatPlateHidden.insert(unit->GetGUID()).second;
+    return _combatPlateHidden.erase(unit->GetGUID()) != 0;
+}
+
+// Four times a second while the filter is on (or just turned off): re-checks every NPC this client knows and sends the flags of
+// those that changed, so a mob that joins the fight gets its bar and one whose fight ended loses it.
+void Player::UpdateCombatPlates(uint32 diff)
+{
+    if (!_combatPlateOn && !_combatPlateWanted && _combatPlateHidden.empty())
+        return;
+    if (_combatPlateTimer > diff && _combatPlateOn == _combatPlateWanted)
+    {
+        _combatPlateTimer -= diff;
+        return;
+    }
+    _combatPlateTimer = 250;
+    _combatPlateOn = _combatPlateWanted;
+
+    UF::ObjectData::Base objMask;
+    UF::UnitData::Base unitMask;
+    unitMask.MarkChanged(&UF::UnitData::Flags3);
+    UpdateData data(GetMapId());
+    Pet const* pet = GetPet();
+    for (ObjectGuid const& guid : m_clientGUIDs)
+    {
+        if (!guid.IsCreatureOrVehicle())
+            continue;
+        if (Creature* creature = ObjectAccessor::GetCreatureOrPetOrVehicle(*this, guid))
+            if (RefreshCombatPlate(creature, pet))
+                creature->BuildValuesUpdateForPlayerWithMask(&data, objMask.GetChangesMask(), unitMask.GetChangesMask(), this, false);
+    }
+    // NPCs gone from this client need no entry (they get a fresh check when they come back into view).
+    std::erase_if(_combatPlateHidden, [this](ObjectGuid const& guid) { return !m_clientGUIDs.contains(guid); });
+    if (data.HasData())
+    {
+        WorldPacket packet;
+        data.BuildPacket(&packet);
+        SendDirectMessage(&packet);
+    }
+}
+
 bool Player::IsNeverVisibleFor(WorldObject const* seer, bool allowServersideObjects) const
 {
     if (Unit::IsNeverVisibleFor(seer, allowServersideObjects))
@@ -26010,6 +26083,9 @@ void Player::UpdateVisibilityOf(WorldObject* target)
     {
         if (CanSeeOrDetect(target, { .DistanceCheck = true }))
         {
+            if (_combatPlateOn)
+                if (Creature const* creature = target->ToCreature())
+                    RefreshCombatPlate(creature, GetPet());   // the create block carries the plate state from the start
             target->SendUpdateToPlayer(this);
             m_clientGUIDs.insert(target->GetGUID());
 
@@ -26123,6 +26199,9 @@ void Player::UpdateVisibilityOf(T* target, UpdateData& data, std::set<WorldObjec
     {
         if (CanSeeOrDetect(target, { .DistanceCheck = true }))
         {
+            if (_combatPlateOn)
+                if (Creature const* creature = target->ToCreature())
+                    RefreshCombatPlate(creature, GetPet());   // the create block carries the plate state from the start
             target->BuildCreateUpdateBlockForPlayer(&data, this);
             m_clientGUIDs.insert(target->GetGUID());
             visibleNow.insert(target);

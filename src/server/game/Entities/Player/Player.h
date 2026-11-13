@@ -2814,6 +2814,13 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
 
         bool HaveAtClient(BaseEntity const* u) const;
 
+        // Combat-only enemy nameplates (asked for by the client's add-on): while on, a hostile NPC this player can see that is not in
+        // a fight with him or his pet goes to his client with UNIT_FLAG3_FORCE_HIDE_NAMEPLATE, so the client draws its plain name;
+        // one that joins the fight gets its health bar. Per viewer: other players see their own fights. Applied on the next update.
+        void SetCombatPlateFilter(bool on) { _combatPlateWanted = on; }
+        bool IsCombatPlateFilterOn() const { return _combatPlateOn; }
+        bool HidesNameplateOf(Unit const* unit) const { return _combatPlateOn && _combatPlateHidden.contains(unit->GetGUID()); }
+
         bool IsNeverVisibleFor(WorldObject const* seer, bool allowServersideObjects) const override;
 
         bool IsVisibleGloballyFor(Player const* player) const;
@@ -3557,6 +3564,15 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         bool CanRequestSpellCast(SpellInfo const* spell, Unit const* castingUnit) const;
 
     private:
+        // Combat-only enemy nameplates (SetCombatPlateFilter).
+        bool CombatPlateHidden(Unit const* unit, Pet const* pet) const;
+        bool RefreshCombatPlate(Unit const* unit, Pet const* pet);
+        void UpdateCombatPlates(uint32 diff);
+        bool _combatPlateWanted = false;      // what the client asked for
+        bool _combatPlateOn = false;          // in force (set on the player's update)
+        uint32 _combatPlateTimer = 0;
+        GuidUnorderedSet _combatPlateHidden;  // the NPCs this client was told to hide the plate of
+
         std::unique_ptr<SpellCastRequest> _pendingSpellCastRequest;
         void ExecutePendingSpellCastRequest();
         bool ProcessItemCast(SpellCastRequest& castRequest, SpellCastTargets const& targets);
