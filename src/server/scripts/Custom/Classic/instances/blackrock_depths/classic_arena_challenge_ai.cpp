@@ -19,6 +19,7 @@
 // (Blackrock Depths T0.5 Arena Challenge NPC AI, GPL-2)
 // Ported: npc_theldren, npc_va_jashni, npc_korv, npc_lefty, npc_snokh_blackspine, npc_volida, npc_malgen_longspear
 
+#include "Player.h"
 #include "ScriptMgr.h"
 #include "Map.h"
 #include "MotionMaster.h"

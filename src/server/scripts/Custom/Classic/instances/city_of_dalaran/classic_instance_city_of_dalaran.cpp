@@ -41,6 +41,7 @@
 // data, so the doors open when the three bosses of the city squares (Arcane Anomaly, Arcanic Enigma, Unstable Sentinel) are
 // dead (INFERRED).
 
+#include "WorldSession.h"
 #include "ScriptMgr.h"
 #include "Creature.h"
 #include "GameObject.h"

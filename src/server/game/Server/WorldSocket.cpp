@@ -15,6 +15,7 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include "Util.h"
 #include "WorldSocket.h"
 #include "AuthenticationPackets.h"
 #include "BattlenetRpcErrorCodes.h"

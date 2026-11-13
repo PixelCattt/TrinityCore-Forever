@@ -20,6 +20,7 @@
 // Ported: instance_scholomance, go_brazier_herald, go_viewing_room_door, the Divination Scryer event (VMaNGOS event_scripts 8436)
 // Added: Darkmaster Gandling's Shadow Portal spell scripts (VMaNGOS Spell::EffectDummy 17950 + the room portal events)
 
+#include "SpellInfo.h"
 #include "ScriptMgr.h"
 #include "Containers.h"
 #include "Creature.h"

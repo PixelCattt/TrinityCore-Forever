@@ -23,6 +23,7 @@
 // 3 Trade, 4 Whisper, 5-10 crafting orders, 11 CreatureKill ("fought together"), 12 CompleteDungeon, ... The value is the area the
 // interaction happened in (official sniff: 11 with 16600..16850, 3 / 4 with 0). At most one per type and ally.
 
+#include "Packet.h"
 #include "RecentAllies.h"
 #include "DatabaseEnv.h"
 #include "GameTime.h"

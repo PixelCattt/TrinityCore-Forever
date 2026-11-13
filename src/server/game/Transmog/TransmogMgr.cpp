@@ -15,6 +15,7 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include "Log.h"
 #include "TransmogMgr.h"
 #include "DB2Stores.h"
 #include "FlatSet.h"

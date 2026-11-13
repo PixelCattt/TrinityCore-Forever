@@ -20,6 +20,7 @@
 //          spell_nefarian_class_call_warlock (23427), spell_nefarian_class_call_rogue (23414), spell_nefarian_class_call_mage (23410),
 //          spell_nefarian_polymorph (23603)
 
+#include "Log.h"
 #include "ScriptMgr.h"
 #include "InstanceScript.h"
 #include "Map.h"

@@ -20,6 +20,7 @@
 //          toxic_tunnel_ai, dark_touched_warriorAI, mob_craftsman_omarion, spell_gargoyle_stoneform,
 //          spell_unrelenting_rider_shadow_bolt_volley
 
+#include "Log.h"
 #include "ScriptMgr.h"
 #include "ChatPackets.h"
 #include "Creature.h"

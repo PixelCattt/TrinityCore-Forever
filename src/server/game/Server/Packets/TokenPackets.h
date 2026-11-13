@@ -18,6 +18,7 @@
 #ifndef TRINITYCORE_TOKEN_PACKETS_H
 #define TRINITYCORE_TOKEN_PACKETS_H
 
+#include "Optional.h"
 #include "Packet.h"
 #include "PacketUtilities.h"
 #include "ObjectGuid.h"

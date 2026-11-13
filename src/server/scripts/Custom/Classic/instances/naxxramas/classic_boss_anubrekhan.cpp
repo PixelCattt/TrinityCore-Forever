@@ -18,6 +18,8 @@
 // Classic 1.60 port of VMaNGOS src/scripts/eastern_kingdoms/eastern_plaguelands/naxxramas/boss_anubrekhan.cpp (GPL-2)
 // Scripts: boss_anubrekhan, mob_cryptguards, go_anub_door
 
+#include "ObjectAccessor.h"
+#include "Log.h"
 #include "ScriptMgr.h"
 #include "Creature.h"
 #include "CreatureAI.h"
