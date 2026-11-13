@@ -2626,6 +2626,7 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         SpellSchoolMask GetMeleeDamageSchoolMask(WeaponAttackType attackType = BASE_ATTACK) const override;
 
         void CastAllObtainSpells();
+        void CastAllEquipSpellsLostOnDeath();
         void ApplyItemObtainSpells(Item* item, bool apply);
 
         void UpdateWeaponDependentCritAuras(WeaponAttackType attackType);

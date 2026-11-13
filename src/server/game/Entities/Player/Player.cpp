@@ -4788,6 +4788,11 @@ void Player::ResurrectPlayer(float restore_percent, bool applySickness)
     // recast lost by death auras of any items held in the inventory
     CastAllObtainSpells();
 
+    // and the equip auras death took: a classic equip spell is often not passive (Onyxia Scale Cloak 22683 has no passive attribute
+    // in the 1.60 data), so RemoveAllAurasOnDeath removed it and nothing cast it again until the item was re-equipped. Every raider
+    // who died once was then open to Shadow Flame's burn 22682 with the cloak still on (BWL Nefarian, dev realm 2026-11-13).
+    CastAllEquipSpellsLostOnDeath();
+
     if (!applySickness)
         return;
 
@@ -9035,6 +9040,35 @@ void Player::CastAllObtainSpells()
         for (uint32 slot = 0; slot < bag->GetBagSize(); ++slot)
             if (Item* item = bag->GetItemByPos(slot))
                 ApplyItemObtainSpells(item, true);
+    }
+}
+
+void Player::CastAllEquipSpellsLostOnDeath()
+{
+    for (uint8 slot = EQUIPMENT_SLOT_START; slot < EQUIPMENT_SLOT_END; ++slot)
+    {
+        Item* item = GetItemByPos(INVENTORY_SLOT_BAG_0, slot);
+        if (!item || item->IsBroken() || item->GetTemplate()->HasFlag(ITEM_FLAG_LEGACY))
+            continue;
+
+        for (ItemEffectEntry const* effectData : item->GetEffects())
+        {
+            if (effectData->TriggerType != ITEM_SPELLTRIGGER_ON_EQUIP)
+                continue;
+
+            SpellInfo const* spellInfo = sSpellMgr->GetSpellInfo(effectData->SpellID, DIFFICULTY_NONE);
+            // passive and death-persistent auras survive death (RemoveAllAurasOnDeath); only the others need casting again
+            if (!spellInfo || spellInfo->IsPassive() || spellInfo->IsDeathPersistent())
+                continue;
+
+            if (effectData->ChrSpecializationID && ChrSpecialization(effectData->ChrSpecializationID) != GetPrimarySpecialization())
+                continue;
+
+            if (HasAura(spellInfo->Id, GetGUID(), item->GetGUID()))
+                continue;
+
+            ApplyEquipSpell(spellInfo, item, true);
+        }
     }
 }
 
