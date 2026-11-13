@@ -28805,8 +28805,11 @@ void Player::_LoadSkills(PreparedQueryResult result)
         LearnSkillRewardedSpells(skillId, skillValue, race);
 
         // enable parent skill line if missing
+        // Classic 1.60: not from a profession child line (ParentTierIndex 4), that made every profession 300 at login; ranks come
+        // from the rank spells, as in SetSkill
         SkillLineEntry const* skillEntry = sSkillLineStore.LookupEntry(skillId);
-        if (skillEntry->ParentSkillLineID && skillEntry->ParentTierIndex > 0 && int32(GetSkillStep(skillEntry->ParentSkillLineID)) < skillEntry->ParentTierIndex)
+        if (skillEntry->ParentSkillLineID && skillEntry->ParentTierIndex > 0 && !IsClassicProfessionChildSkill(skillEntry)
+            && int32(GetSkillStep(skillEntry->ParentSkillLineID)) < skillEntry->ParentTierIndex)
             if (SkillRaceClassInfoEntry const* rcEntry = sDB2Manager.GetSkillRaceClassInfo(skillEntry->ParentSkillLineID, GetRace(), GetClass()))
                 if (SkillTiersEntry const* tier = sObjectMgr->GetSkillTier(rcEntry->SkillTierID))
                     SetSkill(skillEntry->ParentSkillLineID, skillEntry->ParentTierIndex, std::max<uint16>(GetPureSkillValue(skillEntry->ParentSkillLineID), 1), tier->GetValueForTierIndex(skillEntry->ParentTierIndex - 1));
