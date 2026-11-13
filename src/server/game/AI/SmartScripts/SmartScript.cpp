@@ -2599,7 +2599,32 @@ void SmartScript::ProcessAction(SmartScriptHolder& e, Unit* unit, uint32 var0, u
                 if (quest->HasFlag(QUEST_FLAGS_COMPLETION_EVENT) || quest->HasFlag(QUEST_FLAGS_COMPLETION_AREA_TRIGGER))
                 {
                     if (questStatus == QUEST_STATUS_INCOMPLETE)
+                    {
+                        // A server-side area trigger standing in for a client trigger the 1.60 client no longer has (How Big a
+                        // Threat? 984, The Fargodeep Mine 62) must also fill the quest's catch-all area trigger objective
+                        // (ObjectID -1), the same way WorldSession::HandleAreaTriggerOpcode does for a client trigger;
+                        // otherwise the quest is explored but its objective stays open and it can never be turned in.
+                        if (quest->HasFlag(QUEST_FLAGS_COMPLETION_AREA_TRIGGER))
+                        {
+                            uint16 slot = player->FindQuestSlot(questId);
+                            if (slot < MAX_QUEST_LOG_SIZE)
+                            {
+                                for (QuestObjective const& obj : quest->Objectives)
+                                {
+                                    if (obj.Type != QUEST_OBJECTIVE_AREATRIGGER || obj.ObjectID != -1)
+                                        continue;
+
+                                    if (!player->IsQuestObjectiveCompletable(slot, quest, obj) || player->IsQuestObjectiveComplete(slot, quest, obj))
+                                        continue;
+
+                                    player->SetQuestObjectiveData(obj, 1);
+                                    player->SendQuestUpdateAddCreditSimple(obj);
+                                    break;
+                                }
+                            }
+                        }
                         player->AreaExploredOrEventHappens(questId);
+                    }
                 }
                 else if (quest->HasFlag(QUEST_FLAGS_TRACKING_EVENT)) // Check if the quest is used as a serverside flag
                     player->CompleteQuest(questId);
