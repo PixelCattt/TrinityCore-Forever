@@ -58,6 +58,26 @@ LootStore LootTemplates_Reference("reference_loot_template",         "reference 
 LootStore LootTemplates_Skinning("skinning_loot_template",           "creature skinning id",            true);
 LootStore LootTemplates_Spell("spell_loot_template",                 "spell id (random item creating)", false);
 
+// An item in a loot template that the player needs for an active quest, or an item that starts a quest the player can still take.
+// The second keeps a quest chest that also holds the item starting its quest (Excavation Tools 665282: starter 278049 for anyone,
+// objective item 278398 for the quest) open to players who do not have the quest yet; before, only players already on the quest
+// could open it, so nobody could ever get the item that starts it. Loot::AllowedForPlayer gives the starter item on the same terms.
+static bool IsQuestDropForPlayer(uint32 itemId, Player const* player)
+{
+    if (player->HasQuestForItem(itemId))
+        return true;
+
+    ItemTemplate const* proto = sObjectMgr->GetItemTemplate(itemId);
+    if (!proto || !proto->GetStartQuest() || proto->HasFlag(ITEM_FLAGS_CU_IGNORE_QUEST_STATUS))
+        return false;
+
+    if (player->GetQuestStatus(proto->GetStartQuest()) != QUEST_STATUS_NONE)
+        return false;
+
+    Quest const* quest = sObjectMgr->GetQuestTemplate(proto->GetStartQuest());
+    return quest && player->CanTakeQuest(quest, false) && !player->HasItemCount(itemId, 1, true);
+}
+
 // Selects invalid loot items to be removed from group possible entries (before rolling)
 struct LootGroupInvalidSelector
 {
@@ -531,7 +551,7 @@ bool LootTemplate::LootGroup::HasQuestDropForPlayer(Player const* player) const
         switch (item->type)
         {
             case LootStoreItem::Type::Item:
-                return player->HasQuestForItem(item->itemid);
+                return IsQuestDropForPlayer(item->itemid, player);
             case LootStoreItem::Type::Currency:
                 return player->HasQuestForCurrency(item->itemid);
             default:
@@ -958,8 +978,8 @@ bool LootTemplate::HasQuestDropForPlayer(Player const* player, uint8 groupId) co
         switch (item->type)
         {
             case LootStoreItem::Type::Item:
-                if (player->HasQuestForItem(item->itemid))
-                    return true;                            // active quest drop found
+                if (IsQuestDropForPlayer(item->itemid, player))
+                    return true;                            // active quest drop, or the item that starts a quest the player can take
                 break;
             case LootStoreItem::Type::Reference:
             {
