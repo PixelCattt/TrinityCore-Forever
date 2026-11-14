@@ -4465,7 +4465,7 @@ void Spell::EffectResurrectPet()
     {
         // In case the pet was at stay, we don't want it running back
         ci->SaveStayPosition();
-        ci->SetIsAtStay(ci->HasCommandState(COMMAND_STAY));
+        ci->SetIsAtStay(ci->HasStayCommand());
 
         ci->SetIsFollowing(false);
         ci->SetIsCommandAttack(false);

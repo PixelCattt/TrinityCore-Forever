@@ -802,7 +802,7 @@ bool Pet::CatchUpWithOwner()
         return false;
     if (owner->IsInFlight() || owner->IsBeingTeleported() || owner->IsPetNeedBeTemporaryUnsummoned())
         return false;
-    if (GetCharmInfo() && GetCharmInfo()->HasCommandState(COMMAND_STAY))
+    if (GetCharmInfo() && GetCharmInfo()->HasStayCommand())
         return false;                                       // told to stay there: dismissed as before
 
     // A fight it was left at stays behind, or the pet would run straight back to it and drop out of sight again.
@@ -821,7 +821,7 @@ bool Pet::ParkForOwnerTravel()
     Player* owner = GetOwner();
     if (!owner || !owner->IsInWorld() || !owner->IsAlive() || !IsInWorld() || !IsAlive() || m_removed || isPossessed() || isTemporarySummoned())
         return false;
-    if (GetCharmInfo() && GetCharmInfo()->HasCommandState(COMMAND_STAY))
+    if (GetCharmInfo() && GetCharmInfo()->HasStayCommand())
         return false;                                       // told to stay there: dismissed as before
     if (owner->GetMap() != GetMap())
         return false;

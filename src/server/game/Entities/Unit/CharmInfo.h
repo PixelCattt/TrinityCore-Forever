@@ -96,6 +96,7 @@ struct TC_GAME_API CharmInfo
         void SetCommandState(CommandStates st) { _CommandState = st; }
         CommandStates GetCommandState() const { return _CommandState; }
         bool HasCommandState(CommandStates state) const { return (_CommandState == state); }
+        bool HasStayCommand() const { return IsPetStayCommand(_CommandState); }
 
         void InitPossessCreateSpells();
         void InitCharmCreateSpells();
@@ -129,6 +130,7 @@ struct TC_GAME_API CharmInfo
         void SetIsReturning(bool val);
         bool IsReturning();
         void SaveStayPosition();
+        void SetStayPosition(float x, float y, float z) { _stayX = x; _stayY = y; _stayZ = z; }
         void GetStayPosition(float &x, float &y, float &z);
 
     private:

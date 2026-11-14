@@ -261,7 +261,7 @@ void PetAI::_AttackStart(Unit* target)
         return;
 
     // Only chase if not commanded to stay or if stay but commanded to attack
-    DoAttack(target, (!me->GetCharmInfo()->HasCommandState(COMMAND_STAY) || me->GetCharmInfo()->IsCommandAttack()));
+    DoAttack(target, (!me->GetCharmInfo()->HasStayCommand() || me->GetCharmInfo()->IsCommandAttack()));
 }
 
 void PetAI::OwnerAttackedBy(Unit* attacker)
@@ -364,7 +364,7 @@ void PetAI::HandleReturnMovement()
         return;
     }
 
-    if (me->GetCharmInfo()->HasCommandState(COMMAND_STAY))
+    if (me->GetCharmInfo()->HasStayCommand()) // Stay or Move To
     {
         if (!me->GetCharmInfo()->IsAtStay() && !me->GetCharmInfo()->IsReturning())
         {
@@ -506,8 +506,8 @@ bool PetAI::CanAttack(Unit* target)
     if (me->GetCharmInfo()->IsReturning())
         return !me->GetCharmInfo()->IsCommandFollow();
 
-    // Stay - can attack if target is within range or commanded to
-    if (me->GetCharmInfo()->HasCommandState(COMMAND_STAY))
+    // Stay or Move To - can attack if target is within range or commanded to
+    if (me->GetCharmInfo()->HasStayCommand())
         return (me->IsWithinMeleeRange(target) || me->GetCharmInfo()->IsCommandAttack());
 
     //  Pets attacking something (or chasing) should only switch targets if owner tells them to

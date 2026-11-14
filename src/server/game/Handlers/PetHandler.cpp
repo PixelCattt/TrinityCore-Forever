@@ -265,7 +265,9 @@ void WorldSession::HandlePetActionHelper(Unit* pet, ObjectGuid guid1, uint32 spe
                     charmInfo->SetIsAtStay(true);
                     charmInfo->SetIsFollowing(false);
                     charmInfo->SetIsReturning(false);
-                    charmInfo->SaveStayPosition();
+                    // The point movement above only starts on the next motion update, so the spline still ends where
+                    // the pet stands now: store the clicked spot itself, which is where the pet returns after a fight.
+                    charmInfo->SetStayPosition(pos.GetPositionX(), pos.GetPositionY(), pos.GetPositionZ());
                     break;
                 default:
                     TC_LOG_ERROR("entities.pet", "WORLD: unknown PET flag Action {} and spellid {}.", uint32(flag), spellid);

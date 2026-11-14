@@ -467,4 +467,11 @@ enum CommandStates : uint8
     COMMAND_MOVE_TO = 4
 };
 
+// "Move To" parks the pet at the clicked spot, so it behaves like Stay there: it fights what comes into reach or what
+// it is told to attack, and goes back to that spot afterwards.
+constexpr bool IsPetStayCommand(CommandStates state)
+{
+    return state == COMMAND_STAY || state == COMMAND_MOVE_TO;
+}
+
 #endif // UnitDefines_h__

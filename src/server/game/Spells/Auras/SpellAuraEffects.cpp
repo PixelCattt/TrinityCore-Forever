@@ -3327,7 +3327,7 @@ void AuraEffect::HandleModPossessPet(AuraApplication const* aurApp, uint8 mode, 
             caster->ToPlayer()->PetSpellInitialize();
 
             // TODO: remove this
-            if (!pet->GetVictim() && !pet->GetCharmInfo()->HasCommandState(COMMAND_STAY))
+            if (!pet->GetVictim() && !pet->GetCharmInfo()->HasStayCommand())
                 pet->GetMotionMaster()->MoveFollow(caster, PET_FOLLOW_DIST, pet->GetFollowAngle());
         }
     }
