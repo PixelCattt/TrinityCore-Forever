@@ -190,8 +190,17 @@ struct classic_npc_disciple_of_naralex : public EscortAI
 
     void Reset() override
     {
-        // VMaNGOS resets the event state on every Reset(); TC's EscortAI only calls Reset() when not escorting
+        // TC also calls Reset() after respawning the escort. Re-arm an unfinished ritual
+        // through the instance's existing four-fang-boss gate, without resetting an active
+        // escort or replaying a completed Mutanus encounter.
         Initialize();
+        if (m_pInstance && !HasEscortState(STATE_ESCORT_ESCORTING) &&
+            m_pInstance->GetData(CWC_TYPE_MUTANUS) != DONE)
+        {
+            uint32 const discipleState = m_pInstance->GetData(CWC_TYPE_DISCIPLE);
+            if (discipleState == NOT_STARTED || discipleState == IN_PROGRESS || discipleState == FAIL)
+                m_pInstance->SetData(CWC_TYPE_DISCIPLE, NOT_STARTED);
+        }
     }
 
     Creature* GetNaralex() const
