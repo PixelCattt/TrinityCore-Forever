@@ -23,6 +23,7 @@
 #include "Log.h"
 #include "MapUtils.h"
 #include "ObjectAccessor.h"
+#include "ObjectMgr.h"
 #include "Player.h"
 #include "RealmList.h"
 #include "Util.h"
@@ -167,6 +168,33 @@ namespace
         LoginDatabase.EscapeString(upper);
         if (QueryResult result = LoginDatabase.PQuery("SELECT id, battle_tag FROM battlenet_accounts WHERE UPPER(battle_tag) = '{}' OR email = '{}' LIMIT 1", upper, upper))
             return AccountInfo{ (*result)[0].GetUInt32(), (*result)[1].IsNull() ? "" : (*result)[1].GetString() };
+        return {};
+    }
+
+    // A character's name, with or without its Classic 1.60 surname ("Ora", "Ora Brightleaf", "Ora-Brightleaf"). With title
+    // friends on (battleNetTitleFriendsEnabledClient) the Add Friend box sends a typed character name this way
+    // (C_BattleNet.SendTitleFriendInviteByName); the invitation goes to that character's Battle.net account. Character names
+    // are unique on their own, so the surname, when given, only has to match. A character without a Battle.net account
+    // (a bot) is not found.
+    Optional<AccountInfo> FindAccountByCharacterName(std::string const& target)
+    {
+        size_t const split = target.find_first_of(" -");
+        std::string name = target.substr(0, split);
+        std::string surname = split == std::string::npos ? std::string() : target.substr(split + 1);
+        while (!surname.empty() && (surname.back() == ' ' || surname.back() == '\t'))
+            surname.pop_back();
+        if (!normalizePlayerName(name))
+            return {};
+
+        CharacterCacheEntry const* character = sCharacterCache->GetCharacterCacheByName(name);
+        if (!character || character->IsDeleted)
+            return {};
+        if (!surname.empty() && !StringEqualI(surname, character->Surname))
+            return {};
+
+        if (QueryResult result = LoginDatabase.PQuery("SELECT battlenet_account FROM account WHERE id = {}", character->AccountId))
+            if (!(*result)[0].IsNull() && (*result)[0].GetUInt32() != 0)
+                return GetAccount((*result)[0].GetUInt32());
         return {};
     }
 
@@ -484,7 +512,11 @@ uint32 FriendsService::HandleSendInvitation(friends::v2::client::SendInvitationR
     else if (target.has_email())
         invitee = FindAccount(target.email());
     else if (target.has_name())
+    {
         invitee = FindAccount(target.name());
+        if (!invitee && target.name().find_first_of("#@") == std::string::npos)
+            invitee = FindAccountByCharacterName(target.name());
+    }
 
     if (!invitee)
         return ERROR_FRIENDS_RECEIVED_INVITATION_UNDELIVERABLE;
