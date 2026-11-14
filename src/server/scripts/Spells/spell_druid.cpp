@@ -28,6 +28,7 @@
 #include "Containers.h"
 #include "DB2Stores.h"
 #include "GridNotifiersImpl.h"
+#include "MotionMaster.h"
 #include "ObjectAccessor.h"
 #include "Player.h"
 #include "Spell.h"
@@ -3153,8 +3154,50 @@ class spell_dru_yseras_gift_group_heal : public SpellScript
     }
 };
 
+// 414924 - Feral Charge (Cat): "Leap behind an enemy." Its effect 0 is effect 175, which this client uses as a jump to a destination
+// (dest behind the target, Amplitude = speed multiplier, MiscValue / MiscValueB = min / max arc height in tenths, the same fields
+// as SPELL_EFFECT_JUMP_DEST); the core has no handler for 175, so the leap is done here the way Spell::EffectJumpDest does it.
+class spell_dru_classic_feral_charge_cat : public SpellScript
+{
+    SpellCastResult CheckCast()
+    {
+        if (GetCaster()->HasUnitState(UNIT_STATE_ROOT))
+            return SPELL_FAILED_ROOTED;
+        return SPELL_CAST_OK;
+    }
+
+    void HandleLeap(SpellEffIndex /*effIndex*/)
+    {
+        Unit* caster = GetCaster();
+        WorldLocation const* dest = GetHitDest();
+        if (!dest || caster->IsInFlight())
+            return;
+
+        SpellEffectInfo const& effect = GetEffectInfo();
+        Optional<float> speedMultiplier = effect.Amplitude > 0.0f ? Optional<float>(effect.Amplitude) : std::nullopt;
+        Optional<float> minHeight = effect.MiscValue ? Optional<float>(effect.MiscValue / 10.0f) : std::nullopt;
+        Optional<float> maxHeight = effect.MiscValueB ? Optional<float>(effect.MiscValueB / 10.0f) : std::nullopt;
+
+        MovementFacingTarget facing;
+        if (Unit const* target = GetExplTargetUnit())
+            facing = target;
+        else
+            facing = dest->GetOrientation();
+
+        caster->GetMotionMaster()->MoveJump(EVENT_JUMP, *dest, {}, minHeight, maxHeight, facing,
+            GetSpellInfo()->HasAttribute(SPELL_ATTR9_JUMPCHARGE__NO_FACING_CONTROL), false, speedMultiplier);
+    }
+
+    void Register() override
+    {
+        OnCheckCast += SpellCheckCastFn(spell_dru_classic_feral_charge_cat::CheckCast);
+        OnEffectLaunch += SpellEffectFn(spell_dru_classic_feral_charge_cat::HandleLeap, EFFECT_0, SPELL_EFFECT_175);
+    }
+};
+
 void AddSC_druid_spell_scripts()
 {
+    RegisterSpellScript(spell_dru_classic_feral_charge_cat);
     RegisterSpellScript(spell_dru_abundance);
     RegisterSpellScript(spell_dru_astral_communion_celestial_alignment);
     RegisterSpellScript(spell_dru_astral_smolder);
