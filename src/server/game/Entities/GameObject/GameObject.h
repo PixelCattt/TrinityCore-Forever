@@ -343,6 +343,8 @@ class TC_GAME_API GameObject : public WorldObject, public GridObject<GameObject>
         void RollChestOpens();
         bool IsMiningVein() const;
         uint32 GetUniqueUseCount() const { return uint32(m_unique_users.size()); }
+        bool IsUniqueUser(ObjectGuid const& guid) const { return m_unique_users.contains(guid); }
+        GuidSet const& GetUniqueUsers() const { return m_unique_users; }
 
         void SaveRespawnTime(uint32 forceDelay = 0);
 
