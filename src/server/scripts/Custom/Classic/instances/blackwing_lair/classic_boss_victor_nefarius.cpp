@@ -21,6 +21,7 @@
 #include "ScriptMgr.h"
 #include "GameObject.h"
 #include "InstanceScript.h"
+#include "Log.h"
 #include "Map.h"
 #include "MapReference.h"
 #include "MotionMaster.h"
@@ -435,7 +436,12 @@ struct classic_boss_victor_nefarius : public ScriptedAI
             if (capAdds && m_uiSpawnedAdds >= CLASSIC_BWL_MAX_DRAKE_KILLED)
                 return;
             if (me->SummonCreature(entry, at.GetPositionX(), at.GetPositionY(), at.GetPositionZ(), 5.000f, TEMPSUMMON_TIMED_DESPAWN_OUT_OF_COMBAT, 10s))
+            {
                 ++m_uiSpawnedAdds;
+                if (capAdds && m_uiSpawnedAdds == CLASSIC_BWL_MAX_DRAKE_KILLED)
+                    TC_LOG_INFO("scripts.classic", "BWL Victor Nefarius: {} drakonids called, no more come (Instance.NefarianCapAdds); {} killed",
+                                m_uiSpawnedAdds, m_uiKilledAdds);
+            }
         };
 
         // Add spawning mechanism
