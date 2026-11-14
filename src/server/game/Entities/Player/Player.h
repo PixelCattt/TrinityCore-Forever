@@ -2986,6 +2986,7 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
 
         //bool isActiveObject() const { return true; }
         bool CanSeeGossipOn(Creature const* creature) const;
+        bool HasPendingTalkToObjective(uint32 creatureEntry) const;
         bool CanSeeSpellClickOn(Creature const* creature) const;
 
         uint32 GetChampioningFaction() const { return m_ChampioningFaction; }

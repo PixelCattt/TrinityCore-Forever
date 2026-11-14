@@ -29650,6 +29650,22 @@ bool Player::IsPetNeedBeTemporaryUnsummoned() const
     return !IsInWorld() || !IsAlive() || HasUnitMovementFlag(MOVEMENTFLAG_FLYING) || HasUnitMovementFlag(MOVEMENTFLAG_ADV_FLYING);
 }
 
+bool Player::HasPendingTalkToObjective(uint32 creatureEntry) const
+{
+    for (QuestObjectiveStatusMap::value_type const& objectiveItr : Trinity::Containers::MapEqualRange(m_questObjectiveStatus, { QUEST_OBJECTIVE_TALKTO, int32(creatureEntry) }))
+    {
+        Quest const* quest = sObjectMgr->GetQuestTemplate(objectiveItr.second.QuestStatusItr->first);
+        QuestObjective const* objective = sObjectMgr->GetQuestObjective(objectiveItr.second.ObjectiveId);
+        if (!quest || !objective)
+            continue;
+
+        uint16 logSlot = objectiveItr.second.QuestStatusItr->second.Slot;
+        if (IsQuestObjectiveCompletable(logSlot, quest, *objective) && !IsQuestObjectiveComplete(logSlot, quest, *objective))
+            return true;
+    }
+    return false;
+}
+
 bool Player::CanSeeGossipOn(Creature const* creature) const
 {
     if (creature->HasNpcFlag(UNIT_NPC_FLAG_GOSSIP))
@@ -29657,6 +29673,12 @@ bool Player::CanSeeGossipOn(Creature const* creature) const
         if (GetGossipMenuForSource(creature))
             return true;
     }
+
+    // "talk to" objectives: an npc the player still has to speak with stays interactable even without a gossip menu or
+    // a quest of its own (Exploring the Alliance: Mekkatorque and Magni have neither, so the bubble was stripped and the
+    // objective could never be credited). HandleGossipHelloOpcode / HandleQuestgiverHelloOpcode give the credit.
+    if ((creature->HasNpcFlag(UNIT_NPC_FLAG_GOSSIP) || creature->HasNpcFlag(UNIT_NPC_FLAG_QUESTGIVER)) && HasPendingTalkToObjective(creature->GetEntry()))
+        return true;
 
     // for cases with questgiver/ender without gossip menus
     if (creature->HasNpcFlag(UNIT_NPC_FLAG_QUESTGIVER))
