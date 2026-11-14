@@ -1562,8 +1562,34 @@ class spell_rog_venomous_wounds : public AuraScript
     }
 };
 
+// Classic Garrote (703, 8631, 8632, 8633, 11289, 11290): "Must be stealthed and behind the target", but Dirty Deeds (14082) says
+// "your Garrote ability no longer requires you to be behind your target". The other classic positionals use spell_custom_attr.
+class spell_rog_classic_garrote_positional : public SpellScript
+{
+    static constexpr uint32 SPELL_ROGUE_CLASSIC_DIRTY_DEEDS = 14082;
+
+    SpellCastResult CheckCast()
+    {
+        Unit* caster = GetCaster();
+        Unit* target = GetExplTargetUnit();
+        if (!target || target == caster || caster->HasAura(SPELL_ROGUE_CLASSIC_DIRTY_DEEDS))
+            return SPELL_CAST_OK;
+
+        if (target->HasInArc(static_cast<float>(M_PI), caster))
+            return SPELL_FAILED_NOT_BEHIND;
+
+        return SPELL_CAST_OK;
+    }
+
+    void Register() override
+    {
+        OnCheckCast += SpellCheckCastFn(spell_rog_classic_garrote_positional::CheckCast);
+    }
+};
+
 void AddSC_rogue_spell_scripts()
 {
+    RegisterSpellScript(spell_rog_classic_garrote_positional);
     RegisterSpellScript(spell_rog_acrobatic_strikes);
     RegisterSpellScript(spell_rog_airborne_irritant);
     RegisterSpellScript(spell_rog_airborne_irritant_target_selection);
