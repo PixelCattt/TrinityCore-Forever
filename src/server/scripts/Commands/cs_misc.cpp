@@ -25,6 +25,7 @@
 #include "StringConvert.h"
 #include "ChatCommand.h"
 #include "DatabaseEnv.h"
+#include "DayCycle.h"
 #include "DB2Stores.h"
 #include "DisableMgr.h"
 #include "GridNotifiers.h"
@@ -67,6 +68,10 @@ public:
         static ChatCommandTable commandTable =
         {
             { "additem",          HandleAddItemCommand,          rbac::RBAC_PERM_COMMAND_ADDITEM,          Console::No },
+            { "time",             HandleTimeCommand,             rbac::RBAC_PERM_COMMAND_TIME,             Console::No },
+            { "time day",         HandleTimeDayCommand,          rbac::RBAC_PERM_COMMAND_TIME,             Console::No },
+            { "time night",       HandleTimeNightCommand,        rbac::RBAC_PERM_COMMAND_TIME,             Console::No },
+            { "time auto",        HandleTimeAutoCommand,         rbac::RBAC_PERM_COMMAND_TIME,             Console::No },
             { "additem to",       HandleAddItemToCommand,        rbac::RBAC_PERM_COMMAND_ADDITEM,          Console::No },
             { "additem set",      HandleAddItemSetCommand,       rbac::RBAC_PERM_COMMAND_ADDITEMSET,       Console::No },
             { "appear",           HandleAppearCommand,           rbac::RBAC_PERM_COMMAND_APPEAR,           Console::No },
@@ -1209,6 +1214,57 @@ public:
         playerTarget->RemoveExploredZones(offset, val);
 
         handler->SendSysMessage(LANG_UNEXPLORE_AREA);
+        return true;
+    }
+
+    // .time: this character's own sky (DayCycle.h). Only the light and the sky change, for this player alone; the realm's
+    // events and clock stay as they are. Kept across logins (character_day_cycle).
+    static bool HandleTimeCommand(ChatHandler* handler)
+    {
+        Player* player = handler->GetSession()->GetPlayer();
+        bool const ru = handler->GetSession()->GetSessionDbLocaleIndex() == LOCALE_ruRU;
+        uint32 const speed = sWorld->getIntConfig(CONFIG_FOREVER_DAY_CYCLE_SPEED);
+        switch (player->GetSkyMode())
+        {
+            case DayCycle::SkyMode::Day:
+                handler->SendSysMessage(ru ? "Ваше небо: всегда полдень (.time day). .time night - полночь, .time auto - день и ночь мира."
+                                           : "Your sky: always noon (.time day). .time night for midnight, .time auto for the realm's day and night.");
+                break;
+            case DayCycle::SkyMode::Night:
+                handler->SendSysMessage(ru ? "Ваше небо: всегда полночь (.time night). .time day - полдень, .time auto - день и ночь мира."
+                                           : "Your sky: always midnight (.time night). .time day for noon, .time auto for the realm's day and night.");
+                break;
+            default:
+                handler->PSendSysMessage(ru ? "Ваше небо: день и ночь мира (скорость %ux). .time day - всегда полдень, .time night - всегда полночь."
+                                            : "Your sky: the realm's day and night (speed %ux). .time day keeps noon, .time night keeps midnight.", speed);
+                break;
+        }
+        return true;
+    }
+
+    static bool HandleTimeDayCommand(ChatHandler* handler) { return SetSkyMode(handler, DayCycle::SkyMode::Day); }
+    static bool HandleTimeNightCommand(ChatHandler* handler) { return SetSkyMode(handler, DayCycle::SkyMode::Night); }
+    static bool HandleTimeAutoCommand(ChatHandler* handler) { return SetSkyMode(handler, DayCycle::SkyMode::Auto); }
+
+    static bool SetSkyMode(ChatHandler* handler, DayCycle::SkyMode mode)
+    {
+        Player* player = handler->GetSession()->GetPlayer();
+        bool const ru = handler->GetSession()->GetSessionDbLocaleIndex() == LOCALE_ruRU;
+        player->SetSkyMode(mode);
+        switch (mode)
+        {
+            case DayCycle::SkyMode::Day:
+                handler->SendSysMessage(ru ? "Теперь у вас всегда полдень (это видите только вы). .time auto вернёт день и ночь мира."
+                                           : "It stays noon for you now (only you see it). .time auto brings back the realm's day and night.");
+                break;
+            case DayCycle::SkyMode::Night:
+                handler->SendSysMessage(ru ? "Теперь у вас всегда полночь (это видите только вы). .time auto вернёт день и ночь мира."
+                                           : "It stays midnight for you now (only you see it). .time auto brings back the realm's day and night.");
+                break;
+            default:
+                handler->SendSysMessage(ru ? "Ваше небо снова идёт по дню и ночи мира." : "Your sky follows the realm's day and night again.");
+                break;
+        }
         return true;
     }
 

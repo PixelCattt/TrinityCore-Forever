@@ -59,6 +59,7 @@
 #include "CreatureAI.h"
 #include "DB2Stores.h"
 #include "DatabaseEnv.h"
+#include "DayCycle.h"
 #include "DisableMgr.h"
 #include "DuelPackets.h"
 #include "EquipmentSetPackets.h"
@@ -136,6 +137,7 @@
 #include "StringConvert.h"
 #include "TalentPackets.h"
 #include "TerrainMgr.h"
+#include "Timezone.h"
 #include "ToyPackets.h"
 #include "TradeData.h"
 #include "TraitMgr.h"
@@ -249,6 +251,7 @@ Player::Player(WorldSession* session) : Unit(true), m_sceneMgr(this)
 
     m_hostileReferenceCheckTimer = 0;
     m_drunkTimer = 0;
+    m_skyMode = uint8(DayCycle::SkyMode::Auto);
     m_deathTimer = 0;
     m_deathExpireTime = 0;
 
@@ -4589,6 +4592,10 @@ void Player::DeleteFromDB(ObjectGuid playerguid, uint32 accountId, bool updateRe
             trans->Append(stmt);
 
             stmt = CharacterDatabase.GetPreparedStatement(CHAR_DEL_CHARACTER_BANK_TAB_SETTINGS);
+            stmt->setUInt64(0, guid);
+            trans->Append(stmt);
+
+            stmt = CharacterDatabase.GetPreparedStatement(CHAR_DEL_CHARACTER_DAY_CYCLE);
             stmt->setUInt64(0, guid);
             trans->Append(stmt);
 
@@ -19976,6 +19983,8 @@ bool Player::LoadFromDB(ObjectGuid guid, CharacterDatabaseQueryHolder const& hol
 
     _LoadCharacterBankTabSettings(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_BANK_TAB_SETTINGS));
 
+    _LoadDayCycle(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_DAY_CYCLE));
+
     _LoadInventory(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_INVENTORY),
         holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_ARTIFACTS),
         holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_AZERITE),
@@ -21705,6 +21714,11 @@ void Player::_LoadCharacterBankTabSettings(PreparedQueryResult result)
 
     while (m_activePlayerData->CharacterBankTabSettings.size() < *m_activePlayerData->NumCharacterBankTabs)
         AddDynamicUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::CharacterBankTabSettings));
+}
+
+void Player::_LoadDayCycle(PreparedQueryResult result)
+{
+    m_skyMode = uint8(result ? DayCycle::SkyModeFromDb((*result)[0].GetUInt8()) : DayCycle::SkyMode::Auto);
 }
 
 /*********************************************************/
@@ -26418,14 +26432,7 @@ void Player::SendInitialPacketsBeforeAddToMap()
     m_questObjectiveCriteriaMgr->SendAllData(this);
 
     /// SMSG_LOGIN_SETTIMESPEED
-    static float const TimeSpeed = 0.01666667f;
-    WorldPackets::Misc::LoginSetTimeSpeed loginSetTimeSpeed;
-    loginSetTimeSpeed.NewSpeed = TimeSpeed;
-    loginSetTimeSpeed.GameTime = *GameTime::GetWowTime();
-    loginSetTimeSpeed.ServerTime = *GameTime::GetWowTime();
-    loginSetTimeSpeed.GameTimeHolidayOffset = 0; /// @todo
-    loginSetTimeSpeed.ServerTimeHolidayOffset = 0; /// @todo
-    SendDirectMessage(loginSetTimeSpeed.Write());
+    SendDayCycle();
 
     /// SMSG_WORLD_SERVER_INFO
     WorldPackets::Misc::WorldServerInfo worldServerInfo;
@@ -26472,6 +26479,54 @@ void Player::SendInitialPacketsBeforeAddToMap()
     SendDirectMessage(initialSetup.Write());
 
     SetMovedUnit(this);
+}
+
+// SMSG_LOGIN_SET_TIME_SPEED: sent at login and at every map change (SendInitialPacketsBeforeAddToMap), and by .time. The
+// realm's date and clock go as they are (ServerTime, and the date of GameTime: the calendar and holidays); only the hour
+// and minute of GameTime and the speed are the sky's.
+void Player::SendDayCycle() const
+{
+    WowTime const& now = *GameTime::GetWowTime();
+    // the realm's wall clock to the second (WowTime holds whole minutes, a minute that a fast sky would multiply)
+    int64 const localSeconds = int64(GameTime::GetGameTime())
+        + std::chrono::duration_cast<Seconds>(Trinity::Timezone::GetSystemZoneOffsetAt(GameTime::GetSystemTime())).count();
+    DayCycle::SkyClock const sky = DayCycle::ShownClock(localSeconds, sWorld->getIntConfig(CONFIG_FOREVER_DAY_CYCLE_SPEED), GetSkyMode());
+
+    WorldPackets::Misc::LoginSetTimeSpeed loginSetTimeSpeed;
+    loginSetTimeSpeed.NewSpeed = sky.Speed;
+    loginSetTimeSpeed.GameTime = now;
+    loginSetTimeSpeed.GameTime.SetHour(sky.Hour);
+    loginSetTimeSpeed.GameTime.SetMinute(sky.Minute);
+    loginSetTimeSpeed.ServerTime = now;
+    loginSetTimeSpeed.GameTimeHolidayOffset = 0; /// @todo
+    loginSetTimeSpeed.ServerTimeHolidayOffset = 0; /// @todo
+    SendDirectMessage(loginSetTimeSpeed.Write());
+}
+
+DayCycle::SkyMode Player::GetSkyMode() const
+{
+    return DayCycle::SkyModeFromDb(m_skyMode);
+}
+
+void Player::SetSkyMode(DayCycle::SkyMode mode)
+{
+    m_skyMode = uint8(mode);
+
+    CharacterDatabasePreparedStatement* stmt;
+    if (mode == DayCycle::SkyMode::Auto)
+    {
+        stmt = CharacterDatabase.GetPreparedStatement(CHAR_DEL_CHARACTER_DAY_CYCLE);
+        stmt->setUInt64(0, GetGUID().GetCounter());
+    }
+    else
+    {
+        stmt = CharacterDatabase.GetPreparedStatement(CHAR_REP_CHARACTER_DAY_CYCLE);
+        stmt->setUInt64(0, GetGUID().GetCounter());
+        stmt->setUInt8(1, uint8(mode));
+    }
+    CharacterDatabase.Execute(stmt);
+
+    SendDayCycle();
 }
 
 void Player::SendInitialPacketsAfterAddToMap()

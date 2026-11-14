@@ -49,6 +49,7 @@
 #include "CreatureTextMgr.h"
 #include "DB2Stores.h"
 #include "DatabaseEnv.h"
+#include "DayCycle.h"
 #include "DetourMemoryFunctions.h"
 #include "DisableMgr.h"
 #include "GameEventMgr.h"
@@ -920,6 +921,7 @@ void World::LoadConfigSettings(bool reload)
         { .Name = "Classic.Respawn.Level31to60Pct"sv, .DefaultValue = 100, .Index = CONFIG_CLASSIC_RESPAWN_LEVEL_31_60_PCT, .Min = 10, .Max = 1000 },
         { .Name = "Classic.CreatureHealth.RaiseFromLevel"sv, .DefaultValue = 20, .Index = CONFIG_CLASSIC_CREATURE_HEALTH_RAISE_FROM_LEVEL, .Min = 1, .Max = 59 },
         { .Name = "Classic.CreatureHealth.RaiseAt60Pct"sv, .DefaultValue = 20, .Index = CONFIG_CLASSIC_CREATURE_HEALTH_RAISE_AT_60_PCT, .Max = 200 },
+        { .Name = "Forever.DayCycle.Speed"sv, .DefaultValue = 1, .Index = CONFIG_FOREVER_DAY_CYCLE_SPEED, .Min = DayCycle::MinSpeed, .Max = DayCycle::MaxSpeed, .Reloadable = false },
     } };
 
     static constexpr ConfigOptionLoadDefinitionArray<uint64, INT64_CONFIG_VALUE_COUNT> int64s =

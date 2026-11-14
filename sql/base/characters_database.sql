@@ -789,6 +789,29 @@ LOCK TABLES `character_customizations` WRITE;
 UNLOCK TABLES;
 
 --
+-- Table structure for table `character_day_cycle`
+--
+
+DROP TABLE IF EXISTS `character_day_cycle`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `character_day_cycle` (
+  `guid` bigint unsigned NOT NULL COMMENT 'characters.guid',
+  `mode` tinyint unsigned NOT NULL COMMENT '1 noon, 2 midnight',
+  PRIMARY KEY (`guid`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='own sky of a character (.time)';
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `character_day_cycle`
+--
+
+LOCK TABLES `character_day_cycle` WRITE;
+/*!40000 ALTER TABLE `character_day_cycle` DISABLE KEYS */;
+/*!40000 ALTER TABLE `character_day_cycle` ENABLE KEYS */;
+UNLOCK TABLES;
+
+--
 -- Table structure for table `character_declinedname`
 --
 

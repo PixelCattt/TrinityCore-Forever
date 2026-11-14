@@ -2479,6 +2479,7 @@ INSERT INTO `rbac_linked_permissions` VALUES
 (195,24),
 (195,49),
 (195,199),
+(195,1000),
 (196,10),
 (196,202),
 (196,203),
@@ -3789,7 +3790,8 @@ INSERT INTO `rbac_permissions` VALUES
 (882,'Command: reload spell_script_names'),
 (883,'Command: quest objective complete'),
 (884,'Command: bg start'),
-(885,'Command: bg stop');
+(885,'Command: bg stop'),
+(1000,'Command: time');
 /*!40000 ALTER TABLE `rbac_permissions` ENABLE KEYS */;
 UNLOCK TABLES;
 

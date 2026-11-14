@@ -119,6 +119,11 @@ namespace BattlePets
     struct BattlePet;
 }
 
+namespace DayCycle
+{
+    enum class SkyMode : uint8;
+}
+
 namespace WorldPackets
 {
     namespace Character
@@ -1032,6 +1037,7 @@ enum PlayerLoginQueryIndex
     PLAYER_LOGIN_QUERY_LOAD_DATA_ELEMENTS,
     PLAYER_LOGIN_QUERY_LOAD_DATA_FLAGS,
     PLAYER_LOGIN_QUERY_LOAD_BANK_TAB_SETTINGS,
+    PLAYER_LOGIN_QUERY_LOAD_DAY_CYCLE,
     MAX_PLAYER_LOGIN_QUERY
 };
 
@@ -1278,6 +1284,10 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
 
         void SendInitialPacketsBeforeAddToMap();
         void SendInitialPacketsAfterAddToMap();
+        // the sky's clock (DayCycle.h): the realm's sky at Forever.DayCycle.Speed, or this character's own noon or midnight
+        void SendDayCycle() const;
+        DayCycle::SkyMode GetSkyMode() const;
+        void SetSkyMode(DayCycle::SkyMode mode);   // saved at once and sent
         void SendSupercededSpell(uint32 oldSpell, uint32 newSpell) const;
         void SendTransferAborted(uint32 mapid, TransferAbortReason reason, uint8 arg = 0, int32 mapDifficultyXConditionID = 0) const;
 
@@ -3282,6 +3292,7 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         void _LoadCUFProfiles(PreparedQueryResult result);
         void _LoadPlayerData(PreparedQueryResult elementsResult, PreparedQueryResult flagsResult);
         void _LoadCharacterBankTabSettings(PreparedQueryResult result);
+        void _LoadDayCycle(PreparedQueryResult result);
 
         /*********************************************************/
         /***                   SAVE SYSTEM                     ***/
@@ -3419,6 +3430,7 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         uint32 m_hostileReferenceCheckTimer;
         uint32 m_drunkTimer;
         uint32 m_weaponChangeTimer;
+        uint8 m_skyMode;                    // DayCycle::SkyMode
 
         uint32 m_zoneUpdateId;
         uint32 m_areaUpdateId;

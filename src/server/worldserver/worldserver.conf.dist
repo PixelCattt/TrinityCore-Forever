@@ -5224,3 +5224,18 @@ Discord.Channel.Enable = 0
 #        Default:     "Discord"
 
 Discord.Channel.Name = "Discord"
+
+#
+#    Forever.DayCycle.Speed
+#        Description: How fast the sky runs from day to night for the whole realm. The time of day shown is worked out from
+#                     the realm's clock, so every player sees the same sky, also after a restart. Only the sky changes:
+#                     events, resets, respawns and scripts keep the realm's own time. Players can also keep their own
+#                     character at noon or midnight with .time day / .time night (.time auto goes back to this).
+#                     Read at server start (a restart is needed after a change).
+#        Default:     1  - (The realm's own clock: a day takes 24 hours)
+#                     2  - (Twice as fast: a day takes 12 hours)
+#                     3  - (Three times as fast: a day takes 8 hours)
+#                     ...
+#                     24 - (A day takes an hour)
+
+Forever.DayCycle.Speed = 1
