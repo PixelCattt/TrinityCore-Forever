@@ -556,6 +556,7 @@ struct classic_boss_thaddius : public ScriptedAI
     std::random_device m_randDevice;
     std::mt19937 m_random{ m_randDevice() };
     uint32 killSayCooldown = 0;
+    uint32 m_phaseChanges = 0;
 
     // VMaNGOS does this in the AI constructor
     void JustAppeared() override
@@ -735,6 +736,14 @@ struct classic_boss_thaddius : public ScriptedAI
 
     void TransitionToPhase(ClassicNaxxThaddiusPhase newPhase)
     {
+        // Diagnostics: each phase change with his threat list and combat state (naxx_thaddius 2026-11-14: both adds went down together and
+        // he left combat 16 s later at 100% without engaging anybody). The first 20 changes, then every 100th, so a flip each tick shows.
+        ++m_phaseChanges;
+        if (m_phaseChanges <= 20 || m_phaseChanges % 100 == 0)
+            TC_LOG_INFO("scripts", "classic_boss_thaddius: phase {} -> {} (change {}), threat list {}, in combat {}, evading {}, uninteractible {}, "
+                        "immune to pc {}, instance data {}", uint32(m_Phase), uint32(newPhase), m_phaseChanges,
+                        me->GetThreatManager().GetThreatListSize(), me->IsInCombat(),
+                        me->IsInEvadeMode(), me->IsUninteractible(), me->IsImmuneToPC(), m_pInstance ? m_pInstance->GetData(TYPE_THADDIUS) : 0u);
         m_Phase = newPhase;
         switch (m_Phase)
         {
