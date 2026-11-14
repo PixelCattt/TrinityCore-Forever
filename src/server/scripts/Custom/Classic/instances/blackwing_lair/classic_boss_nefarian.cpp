@@ -185,6 +185,11 @@ struct classic_boss_nefarian : public ScriptedAI
         if (uiType != POINT_MOTION_TYPE)
             return;
 
+        // The landing flight, step by step: in chris's dev raids 2026-11-14 (13:30, 15:10) he stood at -7535,-1251 hitting the raid for 25 s
+        // and nobody could attack him, short of point 2 (-7496,-1252), so the flight never reached its end there.
+        TC_LOG_INFO("scripts.classic", "BWL Nefarian reached landing point {} at {:.1f},{:.1f},{:.1f}", uiPointId, me->GetPositionX(), me->GetPositionY(),
+                    me->GetPositionZ());
+
         switch (uiPointId)
         {
             case 1:
@@ -274,6 +279,8 @@ struct classic_boss_nefarian : public ScriptedAI
 
                         ClassicScriptText(CLASSIC_BWL_SAY_NEF_AGGRO, me);
 
+                        TC_LOG_INFO("scripts.classic", "BWL Nefarian takes off from {:.1f},{:.1f},{:.1f} (victim {})", me->GetPositionX(),
+                                    me->GetPositionY(), me->GetPositionZ(), me->GetVictim() ? me->GetVictim()->GetName() : std::string("none"));
                         // VMaNGOS: MovePoint + MonsterMoveWithSpeed(17, MOVE_FORCE_DESTINATION)
                         me->GetMotionMaster()->MovePoint(1, -7449.145f, -1320.647f, 476.795f, false, {}, 17.0f);
                         m_uiTransitionTimer = 0;
@@ -283,6 +290,8 @@ struct classic_boss_nefarian : public ScriptedAI
                         me->SetCanFly(false);
                         me->SetDisableGravity(false);
                         ClassicScriptText(CLASSIC_BWL_SAY_NEF_SHADOWFLAME, me);
+                        TC_LOG_INFO("scripts.classic", "BWL Nefarian lands at {:.1f},{:.1f},{:.1f}", me->GetPositionX(), me->GetPositionY(),
+                                    me->GetPositionZ());
                         me->HandleEmoteCommand(EMOTE_ONESHOT_LAND);
                         m_uiTransitionTimer = 1000;
                         break;
