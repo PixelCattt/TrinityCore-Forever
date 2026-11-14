@@ -705,8 +705,8 @@ public:
 
                 if (item->IsInUpdateQueue())
                 {
-                    uint16 qp = item->GetQueuePos();
-                    if (qp > updateQueue.size())
+                    uint32 qp = item->GetQueuePos();
+                    if (qp >= updateQueue.size())
                     {
                         handler->PSendSysMessage("The item with slot %d and %s has its queuepos (%d) larger than the update queue size! ", item->GetSlot(), item->GetGUID().ToString().c_str(), qp);
                         error = true;
@@ -773,8 +773,8 @@ public:
 
                         if (item2->IsInUpdateQueue())
                         {
-                            uint16 qp = item2->GetQueuePos();
-                            if (qp > updateQueue.size())
+                            uint32 qp = item2->GetQueuePos();
+                            if (qp >= updateQueue.size())
                             {
                                 handler->PSendSysMessage("The item in bag %d at slot %d having %s has a queuepos (%d) larger than the update queue size! ", bag->GetSlot(), item2->GetSlot(), item2->GetGUID().ToString().c_str(), qp);
                                 error = true;
