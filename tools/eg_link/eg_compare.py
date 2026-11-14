@@ -97,7 +97,9 @@ for kind, src in (('npc', npcs), ('obj', nobjs)):
             givers[int(q)].add((kind, int(i)))
         for q in n.get('takes', {}):
             enders[int(q)].add((kind, int(i)))
-prereq = json.load(open(os.path.join(EG, 'quest_prerequisites.json'), encoding='utf-8'))
+# Not every build folder has it (the first day of a new build often lacks it).
+_prereq_path = os.path.join(EG, 'quest_prerequisites.json')
+prereq = json.load(open(_prereq_path, encoding='utf-8')) if os.path.exists(_prereq_path) else {}
 turn = load('turn_ins.json', 'quests')
 
 
