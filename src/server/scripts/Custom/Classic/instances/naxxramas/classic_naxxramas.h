@@ -55,6 +55,13 @@ enum ClassicNaxxramasMap : uint32
     MAP_NAXXRAMAS               = 533
 };
 
+// CreatureAI::DoAction ids. Kel'Thuzad's start is what his room's area trigger does (OnKTAreaTrigger); the action lets a caller that does not
+// walk through the trigger (the bot scenario runner) start the same encounter.
+enum ClassicNaxxramasActions : int32
+{
+    CLASSIC_NAXX_ACTION_KT_START            = 1
+};
+
 // Also the InstanceScript boss ids (SetBossNumber(MAX_ENCOUNTER))
 enum NAXX_ENCOUNTERS_TYPES
 {

@@ -478,6 +478,13 @@ struct classic_boss_kelthuzad : public ScriptedAI
         p1_adds.clear();
     }
 
+    void DoAction(int32 action) override
+    {
+        // The same start as the room's area trigger, with its check (OnKTAreaTrigger).
+        if (action == CLASSIC_NAXX_ACTION_KT_START && m_pInstance && m_pInstance->GetData(TYPE_KELTHUZAD) == NOT_STARTED)
+            StartEncounter();
+    }
+
     void StartEncounter()
     {
         if (!m_pInstance)
