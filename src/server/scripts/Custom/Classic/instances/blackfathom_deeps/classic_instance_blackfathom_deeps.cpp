@@ -405,6 +405,12 @@ public:
             if (m_uiShrinesLit < 4)
                 return false;
 
+            // Update checks completion before dispatching the queued waves. A long tick
+            // must not complete the event while those waves still have to spawn.
+            for (uint32 timer : m_uiSpawnMobsTimer)
+                if (timer)
+                    return false;
+
             // Check if all mobs are dead
             for (ObjectGuid const& guid : m_lWaveMobsGUIDList)
             {
