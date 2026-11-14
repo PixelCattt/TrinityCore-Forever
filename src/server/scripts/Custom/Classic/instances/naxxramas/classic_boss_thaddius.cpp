@@ -572,8 +572,9 @@ struct classic_boss_thaddius : public ScriptedAI
         if (!me->HasAura(SPELL_THADIUS_SPAWN))
             DoCastSelf(SPELL_THADIUS_SPAWN, true);
 
-        // He is not targetable other than in p2
+        // He is not targetable other than in p2. His creature row is immune to players as well (UNIT_FLAG_IMMUNE_TO_PC); phase 2 lifts both.
         me->SetUninteractible(true);
+        me->SetImmuneToPC(true);
     }
 
     // Helper for CheckSpawnAdds
@@ -707,6 +708,7 @@ struct classic_boss_thaddius : public ScriptedAI
 
         // He is not targetable other than in p2
         me->SetUninteractible(true);
+        me->SetImmuneToPC(true);
     }
 
     void KilledUnit(Unit* pVictim) override
@@ -812,6 +814,11 @@ struct classic_boss_thaddius : public ScriptedAI
                     }
                     me->RemoveAurasDueToSpell(SPELL_THADIUS_SPAWN);
                     me->SetUninteractible(false);
+                    // VMaNGOS only clears UNIT_FLAG_NOT_SELECTABLE here; the TC row also carries IMMUNE_TO_PC, and with it kept the raid
+                    // could never attack him (naxx_thaddius 1114f phase log: "immune to pc 1" through phase 2). The raid left his threat
+                    // list while he stood immune and the adds died, so it is put back on it before phase 2 picks the nearest target.
+                    me->SetImmuneToPC(false);
+                    DoZoneInCombat();
                     DoCastSelf(SPELL_THADIUS_LIGHTNING_VISUAL, true);
                     break;
                 case EVENT_THAD_TRANSITION_3:
@@ -938,7 +945,10 @@ struct classic_boss_thaddius : public ScriptedAI
         if (!m_pInstance)
             return;
 
-        if (m_Phase != THAD_NOT_STARTED)
+        // The transition is not a fight of his own: the adds are dead and he stands immune for 13 s while the coils overload, so his
+        // threat list may empty then (1114f: "phase 2 -> 0, threat list 0" between the coils' beam and his engage). It is filled again
+        // when he becomes attackable (EVENT_THAD_TRANSITION_2).
+        if (m_Phase != THAD_NOT_STARTED && m_Phase != THAD_TRANSITION)
         {
             if (me->GetThreatManager().IsThreatListEmpty(true))
             {
