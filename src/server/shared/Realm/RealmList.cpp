@@ -266,6 +266,12 @@ static bool RealmAcceptsBuild(Realm const& realm, uint32 clientBuild)
         for (std::string_view token : Trinity::Tokenize(configured, ',', false))
             if (Optional<uint32> build = Trinity::StringTo<uint32>(token))
                 builds.push_back(*build);
+        // a listed build needs its auth build_info row too (sql/custom/auth/*_auth_classic_<build>.sql): without it the login of that
+        // client fails although the realm lists it. A repack that turns the auth updates off never gets the row (2026-11-14).
+        for (uint32 build : builds)
+            if (!ClientBuild::GetBuildInfo(build))
+                TC_LOG_ERROR("realmlist", "Realm.AlsoAcceptBuilds lists {} but auth.build_info has no row for it: clients of that build cannot log in. "
+                    "Let the auth updates run (Updates.EnableDatabases includes 1) so sql/custom/auth is applied, or add the row.", build);
         return builds;
     }();
 

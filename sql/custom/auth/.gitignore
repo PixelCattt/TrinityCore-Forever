@@ -1,1 +1,2 @@
-*.sql
+# This fork keeps its custom SQL in git: every file here ships and runs (the DB updater applies sql/custom through updates_include).
+# Upstream ignored *.sql here, which hid new files from commits twice (the 70888 and 70938 auth rows, 2026-11).
