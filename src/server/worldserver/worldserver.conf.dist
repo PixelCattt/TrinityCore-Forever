@@ -493,6 +493,16 @@ Pathfinding.RoadCostMounted = 0.35
 
 Pathfinding.SlopeCoefficient = 0.0
 
+#
+#    Pathfinding.PetLiquidCost
+#        Description: Path cost of a yard of water, magma or slime for a player's pet or guardian, against 1.0 for a yard
+#                     of flat ground. Above 1.0 the pet walks round water unless swimming saves a lot of distance, instead
+#                     of swimming across whenever it is a little shorter. Other creatures and players are not affected.
+#                     Values below 1.0 count as 1.0 (stock: water costs the same as ground).
+#        Default:     2.5
+
+Pathfinding.PetLiquidCost = 2.5
+
 ###################################################################################################
 # Handcrafted road segments
 #

@@ -933,6 +933,24 @@ void PathGenerator::CreateFilter()
         // creatures don't take environmental damage
         if (creature->CanEnterWater())
             includeFlags |= (NAV_WATER | NAV_MAGMA_SLIME);                 // swim
+
+        // A pet or guardian of a player (a hunter's pet, a warlock's demon) that walks:
+        if (!creature->IsAquatic() && creature->GetCharmerOrOwnerGUID().IsPlayer())
+        {
+            // It goes where its owner goes: steep ground is open to it as it is to the player, in combat or not. Out of combat a
+            // creature keeps off steep polygons (UpdateFilter opens them in combat), so a follow to an owner on a steep river bank
+            // found no way up it and ran a long way along the water to a gentle slope, or swam to one.
+            includeFlags |= NAV_GROUND_STEEP;
+
+            // It pays more for liquid than for ground. Detour gave water the cost of flat ground, and with
+            // Pathfinding.SlopeCoefficient (the bot config sets 1.0) every sloped yard of land costs up to 2x while the water surface
+            // is flat, so water was the cheapest ground there is: a hunter's pet swam across a lake to reach a target on the far
+            // shore when the walk round it was barely longer, and when the land and water routes cost about the same, each re-path
+            // picked the other one and the pet turned back and forth. Swimming is also about a third slower than running.
+            float const liquidCost = std::max(1.0f, sConfigMgr->GetFloatDefault("Pathfinding.PetLiquidCost", 2.5f));
+            _filter.setAreaCost(NAV_AREA_WATER, liquidCost);
+            _filter.setAreaCost(NAV_AREA_MAGMA_SLIME, liquidCost);
+        }
     }
     else // assume Player
     {
