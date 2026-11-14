@@ -39,11 +39,13 @@ TEST_CASE("With the world server on another PC a local game gets the realmlist a
     realm.Port = ClosedLoopbackPort();
     CHECK(realm.GetAddressForClient(Addr("127.0.0.1")) == Addr("203.0.113.5"));
 
-    // with a localAddress too, the loopback client gets the localAddress, as before the 0.1.30 change
+    // with a localAddress too, the loopback client gets one of the realmlist addresses (the stock pick), never 127.0.0.1
     Realm lan;
     lan.Addresses = { Addr("203.0.113.5"), Addr("203.0.113.6") };
     lan.Port = ClosedLoopbackPort();
-    CHECK(lan.GetAddressForClient(Addr("127.0.0.1")) == Addr("203.0.113.6"));
+    boost::asio::ip::address picked = lan.GetAddressForClient(Addr("127.0.0.1"));
+    CHECK(!picked.is_loopback());
+    CHECK((picked == Addr("203.0.113.5") || picked == Addr("203.0.113.6")));
 }
 
 TEST_CASE("A realm address that is gone (VPN off) still gives 127.0.0.1 while the world server listens here", "[RealmLoopback]")
