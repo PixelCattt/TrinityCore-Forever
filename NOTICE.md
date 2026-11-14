@@ -40,11 +40,11 @@ redistributing. Source files of the module do not carry per-file headers; this n
   Data from [Efficient Games](https://efficient.games) (https://github.com/JIVESCORP/eg-link-output-wowf), licensed under
   [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Changed: only the records we lacked or had different were picked and
   converted to our database tables.
-- Live WoW Forever quest data (quest order, givers and turn-ins) in `sql/custom/world/2026_11_12_15_*.sql`, `2026_11_13_86_*.sql` and
-  `2026_11_13_87_*.sql`: from [Questie](https://github.com/Questie/QuestieDB) (Questie team, GPL-3.0), its Forever corrections and
+- Live WoW Forever quest data (quest order, givers and turn-ins) in `sql/custom/world/2026_11_12_15_*.sql`, `2026_11_13_86_*.sql`,
+  `2026_11_13_87_*.sql` and `2026_11_14_97_*.sql`: from [Questie](https://github.com/Questie/QuestieDB) (Questie team, GPL-3.0), its Forever corrections and
   play traces. Changed: converted to our database tables, only where ours lacked it.
 - Live WoW Forever world data (quest records, object templates, vendor items, trainer levels) in
-  `sql/custom/world/2026_11_12_14_*.sql`, `2026_11_13_88_*.sql` and `2026_11_13_90_*.sql`: Data from
+  `sql/custom/world/2026_11_12_14_*.sql`, `2026_11_13_88_*.sql`, `2026_11_13_90_*.sql` and `2026_11_14_96_*.sql`: Data from
   [Efficient Games](https://efficient.games) (https://github.com/JIVESCORP/eg-link-output-wowf), licensed under
   [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Changed: only the records we lacked or had different were picked and
   converted to our database tables.
