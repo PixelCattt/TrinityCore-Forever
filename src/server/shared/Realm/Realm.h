@@ -160,6 +160,7 @@ struct TC_SHARED_API Realm
     void SetName(std::string name);
 
     boost::asio::ip::address GetAddressForClient(boost::asio::ip::address const& clientAddr) const;
+    bool IsWorldServerOnThisMachine() const;
     uint32 GetConfigId() const;
 
     static uint32 const ConfigIdByType[MAX_CLIENT_REALM_TYPE];
