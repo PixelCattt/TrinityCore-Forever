@@ -1473,6 +1473,13 @@ uint32 BagSorter::GetSlotRank(BagSortSlot const& slot, BagSortCategory category)
     if (slot.BagSlot == REAGENT_BAG_SLOT_START && category == BagSortCategory::Reagent)
         return 0;
 
+    // a reagent bag takes only crafting reagents (CanGoIntoSlot), and those are mostly trade goods (herbs, ore, cloth, leather),
+    // not the Reagent category: whatever fits goes there first, as on live, instead of after every other bag
+    if (Bag const* bag = _player->GetBagByPos(slot.BagSlot))
+        if (ItemTemplate const* bagProto = bag->GetTemplate())
+            if (bagProto->GetClass() == ITEM_CLASS_CONTAINER && bagProto->GetSubClass() == ITEM_SUBCLASS_REAGENT_CONTAINER)
+                return 0;
+
     if (_player->GetBagSlotFlags(slot.BagSlot - INVENTORY_SLOT_BAG_START).HasFlag(GetBagSortPriorityFlag(category)))
         return 0;
 
