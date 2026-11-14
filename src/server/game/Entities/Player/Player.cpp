@@ -9230,7 +9230,10 @@ void Player::ApplyEquipSpell(SpellInfo const* spellInfo, Item* item, bool apply,
             }
         }
 
-        CastSpell(this, spellInfo->Id, item);
+        SpellCastResult const castResult = CastSpell(this, spellInfo->Id, item);
+        if (castResult != SPELL_CAST_OK)
+            TC_LOG_ERROR("spells", "Player::ApplyEquipSpell: {} ({}) equip spell {} of item {} was not applied: cast result {}",
+                GetName(), GetGUID().ToString(), spellInfo->Id, item ? item->GetEntry() : 0, uint32(castResult));
     }
     else
     {

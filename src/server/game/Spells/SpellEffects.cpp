@@ -3216,6 +3216,16 @@ void Spell::EffectScriptEffect()
                     if (unitTarget->HasAura(22683))
                         return;
 
+                    // A player wearing the cloak without its aura is burnt here: say so, with what the aura's absence comes with
+                    // (BWL Nefarian, dev realm 2026-11-13: cloaked raiders died of the burn).
+                    if (Player* playerTarget = unitTarget->ToPlayer())
+                    {
+                        Item const* back = playerTarget->GetItemByPos(INVENTORY_SLOT_BAG_0, EQUIPMENT_SLOT_BACK);
+                        if (back && back->GetEntry() == 15138)
+                            TC_LOG_ERROR("spells", "Shadow Flame {}: {} wears the Onyxia Scale Cloak {} (broken {}, {} item effects) without its aura 22683: burnt",
+                                m_spellInfo->Id, playerTarget->GetName(), back->GetGUID().ToString(), back->IsBroken(), back->GetEffects().size());
+                    }
+
                     // Shadow Flame
                     m_caster->CastSpell(unitTarget, 22682, this);
                     return;
