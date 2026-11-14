@@ -1281,6 +1281,16 @@ Instance.MoltenCoreSkipRunes = 0
 Instance.MoltenCoreRagnarosReady = 0
 
 #
+#    Instance.NefarianCapAdds
+#        Description: Blackwing Lair, Nefarian phase 1: Lord Victor Nefarius stops calling drakonids once
+#                     42 have come (the TrinityCore way). The spawn timing stays as in 1.12 (two every
+#                     6-7 seconds, two Chromatic every 35 seconds); Nefarian still lands at 40 kills.
+#        Default:     0 - (Disabled, the 1.12 way: drakonids keep coming until 42 are killed)
+#                     1 - (Enabled, at most 42 drakonids in phase 1)
+
+Instance.NefarianCapAdds = 0
+
+#
 #    Instance.CombatResurrectionLimit
 #        Description: Limit resurrections during a boss encounter to the encounter's combat
 #                     resurrection charges. Classic has no such limit.

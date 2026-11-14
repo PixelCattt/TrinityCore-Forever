@@ -31,6 +31,7 @@
 #include "ScriptedGossip.h"
 #include "SpellInfo.h"
 #include "TemporarySummon.h"
+#include "World.h"
 #include "ThreatManager.h"
 #include "classic_blackwing_lair.h"
 #include "classic_script_text.h"
@@ -139,6 +140,8 @@ struct classic_boss_victor_nefarius : public ScriptedAI
     bool m_bInert;
 
     uint32 m_uiKilledAdds = 0;
+    uint32 m_uiSpawnedAdds = 0;   // Instance.NefarianCapAdds: drakonids called this phase 1
+    uint32 m_uiLostAdds = 0;      // drakonids that went away alive (out of combat for 10 s): never killed
     uint32 m_uiAddSpawnTimer = 6000;
     uint32 m_uiAddChromaSpawnTimer = 8000;
     uint32 m_uiShadowBoltTimer = 5000;
@@ -172,6 +175,8 @@ struct classic_boss_victor_nefarius : public ScriptedAI
             return;
 
         m_uiKilledAdds            = 0;
+        m_uiSpawnedAdds           = 0;
+        m_uiLostAdds              = 0;
         m_uiAddSpawnTimer         = 6000;
         m_uiAddChromaSpawnTimer   = urand(7000, 9000);
         m_uiShadowBoltTimer       = 5000;
@@ -319,6 +324,12 @@ struct classic_boss_victor_nefarius : public ScriptedAI
             ++m_uiKilledAdds;
     }
 
+    void SummonedCreatureDespawn(Creature* pSummoned) override
+    {
+        if (pSummoned->GetEntry() != CLASSIC_BWL_NPC_NEFARIAN && pSummoned->IsAlive())
+            ++m_uiLostAdds;
+    }
+
     // VMaNGOS gossip_scripts 604500 (gossip option "Attack them, minions!"):
     // the instance forwards SetData(CLASSIC_BWL_GOSSIP_OPTION_NEFARIUS) here.
     void DoAction(int32 action) override
@@ -417,19 +428,21 @@ struct classic_boss_victor_nefarius : public ScriptedAI
                 return;
         }
 
+        // Instance.NefarianCapAdds (the TrinityCore way): no drakonid after the 42nd has come. Off: they come until 42 are killed (1.12).
+        bool const capAdds = sWorld->getBoolConfig(CONFIG_BWL_NEFARIAN_CAP_ADDS);
+        auto callAdd = [&](uint32 entry, Position const& at)
+        {
+            if (capAdds && m_uiSpawnedAdds >= CLASSIC_BWL_MAX_DRAKE_KILLED)
+                return;
+            if (me->SummonCreature(entry, at.GetPositionX(), at.GetPositionY(), at.GetPositionZ(), 5.000f, TEMPSUMMON_TIMED_DESPAWN_OUT_OF_COMBAT, 10s))
+                ++m_uiSpawnedAdds;
+        };
+
         // Add spawning mechanism
         if (m_uiAddSpawnTimer < uiDiff)
         {
-            me->SummonCreature(m_uiDrakeTypeOne,
-                ClassicBwlNefarianLocs[0].GetPositionX(),
-                ClassicBwlNefarianLocs[0].GetPositionY(),
-                ClassicBwlNefarianLocs[0].GetPositionZ(),
-                5.000f, TEMPSUMMON_TIMED_DESPAWN_OUT_OF_COMBAT, 10s);
-            me->SummonCreature(m_uiDrakeTypeTwo,
-                ClassicBwlNefarianLocs[1].GetPositionX(),
-                ClassicBwlNefarianLocs[1].GetPositionY(),
-                ClassicBwlNefarianLocs[1].GetPositionZ(),
-                5.000f, TEMPSUMMON_TIMED_DESPAWN_OUT_OF_COMBAT, 10s);
+            callAdd(m_uiDrakeTypeOne, ClassicBwlNefarianLocs[0]);
+            callAdd(m_uiDrakeTypeTwo, ClassicBwlNefarianLocs[1]);
 
             m_uiAddSpawnTimer = urand(6000, 7000);
         }
@@ -438,16 +451,8 @@ struct classic_boss_victor_nefarius : public ScriptedAI
 
         if (m_uiAddChromaSpawnTimer < uiDiff)
         {
-            me->SummonCreature(CLASSIC_BWL_NPC_CHROMATIC_DRAKANOID,
-                ClassicBwlNefarianLocs[0].GetPositionX(),
-                ClassicBwlNefarianLocs[0].GetPositionY(),
-                ClassicBwlNefarianLocs[0].GetPositionZ(),
-                5.000f, TEMPSUMMON_TIMED_DESPAWN_OUT_OF_COMBAT, 10s);
-            me->SummonCreature(CLASSIC_BWL_NPC_CHROMATIC_DRAKANOID,
-                ClassicBwlNefarianLocs[1].GetPositionX(),
-                ClassicBwlNefarianLocs[1].GetPositionY(),
-                ClassicBwlNefarianLocs[1].GetPositionZ(),
-                5.000f, TEMPSUMMON_TIMED_DESPAWN_OUT_OF_COMBAT, 10s);
+            callAdd(CLASSIC_BWL_NPC_CHROMATIC_DRAKANOID, ClassicBwlNefarianLocs[0]);
+            callAdd(CLASSIC_BWL_NPC_CHROMATIC_DRAKANOID, ClassicBwlNefarianLocs[1]);
             m_uiAddChromaSpawnTimer = 35000;
         }
         else
@@ -457,7 +462,11 @@ struct classic_boss_victor_nefarius : public ScriptedAI
             return;
 
         // Begin phase 2 by spawning Nefarian
-        if (m_uiKilledAdds >= (CLASSIC_BWL_MAX_DRAKE_KILLED - 2)) // 40 drakes killed
+        // Instance.NefarianCapAdds: with no more drakonids to come, one that went away alive must not leave the raid short of 40 kills
+        // for good. He lands once all 42 are gone.
+        bool const allGone = capAdds && m_uiSpawnedAdds >= CLASSIC_BWL_MAX_DRAKE_KILLED &&
+                             m_uiKilledAdds + m_uiLostAdds >= CLASSIC_BWL_MAX_DRAKE_KILLED;
+        if (m_uiKilledAdds >= (CLASSIC_BWL_MAX_DRAKE_KILLED - 2) || allGone) // 40 drakes killed
         {
             // Inturrupt any spell casting
             me->InterruptNonMeleeSpells(false);

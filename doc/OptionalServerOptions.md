@@ -9,6 +9,7 @@ Every option below is OFF in the shipped `worldserver.conf.dist`, which gives th
 | `Instance.IgnoreAttunement` | No attunement item or quest is needed to enter an instance (Molten Core, Onyxia, Blackwing Lair, Naxxramas and so on). Level limits are separate: `Instance.IgnoreLevel`. | 0 |
 | `Instance.AhnQirajGatesOpen` | The Gate of Ahn'Qiraj stands open, so the war effort and the Scarab Gong are not needed to reach Ruins and Temple of Ahn'Qiraj. | 0 |
 | `Instance.PersistRaidTrash` | Raid trash that was killed stays dead until the lockout resets, including after you leave the instance, the instance unloads or the server restarts. Needs `Instance.BindOnEntry = 1` for players without a lockout yet. | 0 |
+| `Instance.NefarianCapAdds` | Nefarian phase 1: Victor Nefarius stops calling drakonids after 42 have come (spawn timing unchanged). Off (1.12): they keep coming until 42 are killed. | 0 |
 | `Instance.MoltenCoreHoundsLinked` | Core Hounds as in 1.12 (feign death and rise again unless the whole pack dies together). Off (standard): hound packs are unlinked and can be killed one by one. | 0 |
 
 Note: the first five switch off Blizzlike rules; `MoltenCoreHoundsLinked` is the reverse, its off state is the shared default for this project (packs unlinked).

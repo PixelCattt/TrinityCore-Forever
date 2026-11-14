@@ -632,6 +632,7 @@ void World::LoadConfigSettings(bool reload)
         { .Name = "Instance.PersistRaidTrash"sv, .DefaultValue = false, .Index = CONFIG_INSTANCE_PERSIST_RAID_TRASH },
         { .Name = "Instance.MoltenCoreHoundsLinked"sv, .DefaultValue = false, .Index = CONFIG_MC_CORE_HOUNDS_LINKED },
         { .Name = "Instance.MoltenCoreSkipRunes"sv, .DefaultValue = false, .Index = CONFIG_MC_SKIP_RUNES },
+        { .Name = "Instance.NefarianCapAdds"sv, .DefaultValue = false, .Index = CONFIG_BWL_NEFARIAN_CAP_ADDS },
         { .Name = "Instance.IgnoreRaid"sv, .DefaultValue = false, .Index = CONFIG_INSTANCE_IGNORE_RAID },
         { .Name = "Instance.CombatResurrectionLimit"sv, .DefaultValue = false, .Index = CONFIG_INSTANCE_COMBAT_RES_LIMIT },
         { .Name = "CastUnstuck"sv, .DefaultValue = true, .Index = CONFIG_CAST_UNSTUCK },
