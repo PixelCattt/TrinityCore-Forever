@@ -22,6 +22,7 @@
 #include "ScriptMgr.h"
 #include "AreaTrigger.h"
 #include "CellImpl.h"
+#include "ClassicVanillaAoe.h"
 #include "Creature.h"
 #include "Item.h"
 #include "ItemTemplate.h"
@@ -37,6 +38,7 @@
 #include "SpellMgr.h"
 #include "SpellScript.h"
 #include "Unit.h"
+#include "World.h"
 #include <cmath>
 
 enum ClassicMageTalentSpells
@@ -291,7 +293,7 @@ class classic_spell_mage_fingers_of_frost : public AuraScript
 // 11185 - Improved Blizzard: "Adds a Chill effect to your Blizzard spell. This effect lowers the target's movement speed by 40%
 // for 1.5 sec." Blizzard (10, 6141, 8427, 10185-10187) ticks through classic_spell_ground_area_damage; this second script on the
 // same tick chills the enemies inside the Blizzard with 12484 (talent amount as the snare), which is a Chill effect for Fingers
-// of Frost.
+// of Frost. Forever ranks chill 15 / 25 / 40%; Forever.VanillaAoE = 1 chills the vanilla 30 / 50 / 65% (ClassicVanillaAoe.h).
 class classic_spell_mage_improved_blizzard : public AuraScript
 {
     bool Validate(SpellInfo const* /*spellInfo*/) override
@@ -309,6 +311,10 @@ class classic_spell_mage_improved_blizzard : public AuraScript
         if (!talent || talent->GetAmount() >= 0)
             return;
 
+        int32 chill = talent->GetAmountAsInt();
+        if (sWorld->getBoolConfig(CONFIG_FOREVER_VANILLA_AOE))
+            chill = ClassicVanillaAoe::ImprovedBlizzardChill(chill);
+
         SpellInfo const* spellInfo = GetSpellInfo();
         GuidUnorderedSet targets;
         for (AreaTrigger* areaTrigger : caster->GetAreaTriggers(spellInfo->Id))
@@ -321,7 +327,7 @@ class classic_spell_mage_improved_blizzard : public AuraScript
             if (!target || !target->IsAlive() || !caster->IsValidAttackTarget(target, spellInfo))
                 continue;
 
-            caster->CastSpell(target, SPELL_MAGE_CHILLED, CastSpellExtraArgs(TRIGGERED_FULL_MASK).AddSpellBP0(talent->GetAmount()));
+            caster->CastSpell(target, SPELL_MAGE_CHILLED, CastSpellExtraArgs(TRIGGERED_FULL_MASK).AddSpellBP0(chill));
             chilled = true;
         }
 

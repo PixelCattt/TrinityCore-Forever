@@ -20,6 +20,7 @@
 #include "BattlefieldMgr.h"
 #include "BattlegroundMgr.h"
 #include "Chat.h"
+#include "ClassicVanillaAoe.h"
 #include "DB2HotfixGenerator.h"
 #include "DB2Stores.h"
 #include "DatabaseEnv.h"
@@ -34,6 +35,7 @@
 #include "SpellAuraDefines.h"
 #include "SpellInfo.h"
 #include "StringConvert.h"
+#include "World.h"
 #include <G3D/g3dmath.h>
 #include <algorithm>
 #include <boost/multi_index/composite_key.hpp>
@@ -3753,6 +3755,60 @@ void SpellMgr::LoadClassicSpellCosts()
 ClassicSpellValue::Cost const* SpellMgr::GetClassicSpellCost(uint32 spellId) const
 {
     return Trinity::Containers::MapGetValuePtr(mClassicSpellCosts, spellId);
+}
+
+// Forever.VanillaAoE = 1: the vanilla Consecration and Improved Blizzard (ClassicVanillaAoe.h). The spell scripts do the
+// damage and the chill; here the client gets the same numbers for its tooltips. Only the client's copy of these rows changes: the
+// server's spells were built from the DB2 before this runs, and the talent curve is read from DB2Manager's own copy.
+// - Consecration tick effect 0 shows the vanilla tick (rank 1: 8 a tick, "64 Holy damage over 8 sec"), effect 1 shows 0.
+// - The five SpellPower rows are sent unchanged, so a client holding Blizzard's live cache (73 mana for rank 1) shows the 135 the
+//   server charges.
+// - Improved Blizzard curve 83071 shows 30 / 50 / 65%.
+void SpellMgr::LoadForeverVanillaAoe()
+{
+    if (!sWorld->getBoolConfig(CONFIG_FOREVER_VANILLA_AOE))
+        return;
+
+    uint32 sent = 0;
+    for (ClassicVanillaAoe::ConsecrationRank const& rank : ClassicVanillaAoe::ConsecrationRanks)
+    {
+        if (SpellEffectEntry const* effect = sSpellEffectStore.LookupEntry(rank.TickEffect0Id))
+        {
+            const_cast<SpellEffectEntry*>(effect)->EffectBasePoints = float(rank.VanillaTick);
+            DB2HotfixGeneratorBase::AddClientHotfix(sSpellEffectStore.GetTableHash(), effect->ID);
+            ++sent;
+        }
+
+        if (SpellEffectEntry const* effect = sSpellEffectStore.LookupEntry(rank.TickEffect1Id))
+        {
+            const_cast<SpellEffectEntry*>(effect)->EffectBasePoints = 0.0f;
+            DB2HotfixGeneratorBase::AddClientHotfix(sSpellEffectStore.GetTableHash(), effect->ID);
+            ++sent;
+        }
+
+        if (SpellInfo const* spellInfo = GetSpellInfo(rank.RankSpell, DIFFICULTY_NONE))
+        {
+            for (SpellPowerEntry const* power : spellInfo->PowerCosts)
+            {
+                if (!power)
+                    continue;
+                DB2HotfixGeneratorBase::AddClientHotfix(sSpellPowerStore.GetTableHash(), power->ID);
+                ++sent;
+            }
+        }
+    }
+
+    for (std::size_t i = 0; i < std::size(ClassicVanillaAoe::ImprovedBlizzardCurvePoints); ++i)
+    {
+        if (CurvePointEntry const* point = sCurvePointStore.LookupEntry(ClassicVanillaAoe::ImprovedBlizzardCurvePoints[i]))
+        {
+            const_cast<CurvePointEntry*>(point)->Pos.Y = float(ClassicVanillaAoe::ImprovedBlizzardVanilla[i]);
+            DB2HotfixGeneratorBase::AddClientHotfix(sCurvePointStore.GetTableHash(), point->ID);
+            ++sent;
+        }
+    }
+
+    TC_LOG_INFO("server.loading", ">> Forever.VanillaAoE = 1: vanilla Consecration and Improved Blizzard ({} client rows sent)", sent);
 }
 
 // Classic 1.60 (Forever): the bundles a labeled Waylaid Crate takes. The client lists them only in the Stock Crate spell's text

@@ -21,6 +21,7 @@
 #include "AreaTrigger.h"
 #include "CellImpl.h"
 #include "ClassicLegacyPerks.h"
+#include "ClassicVanillaAoe.h"
 #include "Creature.h"
 #include "CreatureAI.h"
 #include "ConditionMgr.h"
@@ -48,6 +49,7 @@
 #include "SpellScript.h"
 #include "ThreatManager.h"
 #include "Unit.h"
+#include "World.h"
 #include "WorldSession.h"
 #include <mutex>
 #include <unordered_map>
@@ -1528,19 +1530,13 @@ class classic_spell_pal_judgement_of_fury : public SpellScript
 // 26573, 20116, 20922, 20923, 20924 - Consecration (Classic 1.60, official dungeon sniff): the cast puts a 1 sec periodic dummy on the
 // paladin for 8 sec and creates area trigger 41311-41316 at his feet (no data on our server); each tick the official server casts the
 // rank's Consecration damage (1280345-1280349) at the consecrated spot, hitting the enemies standing in it.
+// Forever.VanillaAoE = 1: each tick does the vanilla damage instead (ClassicVanillaAoe.h): effect 0 for 0, effect 1 (the one with
+// the spell power) for the vanilla tick, on every enemy in it.
 class classic_spell_pal_consecration : public AuraScript
 {
     static uint32 TickSpell(uint32 spellId)
     {
-        switch (spellId)
-        {
-            case 26573: return 1280345;
-            case 20116: return 1280346;
-            case 20922: return 1280347;
-            case 20923: return 1280348;
-            case 20924: return 1280349;
-            default:    return 0;
-        }
+        return ClassicVanillaAoe::ConsecrationTickSpell(spellId);
     }
 
     bool Validate(SpellInfo const* spellInfo) override
@@ -1557,7 +1553,16 @@ class classic_spell_pal_consecration : public AuraScript
     {
         PreventDefaultAction();
         Unit* paladin = GetUnitOwner();
-        paladin->CastSpell(_center, TickSpell(GetId()), CastSpellExtraArgs(aurEff));
+        CastSpellExtraArgs args(aurEff);
+        if (sWorld->getBoolConfig(CONFIG_FOREVER_VANILLA_AOE))
+        {
+            if (ClassicVanillaAoe::ConsecrationRank const* rank = ClassicVanillaAoe::FindConsecrationRank(GetId()))
+            {
+                args.AddSpellMod(SPELLVALUE_BASE_POINT0, 0);
+                args.AddSpellMod(SPELLVALUE_BASE_POINT1, rank->VanillaTick);
+            }
+        }
+        paladin->CastSpell(_center, TickSpell(GetId()), args);
     }
 
     void Register() override

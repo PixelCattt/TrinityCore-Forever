@@ -5170,6 +5170,17 @@ Classic.CreatureHealth.RaiseFromLevel = 20
 Classic.CreatureHealth.RaiseAt60Pct = 20
 Classic.CreatureHealth.Raids = 0
 
+#    Forever.VanillaAoE
+#        Description: Puts the two AoE spells WoW Forever reworked back to vanilla 1.12.
+#                     Consecration: every enemy in it takes the vanilla damage each second (rank 1: 64 over 8 sec, rank 5:
+#                     384) with about 33% spell power, instead of Forever's small hit plus an extra hit.
+#                     Improved Blizzard: the Chill slows by 30 / 50 / 65% (rank 1 / 2 / 3) instead of 15 / 25 / 40%.
+#                     Players' tooltips show the vanilla numbers too (sent at login). Needs a restart.
+#        Default:     0 - (Disabled, the WoW Forever spells)
+#                     1 - (Enabled, vanilla)
+
+Forever.VanillaAoE = 0
+
 #    Classic.AutoEquipNewBags
 #        Description: A new bag goes straight onto an empty bag slot. WoW Forever stopped this: new bags go into the
 #                     backpack and the player puts them on by hand. Bots always put new bags on.

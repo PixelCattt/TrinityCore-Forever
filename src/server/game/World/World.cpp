@@ -712,6 +712,7 @@ void World::LoadConfigSettings(bool reload)
         { .Name = "Classic.ForeverKillXp"sv, .DefaultValue = false, .Index = CONFIG_CLASSIC_FOREVER_KILL_XP },
         { .Name = "Classic.AutoEquipNewBags"sv, .DefaultValue = false, .Index = CONFIG_CLASSIC_AUTO_EQUIP_NEW_BAGS },
         { .Name = "Classic.CreatureHealth.Raids"sv, .DefaultValue = false, .Index = CONFIG_CLASSIC_CREATURE_HEALTH_RAIDS },
+        { .Name = "Forever.VanillaAoE"sv, .DefaultValue = false, .Index = CONFIG_FOREVER_VANILLA_AOE },
     } };
 
     static constexpr ConfigOptionLoadDefinitionArray<uint32, INT_CONFIG_VALUE_COUNT> ints =
@@ -1462,6 +1463,7 @@ bool World::SetInitialWorldSettings()
     sSpellMgr->LoadClassicSpellEffects();
     sSpellMgr->LoadClassicSpellValues();
     sSpellMgr->LoadClassicSpellCosts();
+    sSpellMgr->LoadForeverVanillaAoe();
 
     TC_LOG_INFO("server.loading", "Loading SkillLineAbilityMultiMap Data...");
     sSpellMgr->LoadSkillLineAbilityMap();
