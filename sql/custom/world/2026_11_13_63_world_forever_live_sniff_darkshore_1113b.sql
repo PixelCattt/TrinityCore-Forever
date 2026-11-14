@@ -17,9 +17,9 @@ INSERT INTO `npc_vendor` (`entry`, `slot`, `item`, `maxcount`, `incrtime`, `Exte
 --    "Rainon" (22) and "Makky" (9), plus 42 progress texts. Live sends $n here (quests 1138, 2138, 4763 in this capture). None of
 --    them is an NPC name. Quest 1002 also gets live's female word form.
 UPDATE `quest_offer_reward_locale` SET `RewardText` = REPLACE(REPLACE(REPLACE(`RewardText`, 'Wrestlecake', '$n'), 'Rainon', '$n'), 'Makky', '$n')
-  WHERE `locale` = 'ruRU' AND `RewardText` REGEXP BINARY 'Wrestlecake|Rainon|Makky';
+  WHERE `locale` = 'ruRU' AND REGEXP_LIKE(`RewardText`, 'Wrestlecake|Rainon|Makky', 'c');
 UPDATE `quest_request_items_locale` SET `CompletionText` = REPLACE(REPLACE(REPLACE(`CompletionText`, 'Wrestlecake', '$n'), 'Rainon', '$n'), 'Makky', '$n')
-  WHERE `locale` = 'ruRU' AND `CompletionText` REGEXP BINARY 'Wrestlecake|Rainon|Makky';
+  WHERE `locale` = 'ruRU' AND REGEXP_LIKE(`CompletionText`, 'Wrestlecake|Rainon|Makky', 'c');
 INSERT INTO `quest_offer_reward_locale` (`ID`, `locale`, `RewardText`, `VerifiedBuild`) VALUES
 (1002, 'ruRU', 'Неожидано Жужжалка начинает работать, и вы отчетливо слышите, как клыки перемалываются внутри машины в муку.$B$B"Так шшшо, ты это $gшшшделал:шшшделала;! Отлишшшные новосшшшти... И шшшо жшшше... ты не уходишшшь? А! Можшшшет, хочешшшь ешшше поработать?"', 70938)
 ON DUPLICATE KEY UPDATE `RewardText` = VALUES(`RewardText`), `VerifiedBuild` = VALUES(`VerifiedBuild`);
