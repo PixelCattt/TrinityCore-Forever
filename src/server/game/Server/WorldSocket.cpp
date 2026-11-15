@@ -292,6 +292,11 @@ void WorldSocket::OnClose()
         std::scoped_lock sessionGuard(_worldSessionLock);
         _worldSession = nullptr;
     }
+
+    // The address's Network.ConnectionsPerIp slot is given back when the connection closes, not when this object is deleted:
+    // the WorldSession keeps its socket alive until the session itself goes (logout delay, reconnect window), so slots held
+    // to the destructor piled up and a player was refused with no connection of theirs open. CloseSocket calls this once.
+    _ipConnectionSlot.reset();
 }
 
 Trinity::Net::SocketReadCallbackResult WorldSocket::ReadHandler()

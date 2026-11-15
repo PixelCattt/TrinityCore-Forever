@@ -170,7 +170,7 @@ private:
     bool _canRequestHotfixes;
     std::atomic<uint32> _clientBuild;   // the client's build once known (auth or SetWorldSession): picks its message numbers
 
-    std::unique_ptr<Trinity::Net::IpConnectionLimit::Slot> _ipConnectionSlot;
+    std::unique_ptr<Trinity::Net::IpConnectionLimit::Slot> _ipConnectionSlot;   // given back in OnClose, when the connection closes
     TimePoint _authDeadline;        // closed if not logged in by then (Network.AuthTimeout); TimePoint::max() = no limit
 
     MessageBuffer _headerBuffer;

@@ -26,8 +26,8 @@
 
 namespace Trinity::Net
 {
-// Open connections per remote address on one listener. A socket holds its Slot for as long as it lives and the count drops
-// when the Slot goes. A limit of 0 and the server's own PC (loopback, where a local launcher or bridge connects from) are
+// Open connections per remote address on one listener. A socket holds its Slot while its connection is open and the count
+// drops when the Slot goes; a socket that outlives its connection (WorldSocket) must give it back when it closes. A limit of 0 and the server's own PC (loopback, where a local launcher or bridge connects from) are
 // never limited.
 class IpConnectionLimit
 {
