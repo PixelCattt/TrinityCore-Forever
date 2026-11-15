@@ -1,0 +1,127 @@
+-- WoW Forever live realm: two English captures, dump_1.60.1.70938_2026-11-13_21-06-29.pkt (Zephras Isle, Wetlands, Loch Modan,
+-- Redridge, Dun Morogh) and dump_1.60.1.70938_2026-11-14_23-28-14.pkt (Zephras Isle, Westfall, Elwynn, Stormwind, Darkshore,
+-- Darnassus, Deeprun Tram). Only what our data lacks. Comes after 2026_11_15_53. Chances are INFERRED from small samples: 3 for a
+-- mob drop, 35 for a chest item (as before). Safe to run more than once.
+
+-- 1. Drops live gave that our mobs never drop (corpse windows only; skinning windows are not counted). Daggerfang drops the same
+--    crocolisk parts as Loch Crocolisk (1693), so it gets the same chances, with the skin as a quest drop like there.
+DELETE FROM `creature_loot_template` WHERE `Comment` LIKE 'Forever live drop 2026-11-15 (%';
+INSERT IGNORE INTO `creature_loot_template` (`Entry`, `ItemType`, `Item`, `Chance`, `QuestRequired`, `LootMode`, `GroupId`, `MinCount`, `MaxCount`, `Comment`) VALUES
+(250868, 0, 1430, 3, 0, 1, 0, 1, 1, 'Forever live drop 2026-11-15 (Vuldren, 1 of 5 kills)'),
+(250873, 0, 1369, 3, 0, 1, 0, 1, 1, 'Forever live drop 2026-11-15 (Juvenile Vuldren, 1 of 8 kills)'),
+(250873, 0, 1376, 3, 0, 1, 0, 1, 1, 'Forever live drop 2026-11-15 (Juvenile Vuldren, 2 of 8 kills)'),
+(250873, 0, 1377, 3, 0, 1, 0, 1, 1, 'Forever live drop 2026-11-15 (Juvenile Vuldren, 1 of 8 kills)'),
+(250926, 0, 1368, 3, 0, 1, 0, 1, 1, 'Forever live drop 2026-11-15 (Scrawny Ursera, 1 of 26 kills)'),
+(250926, 0, 1369, 3, 0, 1, 0, 1, 1, 'Forever live drop 2026-11-15 (Scrawny Ursera, 1 of 26 kills)'),
+(250926, 0, 1376, 3, 0, 1, 0, 1, 1, 'Forever live drop 2026-11-15 (Scrawny Ursera, 1 of 26 kills)'),
+(250927, 0, 4776, 3, 0, 1, 0, 1, 1, 'Forever live drop 2026-11-15 (Shadowgale Ursera, 1 of 1 kills)'),
+(250927, 0, 6889, 3, 0, 1, 0, 1, 1, 'Forever live drop 2026-11-15 (Shadowgale Ursera, 1 of 1 kills)'),
+(250937, 0, 1372, 3, 0, 1, 0, 1, 1, 'Forever live drop 2026-11-15 (Ursera Scavenger, 1 of 36 kills)'),
+(250937, 0, 1376, 3, 0, 1, 0, 1, 1, 'Forever live drop 2026-11-15 (Ursera Scavenger, 1 of 36 kills)'),
+(250937, 0, 2649, 3, 0, 1, 0, 1, 1, 'Forever live drop 2026-11-15 (Ursera Scavenger, 1 of 36 kills)'),
+(250937, 0, 2650, 3, 0, 1, 0, 1, 1, 'Forever live drop 2026-11-15 (Ursera Scavenger, 1 of 36 kills)'),
+(251115, 0, 805, 3, 0, 1, 0, 1, 1, 'Forever live drop 2026-11-15 (Urs''anah, 1 of 1 kills)'),
+(251145, 0, 2653, 3, 0, 1, 0, 1, 1, 'Forever live drop 2026-11-15 (Al''Aketh Brute, 1 of 6 kills)'),
+(251160, 0, 1376, 3, 0, 1, 0, 1, 1, 'Forever live drop 2026-11-15 (Al''Aketh Convert, 1 of 6 kills)'),
+(251245, 0, 774, 3, 0, 1, 0, 1, 1, 'Forever live drop 2026-11-15 (Prideclaw, 1 of 18 kills)'),
+(251245, 0, 818, 3, 0, 1, 0, 1, 1, 'Forever live drop 2026-11-15 (Prideclaw, 1 of 18 kills)'),
+(251245, 0, 1419, 3, 0, 1, 0, 1, 1, 'Forever live drop 2026-11-15 (Prideclaw, 1 of 18 kills)'),
+(251245, 0, 2650, 3, 0, 1, 0, 1, 1, 'Forever live drop 2026-11-15 (Prideclaw, 1 of 18 kills)'),
+(251284, 0, 2646, 3, 0, 1, 0, 1, 1, 'Forever live drop 2026-11-15 (Hippogryph Protector, 1 of 14 kills)'),
+(251291, 0, 1429, 3, 0, 1, 0, 1, 1, 'Forever live drop 2026-11-15 (Hippogryph Youth, 1 of 8 kills)'),
+(251291, 0, 2138, 3, 0, 1, 0, 1, 1, 'Forever live drop 2026-11-15 (Hippogryph Youth, 1 of 8 kills)'),
+(251402, 0, 1370, 3, 0, 1, 0, 1, 1, 'Forever live drop 2026-11-15 (Cirrusfly Soldier, 1 of 2 kills)'),
+(251402, 0, 2656, 3, 0, 1, 0, 1, 1, 'Forever live drop 2026-11-15 (Cirrusfly Soldier, 1 of 2 kills)'),
+(251661, 0, 1378, 3, 0, 1, 0, 1, 1, 'Forever live drop 2026-11-15 (Galestrider, 1 of 23 kills)'),
+(251661, 0, 2656, 3, 0, 1, 0, 1, 1, 'Forever live drop 2026-11-15 (Galestrider, 1 of 23 kills)'),
+(251661, 0, 3363, 3, 0, 1, 0, 1, 1, 'Forever live drop 2026-11-15 (Galestrider, 1 of 23 kills)'),
+(251707, 0, 1416, 3, 0, 1, 0, 1, 1, 'Forever live drop 2026-11-15 (Ornery Galestrider, 1 of 27 kills)'),
+(251707, 0, 3189, 3, 0, 1, 0, 1, 1, 'Forever live drop 2026-11-15 (Ornery Galestrider, 1 of 27 kills)'),
+(251918, 0, 727, 3, 0, 1, 0, 1, 1, 'Forever live drop 2026-11-15 (Highlands Bandit, 1 of 15 kills)'),
+(251918, 0, 1413, 3, 0, 1, 0, 1, 1, 'Forever live drop 2026-11-15 (Highlands Bandit, 1 of 15 kills)'),
+(251966, 0, 252030, 3, 0, 1, 0, 1, 1, 'Forever live drop 2026-11-15 (Commander Cyclas, 1 of 1 kills)'),
+(251966, 0, 255663, 3, 0, 1, 0, 1, 1, 'Forever live drop 2026-11-15 (Commander Cyclas, 1 of 1 kills)'),
+(252068, 0, 774, 3, 0, 1, 0, 1, 1, 'Forever live drop 2026-11-15 (Al''Aketh Stormcaller, 1 of 14 kills)'),
+(252068, 0, 818, 3, 0, 1, 0, 1, 1, 'Forever live drop 2026-11-15 (Al''Aketh Stormcaller, 1 of 14 kills)'),
+(252068, 0, 1423, 3, 0, 1, 0, 1, 1, 'Forever live drop 2026-11-15 (Al''Aketh Stormcaller, 1 of 14 kills)'),
+(252068, 0, 8177, 3, 0, 1, 0, 1, 1, 'Forever live drop 2026-11-15 (Al''Aketh Stormcaller, 1 of 14 kills)'),
+(252664, 0, 2763, 3, 0, 1, 0, 1, 1, 'Forever live drop 2026-11-15 (Al''Aketh Stormchaser, 1 of 24 kills)'),
+(252664, 0, 4669, 3, 0, 1, 0, 1, 1, 'Forever live drop 2026-11-15 (Al''Aketh Stormchaser, 1 of 24 kills)'),
+(252802, 0, 774, 3, 0, 1, 0, 1, 1, 'Forever live drop 2026-11-15 (Hungry Bandit, 1 of 9 kills)'),
+(252802, 0, 1181, 3, 0, 1, 0, 1, 1, 'Forever live drop 2026-11-15 (Hungry Bandit, 1 of 9 kills)'),
+(252802, 0, 1413, 3, 0, 1, 0, 1, 1, 'Forever live drop 2026-11-15 (Hungry Bandit, 1 of 9 kills)'),
+(252802, 0, 8178, 3, 0, 1, 0, 1, 1, 'Forever live drop 2026-11-15 (Hungry Bandit, 1 of 9 kills)'),
+(252802, 0, 252028, 3, 0, 1, 0, 1, 1, 'Forever live drop 2026-11-15 (Hungry Bandit, 1 of 9 kills)'),
+(252802, 0, 255663, 3, 0, 1, 0, 1, 1, 'Forever live drop 2026-11-15 (Hungry Bandit, 2 of 9 kills)'),
+(252820, 0, 1429, 3, 0, 1, 0, 1, 1, 'Forever live drop 2026-11-15 (Bandit Highwayman, 1 of 20 kills)'),
+(252820, 0, 3189, 3, 0, 1, 0, 1, 1, 'Forever live drop 2026-11-15 (Bandit Highwayman, 1 of 20 kills)'),
+(253282, 0, 805, 3, 0, 1, 0, 1, 1, 'Forever live drop 2026-11-15 (Shriekling Fledgling, 1 of 15 kills)'),
+(253282, 0, 1413, 3, 0, 1, 0, 1, 1, 'Forever live drop 2026-11-15 (Shriekling Fledgling, 1 of 15 kills)'),
+(253282, 0, 1422, 3, 0, 1, 0, 1, 1, 'Forever live drop 2026-11-15 (Shriekling Fledgling, 1 of 15 kills)'),
+(253282, 0, 3370, 3, 0, 1, 0, 1, 1, 'Forever live drop 2026-11-15 (Shriekling Fledgling, 1 of 15 kills)'),
+(253283, 0, 1416, 3, 0, 1, 0, 1, 1, 'Forever live drop 2026-11-15 (Shriekling Matriarch, 1 of 1 kills)'),
+(253622, 0, 3013, 3, 0, 1, 0, 1, 1, 'Forever live drop 2026-11-15 (Commander Haalien, 1 of 3 kills)'),
+(253622, 0, 252030, 3, 0, 1, 0, 1, 1, 'Forever live drop 2026-11-15 (Commander Haalien, 1 of 3 kills)'),
+(254588, 0, 767, 3, 0, 1, 0, 1, 1, 'Forever live drop 2026-11-15 (Windsong Crawler, 1 of 24 kills)'),
+(254588, 0, 1413, 3, 0, 1, 0, 1, 1, 'Forever live drop 2026-11-15 (Windsong Crawler, 1 of 24 kills)'),
+(254588, 0, 1414, 3, 0, 1, 0, 1, 1, 'Forever live drop 2026-11-15 (Windsong Crawler, 1 of 24 kills)'),
+(254588, 0, 1425, 3, 0, 1, 0, 1, 1, 'Forever live drop 2026-11-15 (Windsong Crawler, 1 of 24 kills)'),
+(254588, 0, 1430, 3, 0, 1, 0, 1, 1, 'Forever live drop 2026-11-15 (Windsong Crawler, 1 of 24 kills)'),
+(254588, 0, 2648, 3, 0, 1, 0, 1, 1, 'Forever live drop 2026-11-15 (Windsong Crawler, 1 of 24 kills)'),
+(254596, 0, 1430, 3, 0, 1, 0, 1, 1, 'Forever live drop 2026-11-15 (Al''Aketh Healer, 1 of 7 kills)'),
+(254596, 0, 3280, 3, 0, 1, 0, 1, 1, 'Forever live drop 2026-11-15 (Al''Aketh Healer, 1 of 7 kills)'),
+(254596, 0, 5069, 3, 0, 1, 0, 1, 1, 'Forever live drop 2026-11-15 (Al''Aketh Healer, 1 of 7 kills)'),
+(254596, 0, 15004, 3, 0, 1, 0, 1, 1, 'Forever live drop 2026-11-15 (Al''Aketh Healer, 1 of 7 kills)'),
+(254596, 0, 252028, 3, 0, 1, 0, 1, 1, 'Forever live drop 2026-11-15 (Al''Aketh Healer, 2 of 7 kills)'),
+(254626, 0, 1415, 3, 0, 1, 0, 1, 1, 'Forever live drop 2026-11-15 (Al''Aketh Assassin, 1 of 11 kills)'),
+(254626, 0, 4668, 3, 0, 1, 0, 1, 1, 'Forever live drop 2026-11-15 (Al''Aketh Assassin, 1 of 11 kills)'),
+(254626, 0, 252030, 3, 0, 1, 0, 1, 1, 'Forever live drop 2026-11-15 (Al''Aketh Assassin, 1 of 11 kills)'),
+(256092, 0, 1495, 3, 0, 1, 0, 1, 1, 'Forever live drop 2026-11-15 (Shadowgale Shriekling, 1 of 39 kills)'),
+(256092, 0, 8178, 3, 0, 1, 0, 1, 1, 'Forever live drop 2026-11-15 (Shadowgale Shriekling, 1 of 39 kills)'),
+(256092, 0, 15299, 3, 0, 1, 0, 1, 1, 'Forever live drop 2026-11-15 (Shadowgale Shriekling, 1 of 39 kills)'),
+(256935, 0, 1372, 3, 0, 1, 0, 1, 1, 'Forever live drop 2026-11-15 (Malduko Cloudcrush, 1 of 1 kills)'),
+(256966, 0, 3013, 3, 0, 1, 0, 1, 1, 'Forever live drop 2026-11-15 (Skypriest Aanders, 1 of 1 kills)'),
+(257532, 0, 1369, 3, 0, 1, 0, 1, 1, 'Forever live drop 2026-11-15 (Windshaper Novice Seer, 1 of 9 kills)'),
+(270201, 0, 4671, 3, 0, 1, 0, 1, 1, 'Forever live drop 2026-11-15 (Al''Aketh Brawler, 1 of 9 kills)'),
+(270201, 0, 4686, 3, 0, 1, 0, 1, 1, 'Forever live drop 2026-11-15 (Al''Aketh Brawler, 1 of 9 kills)'),
+(270693, 0, 2924, 43.6399, 0, 1, 0, 1, 1, 'Forever live drop 2026-11-15 (Daggerfang, 1 of 2 kills)'),
+(270693, 0, 2925, 80, 1, 1, 0, 1, 1, 'Forever live drop 2026-11-15 (Daggerfang, 1 of 2 kills)'),
+(270693, 0, 3401, 31.9673, 0, 1, 0, 1, 1, 'Forever live drop 2026-11-15 (Daggerfang, 1 of 2 kills)'),
+(271712, 0, 6889, 3, 0, 1, 0, 1, 1, 'Forever live drop 2026-11-15 (Cloudrunner, 1 of 1 kills)'),
+(271712, 0, 7097, 3, 0, 1, 0, 1, 1, 'Forever live drop 2026-11-15 (Cloudrunner, 1 of 1 kills)');
+
+-- 2. Chest and herb items live gave that ours lack.
+DELETE FROM `gameobject_loot_template` WHERE `Comment` LIKE 'Forever live drop 2026-11-15 (%';
+INSERT IGNORE INTO `gameobject_loot_template` (`Entry`, `ItemType`, `Item`, `Chance`, `QuestRequired`, `LootMode`, `GroupId`, `MinCount`, `MaxCount`, `Comment`) VALUES
+(1417, 0, 268416, 3, 0, 1, 0, 1, 1, 'Forever live drop 2026-11-15 (Mageroyal, 1 of 4 gathers)'),
+(2279, 0, 211786, 35, 0, 1, 0, 1, 1, 'Forever live drop 2026-11-15 (Battered Chest, 1 of 2 openings)'),
+(139194, 0, 1411, 35, 0, 1, 0, 1, 1, 'Forever live drop 2026-11-15 (Dented Chest, 1 of 3 openings)'),
+(139194, 0, 2589, 35, 0, 1, 0, 1, 1, 'Forever live drop 2026-11-15 (Dented Chest, 1 of 3 openings)'),
+(139194, 0, 2774, 35, 0, 1, 0, 1, 1, 'Forever live drop 2026-11-15 (Dented Chest, 1 of 3 openings)'),
+(139194, 0, 252022, 35, 0, 1, 0, 1, 1, 'Forever live drop 2026-11-15 (Dented Chest, 2 of 3 openings)');
+
+-- 3. Vendor items live sells that ours lacks (rows we have and live did not show stay: they may be seasonal or conditional).
+--    Railee Thriceforged sells one of 287063 at a time like 11303; the restock time (1 hour) is INFERRED.
+DELETE FROM `npc_vendor` WHERE (`entry`,`item`) IN ((257422,287063),(252449,4536),(252449,277115),(252449,277114),(252449,277113),
+  (257006,2692),(257006,3713),(257006,10284),(257006,4471),(257006,4470),(257006,11291),(257006,272941),(257006,21099),(257006,21219));
+INSERT INTO `npc_vendor` (`entry`, `slot`, `item`, `maxcount`, `incrtime`, `ExtendedCost`, `type`, `BonusListIDs`, `PlayerConditionID`, `IgnoreFiltering`, `VerifiedBuild`) VALUES
+(257422, 9, 287063, 1, 3600, 0, 1, NULL, 0, 0, 70938),
+(252449, 18, 4536, 0, 0, 0, 1, NULL, 0, 0, 70938),
+(252449, 19, 277115, 0, 0, 0, 1, NULL, 0, 0, 70938),
+(252449, 20, 277114, 0, 0, 0, 1, NULL, 0, 0, 70938),
+(252449, 21, 277113, 0, 0, 0, 1, NULL, 0, 0, 70938),
+(257006, 6, 2692, 0, 0, 0, 1, NULL, 0, 0, 70938),
+(257006, 7, 3713, 0, 0, 0, 1, NULL, 0, 0, 70938),
+(257006, 8, 10284, 0, 0, 0, 1, NULL, 0, 0, 70938),
+(257006, 9, 4471, 0, 0, 0, 1, NULL, 0, 0, 70938),
+(257006, 10, 4470, 0, 0, 0, 1, NULL, 0, 0, 70938),
+(257006, 11, 11291, 0, 0, 0, 1, NULL, 0, 0, 70938),
+(257006, 12, 272941, 0, 0, 0, 1, NULL, 0, 0, 70938),
+(257006, 13, 21099, 0, 0, 0, 1, NULL, 0, 0, 70938),
+(257006, 14, 21219, 0, 0, 0, 1, NULL, 0, 0, 70938);
+
+-- 4. Hand-in texts our data has none for: Camping 101: Blacksmithing (97964) and Journey to Sentinel Hill (98021).
+INSERT INTO `quest_offer_reward` (`ID`, `Emote1`, `Emote2`, `Emote3`, `Emote4`, `EmoteDelay1`, `EmoteDelay2`, `EmoteDelay3`, `EmoteDelay4`, `RewardText`, `VerifiedBuild`) VALUES
+(97964, 0, 0, 0, 0, 0, 0, 0, 0, 'There you have it, you can now craft your very own Sharpening Wheel. Most folk don''t care much for camps being set up in the center of town, so you''ll need to head into the wilderness if you want to test it out.\n\nOh, and just remember, no camp is complete without a campfire. You''ll need one of those before you start up your camp. Most cooks can teach you to make a fire. If you haven''t already, you might want to check in with someone who can train you in the culinary arts to learn the basics.', 70938),
+(98021, 0, 0, 0, 0, 0, 0, 0, 0, 'I''ve been begging Stormwind for aid for months and he sends me a skinny elf? Well, beggars can''t be choosers I suppose.\n\nWelcome to Westfall, $c. Let''s see if we can''t put you to work.', 70938)
+ON DUPLICATE KEY UPDATE `RewardText` = IF(`RewardText` IS NULL OR `RewardText` = '', VALUES(`RewardText`), `RewardText`);
