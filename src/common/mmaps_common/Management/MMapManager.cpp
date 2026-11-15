@@ -24,6 +24,8 @@
 #include "Memory.h"
 #include <algorithm>
 #include <mutex>
+#include <optional>
+#include <shared_mutex>
 
 namespace MMAP
 {
@@ -60,10 +62,24 @@ namespace MMAP
             }
         };
 
-        // One query per map instance per thread, kept for the life of the thread so its node pool is allocated once.
+        // Tile lock: see NavMeshReadLock in the header.
+        std::shared_mutex g_tileLock;
+        thread_local uint32 t_readLockDepth = 0;
+
+        // Bumped by every unloadMapInstance, so a thread drops the queries it kept for map instances that may be gone.
+        std::atomic<uint32> g_instanceUnloads{ 0 };
+
+        // One query per map instance per thread, kept so its node pool is allocated once.
         dtNavMeshQuery const* GetThreadNavMeshQuery(ThreadQueryKey const& key, dtNavMesh const* navMesh)
         {
             thread_local std::unordered_map<ThreadQueryKey, std::unique_ptr<dtNavMeshQuery>, ThreadQueryKeyHash> queries;
+            thread_local uint32 seenUnloads = 0;
+            if (uint32 const unloads = g_instanceUnloads.load(std::memory_order_relaxed); unloads != seenUnloads)
+            {
+                // ~350 KB each: a long-lived thread that visits many dungeons would otherwise keep one per instance it ever saw
+                seenUnloads = unloads;
+                std::erase_if(queries, [&](auto const& entry) { return !(entry.first == key); });
+            }
             std::unique_ptr<dtNavMeshQuery>& query = queries[key];
             if (query && query->getAttachedNavMesh() == navMesh)
                 return query.get();
@@ -92,6 +108,30 @@ namespace MMAP
     bool ScopedThreadNavMeshQuery::Active()
     {
         return t_threadQueries;
+    }
+
+    NavMeshReadLock::NavMeshReadLock()
+    {
+        if (t_readLockDepth++ == 0)
+            g_tileLock.lock_shared();
+    }
+
+    NavMeshReadLock::~NavMeshReadLock()
+    {
+        if (--t_readLockDepth == 0)
+            g_tileLock.unlock_shared();
+    }
+
+    NavMeshTileChangeLock::NavMeshTileChangeLock()
+    {
+        // a thread waiting for its own read lock to go away would wait forever
+        ASSERT(t_readLockDepth == 0, "navmesh tile change on a thread that holds a NavMeshReadLock");
+        g_tileLock.lock();
+    }
+
+    NavMeshTileChangeLock::~NavMeshTileChangeLock()
+    {
+        g_tileLock.unlock();
     }
     using MMapTileSet = std::unordered_map<uint32, dtTileRef>;
 
@@ -192,6 +232,13 @@ namespace MMAP
         // we already have this map loaded?
         MMapDataSet::iterator itr = loadedMMaps.find(mapId);
         ASSERT(itr != loadedMMaps.end(), "Invalid mapId %u passed to MMapManager after startup in thread unsafe environment", mapId);
+
+        // the usual case (every grid load asks): a plain lookup, nothing changes
+        if (itr->second->FindMeshData(mapId, instanceId) != itr->second->meshData.end())
+            return LoadResult::AlreadyLoaded;
+
+        // adding a mesh changes meshData, which bot logic threads read in GetNavMesh / GetNavMeshQuery
+        NavMeshTileChangeLock tileChange;
 
         auto [meshItr, needsLoading] = itr->second->GetMeshData(mapId, instanceId);
         if (!needsLoading)
@@ -361,6 +408,9 @@ namespace MMAP
         dtMeshHeader* header = static_cast<dtMeshHeader*>(data.get());
         dtTileRef tileRef = 0;
 
+        // the file is read; only the tile insert itself waits for searches from other threads
+        NavMeshTileChangeLock tileChange;
+
         // memory allocated for data is now managed by detour, and will be deallocated when the tile is removed
         if (dtStatusSucceed(meshData.navMesh.addTile(static_cast<unsigned char*>(data.release()), fileHeader.size, DT_TILE_FREE_DATA, 0, &tileRef)))
         {
@@ -392,6 +442,8 @@ namespace MMAP
             default:
                 return false;
         }
+
+        NavMeshTileChangeLock tileChange;   // navMeshQueries is read by GetNavMeshQuery on bot logic threads
 
         auto [queryItr, inserted] = mmap->navMeshQueries.try_emplace({ instanceMapId, instanceId });
         if (!inserted)
@@ -541,6 +593,7 @@ namespace MMAP
 
         MMapData* mmap = itr->second.get();
         std::lock_guard<std::mutex> lock(mmap->loadLock);
+        NavMeshTileChangeLock tileChange;
         uint32 packedGridPos = packTileID(x, y);
         for (auto& [instanceId, meshData] : mmap->meshData)
         {
@@ -581,6 +634,7 @@ namespace MMAP
         }
 
         std::lock_guard<std::mutex> lock(itr->second->loadLock);
+        NavMeshTileChangeLock tileChange;
 
         if (!isRebuildingTilesEnabledOnMap(mapId))
         {
@@ -620,6 +674,8 @@ namespace MMAP
 
         MMapData* mmap = itr->second.get();
         std::lock_guard<std::mutex> lock(mmap->loadLock);
+        NavMeshTileChangeLock tileChange;
+        g_instanceUnloads.fetch_add(1, std::memory_order_relaxed);
         std::size_t erased = mmap->navMeshQueries.erase({ instanceMapId, instanceId });
         if (!erased)
             TC_LOG_DEBUG("maps", "MMAP:unloadMapInstance: Asked to unload not loaded dtNavMeshQuery mapId {:04} instanceId {}", instanceMapId, instanceId);
@@ -654,6 +710,10 @@ namespace MMAP
         if (itr == loadedMMaps.end())
             return nullptr;
 
+        std::optional<NavMeshReadLock> readLock;   // another thread's map may be adding a mesh right now
+        if (t_threadQueries)
+            readLock.emplace();
+
         MeshDataMap::iterator meshItr = itr->second->FindMeshData(mapId, instanceId);
         if (meshItr == itr->second->meshData.end())
             return nullptr;
@@ -666,6 +726,10 @@ namespace MMAP
         MMapDataSet::const_iterator itr = GetMMapData(meshMapId);
         if (itr == loadedMMaps.end())
             return nullptr;
+
+        std::optional<NavMeshReadLock> readLock;   // another thread's map may be adding an instance right now
+        if (t_threadQueries)
+            readLock.emplace();
 
         auto queryItr = itr->second->navMeshQueries.find({ instanceMapId, instanceId });
         if (queryItr == itr->second->navMeshQueries.end())

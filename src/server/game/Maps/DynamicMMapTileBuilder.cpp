@@ -226,6 +226,7 @@ bool InvokeAsyncCallbackIfReady(TileBuildRequest& request)
         {
             TC_LOG_INFO("maps.mmapgen", "[Map {:04}] [{:02},{:02}]: Swapping new tile", request.Id.TerrainMapId, request.Id.Y, request.Id.X);
 
+            MMAP::NavMeshTileChangeLock tileChange;   // searches from bot logic threads must not see a half-swapped tile
             request.NavMesh->removeTile(tileRef, nullptr, nullptr);
 
             unsigned char* data = static_cast<unsigned char*>(dtAlloc(tileResult.size, DT_ALLOC_PERM));

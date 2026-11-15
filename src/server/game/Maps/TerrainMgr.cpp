@@ -107,7 +107,11 @@ namespace
         for (HandcraftedRoadSegment const& s : segs)
             roadSegs.push_back({ s.fromX, s.fromY, s.toX, s.toY, s.width });
 
-        std::size_t const tagged = Road::ApplyCorridorsToNavmesh(*navMesh, roadSegs);
+        std::size_t tagged = 0;
+        {
+            MMAP::NavMeshTileChangeLock tileChange;   // retags polys that bot logic threads may be searching right now
+            tagged = Road::ApplyCorridorsToNavmesh(*navMesh, roadSegs);
+        }
         {
             std::lock_guard<std::mutex> lock(g_handcraftedRoadAppliedMutex);
             g_handcraftedRoadTaggedCount[key] = tagged;
@@ -221,7 +225,11 @@ namespace TerrainMgrDetail
         for (HandcraftedRoadSegment const& s : segs)
             roadSegs.push_back({ s.fromX, s.fromY, s.toX, s.toY, s.width });
 
-        std::size_t const tagged = Road::ApplyCorridorsToNavmesh(*navMesh, roadSegs);
+        std::size_t tagged = 0;
+        {
+            MMAP::NavMeshTileChangeLock tileChange;   // retags polys that bot logic threads may be searching right now
+            tagged = Road::ApplyCorridorsToNavmesh(*navMesh, roadSegs);
+        }
         TC_LOG_DEBUG("misc", "[handcrafted-road] map {}: tagged {} polys across {} segments",
             mapId, uint32(tagged), uint32(roadSegs.size()));
 

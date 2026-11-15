@@ -89,8 +89,9 @@ namespace MMAP
 
     // While one of these is alive on a thread, GetNavMeshQuery called on that thread returns a dtNavMeshQuery that belongs to
     // the thread (same navmesh, same node pool size as the shared one) instead of the one query each map instance shares.
-    // Several threads can then search paths on the same map at the same time. The navmesh itself is still shared, so this is
-    // only safe while no tile of it is loaded or unloaded, i.e. outside the map updates.
+    // Several threads can then search paths on the same map at the same time. The navmesh itself is still shared, so a search
+    // must not overlap a tile load or unload: either it runs outside the map updates, or it holds a NavMeshReadLock.
+    // While the scope is active, GetNavMeshQuery and GetNavMesh take the NavMeshReadLock for their own lookup.
     class TC_MMAPS_COMMON_API ScopedThreadNavMeshQuery
     {
         public:
@@ -103,6 +104,30 @@ namespace MMAP
 
         private:
             bool _previous;
+    };
+
+    // Searches from a thread that is not a map update thread (bot logic threads) run while the map threads load and unload
+    // navmesh tiles. Every tile or mesh change takes the tile lock exclusively (MMapManager does it itself; code that swaps
+    // tiles on its own, like the dynamic tile builder, holds a NavMeshTileChangeLock). Such a search holds a NavMeshReadLock
+    // (the same lock, shared) for its whole length, together with a ScopedThreadNavMeshQuery. A map thread searching its own
+    // map needs neither: its own tile changes happen between its own searches.
+    // Nested read locks on one thread are counted, only the outermost one locks.
+    class TC_MMAPS_COMMON_API NavMeshReadLock
+    {
+        public:
+            NavMeshReadLock();
+            ~NavMeshReadLock();
+            NavMeshReadLock(NavMeshReadLock const&) = delete;
+            NavMeshReadLock& operator=(NavMeshReadLock const&) = delete;
+    };
+
+    class TC_MMAPS_COMMON_API NavMeshTileChangeLock
+    {
+        public:
+            NavMeshTileChangeLock();
+            ~NavMeshTileChangeLock();
+            NavMeshTileChangeLock(NavMeshTileChangeLock const&) = delete;
+            NavMeshTileChangeLock& operator=(NavMeshTileChangeLock const&) = delete;
     };
 }
 
