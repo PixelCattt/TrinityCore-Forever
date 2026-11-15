@@ -127,7 +127,11 @@ namespace Trainer
         for (Spell const& trainerSpell : _spells)
         {
             if (!player->IsSpellFitByClassAndRace(trainerSpell.SpellId))
+            {
+                TC_LOG_DEBUG("entities.player", "Trainer::SendSpells: trainer {} spell {} left out for player '{}' (race {} class {}): not fit by class and race",
+                    _id, trainerSpell.SpellId, player->GetName(), uint32(player->GetRace()), uint32(player->GetClass()));
                 continue;
+            }
 
             if (!sConditionMgr->IsObjectMeetingTrainerSpellConditions(_id, trainerSpell.SpellId, player))
             {
@@ -151,6 +155,8 @@ namespace Trainer
                     reqAbility = 0;
             trainerListSpell.Usable = AsUnderlyingType(GetSpellState(player, &trainerSpell));
             trainerListSpell.ReqLevel = trainerSpell.ReqLevel;
+            TC_LOG_DEBUG("entities.player", "Trainer::SendSpells: trainer {} spell {} for player '{}': state {} (0 known, 1 available, 2 unavailable)",
+                _id, trainerSpell.SpellId, player->GetName(), trainerListSpell.Usable);
         }
 
         player->SendDirectMessage(trainerList.Write());
