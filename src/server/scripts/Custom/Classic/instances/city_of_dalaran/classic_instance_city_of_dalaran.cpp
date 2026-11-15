@@ -122,7 +122,8 @@ enum ClassicCityOfDalaranSpells : uint32
     SPELL_COD_SUMMON_MANALING = 1304455,    // cast for the look; its creature 269467 has no template
     SPELL_COD_ARCING_SMASH = 16169,
     SPELL_COD_MALFUNCTION = 13319,
-    SPELL_COD_ENTANGLE = 720,
+    SPELL_COD_ENTANGLE = 339,               // Entangling Roots: root + nature damage over time. 720 "Entangle" is Fankriss's
+                                            // spell (Temple of Ahn'Qiraj): its script spawns level 60 Vekniss Hatchlings
     SPELL_COD_FEL_TIMBERS = 1240692,        // live dummy, cast for the look
     SPELL_COD_FELFIRE = 24530,
     SPELL_COD_DRAIN_VITALITY = 1240738,
@@ -228,15 +229,17 @@ public:
         void OnGameObjectCreate(GameObject* go) override
         {
             InstanceScript::OnGameObjectCreate(go);
+            // This runs inside GameObject::AddToWorld, before the object is in the map's object store, so instance->GetGameObject()
+            // cannot find it yet: a door made while its bosses are already dead (a respawn, or the grid loading after a restart) was
+            // never opened. The city door is opened here on the object itself; a Prismatic Door cannot be deleted in the middle of
+            // being added, so Update() removes it on the next map tick.
             if (go->GetEntry() == GO_COD_PRISMATIC_DOOR_FEL_ANCIENT)
-            {
                 _felAncientDoors.push_back(go->GetGUID());
-                UpdateFelAncientDoors();
-            }
             else if (go->GetEntry() == GO_COD_CITY_DOOR)
             {
                 _cityDoors.push_back(go->GetGUID());
-                UpdateCityDoors();
+                if (SewerBossesDone())
+                    go->SetGoState(GO_STATE_ACTIVE);
             }
         }
 
@@ -248,6 +251,8 @@ public:
         void Update(uint32 diff) override
         {
             _encounterTracker.Update(diff);
+            if (!_felAncientDoors.empty() && SquareBossesDone())
+                UpdateFelAncientDoors();
         }
 
         bool SetBossState(uint32 id, EncounterState state) override
@@ -288,9 +293,13 @@ public:
         {
             if (!SquareBossesDone())
                 return;
+            // The doors are spawned with a 180 s respawn, so a plain despawn brought them back three minutes later and closed the way
+            // to Fel Ancient for the rest of the run (fox4039, 14 Nov: "after one wipe the portal to the boss closes again"). They
+            // stay gone for a week now, longer than any run; an instance reset brings them back with the bosses. Should one still
+            // come back, OnGameObjectCreate queues it and Update() removes it again.
             for (ObjectGuid const& guid : _felAncientDoors)
                 if (GameObject* door = instance->GetGameObject(guid))
-                    door->DespawnOrUnsummon();
+                    door->DespawnOrUnsummon(0ms, Seconds(WEEK));
             _felAncientDoors.clear();
         }
     };
@@ -703,7 +712,8 @@ private:
     EventMap _events;
 };
 
-// Fel Ancient (city centre): Entangle (10 s root with damage), Fel Timbers: green pools that burn whoever stands in them.
+// Fel Ancient (city centre): Entangle (the guides' root with damage; cast as Entangling Roots 339), Fel Timbers: green pools
+// that burn whoever stands in them.
 struct classic_boss_cod_fel_ancient : public ScriptedAI
 {
     classic_boss_cod_fel_ancient(Creature* creature) : ScriptedAI(creature) { }
