@@ -883,16 +883,17 @@ void Loot::OnLootOpened(Map* map, Player* looter)
             if (!_rolls.empty())
                 _changed = true;
         }
-        else if (_lootMethod == MASTER_LOOT)
-        {
-            if (looter->GetGUID() == _lootMaster)
-            {
-                WorldPackets::Loot::MasterLootCandidateList masterLootCandidateList;
-                masterLootCandidateList.LootObj = GetGUID();
-                masterLootCandidateList.Players = _allowedLooters;
-                looter->SendDirectMessage(masterLootCandidateList.Write());
-            }
-        }
+    }
+
+    // The master looter gets the candidate list every time it opens the loot, not only when it is the first to open it: a party bot
+    // that opened the corpse first (its loot window opens and closes) left the master looter with an empty "give to" list
+    // (Discord 11-14, doctorsun: "sometimes the character list does not appear").
+    if (_lootMethod == MASTER_LOOT && looter->GetGUID() == _lootMaster)
+    {
+        WorldPackets::Loot::MasterLootCandidateList masterLootCandidateList;
+        masterLootCandidateList.LootObj = GetGUID();
+        masterLootCandidateList.Players = _allowedLooters;
+        looter->SendDirectMessage(masterLootCandidateList.Write());
     }
 
     // Flag tracking quests as completed after all items were scanned for this player (some might depend on this quest not being completed)
