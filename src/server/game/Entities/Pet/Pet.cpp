@@ -1598,7 +1598,7 @@ bool Guardian::InitStatsForLevel(uint8 petlevel)
 
 bool Pet::HaveInDiet(ItemTemplate const* item) const
 {
-    if (!item->FoodType)
+    if (!item->FoodType || item->FoodType > 32)   // one bit of CreatureFamily.PetFoodMask per type
         return false;
 
     CreatureTemplate const* cInfo = GetCreatureTemplate();
@@ -1610,7 +1610,7 @@ bool Pet::HaveInDiet(ItemTemplate const* item) const
         return false;
 
     uint32 diet = cFamily->PetFoodMask;
-    uint32 FoodMask = 1 << (item->FoodType-1);
+    uint32 FoodMask = 1u << (item->FoodType - 1);
     return (diet & FoodMask) != 0;
 }
 

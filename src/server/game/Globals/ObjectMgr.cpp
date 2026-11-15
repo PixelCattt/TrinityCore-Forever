@@ -3663,7 +3663,9 @@ void ObjectMgr::LoadItemTemplates()
 
         itemTemplate.MaxDurability = FillMaxDurability(db2Data->ClassID, db2Data->SubclassID, sparse->InventoryType, sparse->OverallQualityID, sparse->ItemLevel);
         itemTemplate.ScriptId = 0;
-        itemTemplate.FoodType = 0;
+        // The pet food type is the client's own (Item.ItemPetFoodID, a row of ItemPetFood: 1 meat .. 8 raw fish); item_template_addon
+        // only fills in an item the client gives none (idea from the Everlake core, GPL).
+        itemTemplate.FoodType = db2Data->ItemPetFoodID > 0 ? uint32(db2Data->ItemPetFoodID) : 0;
         itemTemplate.MinMoneyLoot = 0;
         itemTemplate.MaxMoneyLoot = 0;
         itemTemplate.FlagsCu = 0;
@@ -3772,7 +3774,8 @@ void ObjectMgr::LoadItemTemplateAddon()
                 std::swap(minMoneyLoot, maxMoneyLoot);
             }
             itemTemplate->FlagsCu = fields[1].GetUInt32();
-            itemTemplate->FoodType = fields[2].GetUInt8();
+            if (!itemTemplate->BasicData || itemTemplate->BasicData->ItemPetFoodID <= 0)   // the client's type wins (LoadItemTemplates)
+                itemTemplate->FoodType = fields[2].GetUInt8();
             itemTemplate->MinMoneyLoot = minMoneyLoot;
             itemTemplate->MaxMoneyLoot = maxMoneyLoot;
             itemTemplate->SpellPPMRate = fields[5].GetFloat();
