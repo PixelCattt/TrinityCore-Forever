@@ -768,9 +768,18 @@ bool WorldSession::MeetsChrCustomizationReq(ChrCustomizationReqEntry const* req,
 
 bool WorldSession::ValidateAppearance(Races race, Classes playerClass, Gender gender, Trinity::IteratorPair<UF::ChrCustomizationChoice const*> customizations)
 {
+    // Each refusal names its reason (debug, entities.player.cheat): a refused create only says "invalid appearance attributes",
+    // which cannot tell a client sending choices of another build from options missing in the server's DB2 (Skyborne, SIN, 2026-11-15).
+    auto refuse = [&](char const* reason, uint32 optionId, uint32 choiceId)
+    {
+        TC_LOG_DEBUG("entities.player.cheat", "WorldSession::ValidateAppearance: account {} race {} class {} gender {}: option {} choice {}: {}",
+            GetAccountId(), uint32(race), uint32(playerClass), uint32(gender), optionId, choiceId, reason);
+        return false;
+    };
+
     std::vector<ChrCustomizationOptionEntry const*> const* options = sDB2Manager.GetCustomiztionOptions(race, gender);
     if (!options)
-        return false;
+        return refuse("no customization options for the race and gender", 0, 0);
 
     uint32 previousOption = 0;
 
@@ -778,7 +787,7 @@ bool WorldSession::ValidateAppearance(Races race, Classes playerClass, Gender ge
     {
         // check uniqueness of options
         if (playerChoice.ChrCustomizationOptionID == previousOption)
-            return false;
+            return refuse("option sent twice", playerChoice.ChrCustomizationOptionID, playerChoice.ChrCustomizationChoiceID);
 
         previousOption = playerChoice.ChrCustomizationOptionID;
 
@@ -794,15 +803,15 @@ bool WorldSession::ValidateAppearance(Races race, Classes playerClass, Gender ge
 
         // option not found for race/gender combination
         if (!customizationOption)
-            return false;
+            return refuse("option not found for the race and gender", playerChoice.ChrCustomizationOptionID, playerChoice.ChrCustomizationChoiceID);
 
         if (ChrCustomizationReqEntry const* req = sChrCustomizationReqStore.LookupEntry(customizationOption->ChrCustomizationReqID))
             if (!MeetsChrCustomizationReq(req, race, playerClass, false, customizations))
-                return false;
+                return refuse("option requirement not met", playerChoice.ChrCustomizationOptionID, playerChoice.ChrCustomizationChoiceID);
 
         std::vector<ChrCustomizationChoiceEntry const*> const* choicesForOption = sDB2Manager.GetCustomiztionChoices(playerChoice.ChrCustomizationOptionID);
         if (!choicesForOption)
-            return false;
+            return refuse("option has no choices", playerChoice.ChrCustomizationOptionID, playerChoice.ChrCustomizationChoiceID);
 
         auto customizationChoiceDataItr = std::find_if(choicesForOption->begin(), choicesForOption->end(), [&](ChrCustomizationChoiceEntry const* choice)
         {
@@ -811,11 +820,11 @@ bool WorldSession::ValidateAppearance(Races race, Classes playerClass, Gender ge
 
         // choice not found for option
         if (customizationChoiceDataItr == choicesForOption->end())
-            return false;
+            return refuse("choice not found for the option", playerChoice.ChrCustomizationOptionID, playerChoice.ChrCustomizationChoiceID);
 
         if (ChrCustomizationReqEntry const* req = sChrCustomizationReqStore.LookupEntry((*customizationChoiceDataItr)->ChrCustomizationReqID))
             if (!MeetsChrCustomizationReq(req, race, playerClass, true, customizations))
-                return false;
+                return refuse("choice requirement not met", playerChoice.ChrCustomizationOptionID, playerChoice.ChrCustomizationChoiceID);
     }
 
     return true;
