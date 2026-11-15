@@ -60,3 +60,5 @@ redistributing. Source files of the module do not carry per-file headers; this n
   as our own code: the hunter pet's food type taken from the client's Item table (`ObjectMgr::LoadItemTemplates`).
 - From the Everlake core (https://github.com/buildthehomelab/wow-trinitycore-everlake, GPL, a fork of this core), written as our
   own code: ranged weapons and wands take the ranged stat budget column (`GetRandomPropertyPoints`, ItemEnchantmentMgr.cpp).
+- From the Everlake core (https://github.com/buildthehomelab/wow-trinitycore-everlake, GPL, a fork of this core), written as our
+  own code: ranged weapons and wands take the ranged stat budget column (`GetRandomPropertyPoints`, ItemEnchantmentMgr.cpp).
