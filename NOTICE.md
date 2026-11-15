@@ -48,6 +48,9 @@ redistributing. Source files of the module do not carry per-file headers; this n
   [Efficient Games](https://efficient.games) (https://github.com/JIVESCORP/eg-link-output-wowf), licensed under
   [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Changed: only the records we lacked or had different were picked and
   converted to our database tables.
+- French quest text in `sql/custom/world/2026_11_15_98_world_forever_quest_locale_frFR_wowhead.sql`: from Wowhead's WoW Forever
+  database (www.wowhead.com/forever), French pages, collected and shared by Ashendris (Mizuka). Changed: compared with our world and
+  only the fields we lacked or that differ from live were written.
 - Quest givers, drops and vendor items in `sql/custom/world/2026_11_13_91_world_forever_everlake_data.sql` and
   `2026_11_15_97_world_forever_everlake_data_1115.sql`: from Everlake's world data
   ([buildthehomelab/wow-everlake-world-data](https://github.com/buildthehomelab/wow-everlake-world-data), GPL-3.0), which in turn
