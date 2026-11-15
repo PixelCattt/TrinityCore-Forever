@@ -126,10 +126,14 @@ struct classic_boss_gluth : public ScriptedAI
 
     void MoveInLineOfSight(Unit* pWho) override
     {
-        // He should aggro just at the edge of the sewer pipe players jump from
+        // He should aggro just at the edge of the sewer pipe players jump from. Only a player in his own room: the
+        // 49 y reach goes through the wall into Patchwerk's room (one floor lower, ~294 against his ~297.8), and a
+        // raid fighting Patchwerk pulled him in (chris 11-15: "2 bosses on us").
         if (pWho->GetTypeId() == TYPEID_PLAYER
             && !me->IsInCombat()
             && me->IsWithinDistInMap(pWho, 49.0f)
+            && std::abs(pWho->GetPositionZ() - me->GetPositionZ()) < 2.5f
+            && me->IsWithinLOSInMap(pWho)
             && !pWho->HasAuraType(SPELL_AURA_FEIGN_DEATH))
         {
             AttackStart(pWho);
@@ -264,7 +268,8 @@ struct classic_boss_gluth : public ScriptedAI
                 {
                     m_events.Repeat(5s);
                     float curZ = me->GetPositionZ(); // encounter floor at ~297.78f
-                    if (curZ < 293.0f || curZ > 300.0f) // avoid getting stuck in wall on pull
+                    // avoid getting stuck in wall on pull; his room floor runs 296.7-298, Patchwerk's 293.7-294.1: below 295.3 he has left his room
+                    if (curZ < 295.3f || curZ > 300.0f)
                     {
                         EnterEvadeMode();
                         return;
