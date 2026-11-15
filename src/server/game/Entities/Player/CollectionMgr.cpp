@@ -687,7 +687,10 @@ bool CollectionMgr::CanAddAppearance(ItemModifiedAppearanceEntry const* itemModi
     if (itemModifiedAppearance->TransmogSourceTypeEnum == 6 || itemModifiedAppearance->TransmogSourceTypeEnum == 9)
         return false;
 
-    if (!sItemSearchNameStore.LookupEntry(itemModifiedAppearance->ItemID))
+    // The Classic client's ItemSearchName holds only part of the items (about 6600 of 19000 ItemSparse rows, and none of the
+    // items that come from hotfixes), so an item a player can wear, such as the Ginn-su Sword, never reached the collection.
+    // The item being in ItemSparse is enough.
+    if (!sItemSearchNameStore.LookupEntry(itemModifiedAppearance->ItemID) && !sItemSparseStore.LookupEntry(itemModifiedAppearance->ItemID))
         return false;
 
     ItemTemplate const* itemTemplate = sObjectMgr->GetItemTemplate(itemModifiedAppearance->ItemID);
