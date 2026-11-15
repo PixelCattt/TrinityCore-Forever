@@ -67,6 +67,7 @@ namespace MMAP
             void unloadMapInstance(uint32 meshMapId, uint32 instanceMapId, uint32 instanceId);
 
             // the returned [dtNavMeshQuery const*] is NOT threadsafe
+            // (while a ScopedThreadNavMeshQuery is alive on the calling thread it is that thread's own query, see below)
             dtNavMeshQuery const* GetNavMeshQuery(uint32 meshMapId, uint32 instanceMapId, uint32 instanceId);
             dtNavMesh* GetNavMesh(uint32 mapId, uint32 instanceId);
 
@@ -84,6 +85,24 @@ namespace MMAP
             std::atomic<uint32> loadedTiles = 0;    // changed by several map threads (each map has its own load lock)
 
             std::unordered_map<uint32, uint32> parentMapData;
+    };
+
+    // While one of these is alive on a thread, GetNavMeshQuery called on that thread returns a dtNavMeshQuery that belongs to
+    // the thread (same navmesh, same node pool size as the shared one) instead of the one query each map instance shares.
+    // Several threads can then search paths on the same map at the same time. The navmesh itself is still shared, so this is
+    // only safe while no tile of it is loaded or unloaded, i.e. outside the map updates.
+    class TC_MMAPS_COMMON_API ScopedThreadNavMeshQuery
+    {
+        public:
+            ScopedThreadNavMeshQuery();
+            ~ScopedThreadNavMeshQuery();
+            ScopedThreadNavMeshQuery(ScopedThreadNavMeshQuery const&) = delete;
+            ScopedThreadNavMeshQuery& operator=(ScopedThreadNavMeshQuery const&) = delete;
+
+            static bool Active();
+
+        private:
+            bool _previous;
     };
 }
 
