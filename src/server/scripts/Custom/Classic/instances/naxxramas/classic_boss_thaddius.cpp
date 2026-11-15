@@ -572,9 +572,12 @@ struct classic_boss_thaddius : public ScriptedAI
         if (!me->HasAura(SPELL_THADIUS_SPAWN))
             DoCastSelf(SPELL_THADIUS_SPAWN, true);
 
-        // He is not targetable other than in p2. His creature row is immune to players as well (UNIT_FLAG_IMMUNE_TO_PC); phase 2 lifts both.
+        // He is not targetable other than in p2 (VMaNGOS: UNIT_FLAG_NOT_SELECTABLE only). His creature row also carries UNIT_FLAG_IMMUNE_TO_PC,
+        // and that one is cleared here: a creature immune to players ends its combat with them and takes none (Unit::SetImmuneToPC,
+        // CombatManager). naxx_thaddius 1115b: he stayed immune into the transition, and while the coils overloaded he left the fight at 100%
+        // before phase 2 (the adds down with 39/40 alive, "phase 1 -> 2", then nothing). Uninteractible alone keeps every attack off him.
         me->SetUninteractible(true);
-        me->SetImmuneToPC(true);
+        me->SetImmuneToPC(false);
     }
 
     // Helper for CheckSpawnAdds
@@ -706,9 +709,9 @@ struct classic_boss_thaddius : public ScriptedAI
         if (!me->HasAura(SPELL_THADIUS_SPAWN))
             DoCastSelf(SPELL_THADIUS_SPAWN, true);
 
-        // He is not targetable other than in p2
+        // He is not targetable other than in p2; not immune to players either (JustAppeared).
         me->SetUninteractible(true);
-        me->SetImmuneToPC(true);
+        me->SetImmuneToPC(false);
     }
 
     void KilledUnit(Unit* pVictim) override
