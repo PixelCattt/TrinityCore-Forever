@@ -16,6 +16,7 @@
  */
 
 #include "Config.h"
+#include "ConfigBaseFile.h"
 #include "Common.h"
 #include "Log.h"
 #include "StringConvert.h"
@@ -35,6 +36,7 @@ namespace
 {
     std::string _filename;
     std::vector<std::string> _additonalFiles;
+    std::vector<std::string> _baseFiles;   // LoadBaseFile: applied after the main file, before _additonalFiles
     std::vector<std::string> _args;
     bpt::ptree _config;
     std::mutex _configLock;
@@ -172,6 +174,33 @@ bool ConfigMgr::LoadAdditionalFile(std::string file, bool keepOnReload, std::str
     return true;
 }
 
+bool Trinity::Config::LoadBaseFile(std::string file, std::string& error)
+{
+    // check the file first, so a broken one is not kept for every later reload
+    bpt::ptree fullTree;
+    if (!LoadFile(file, fullTree, error, true))
+        return false;
+
+    {
+        std::scoped_lock lock(_configLock);
+        if (std::find(_baseFiles.begin(), _baseFiles.end(), file) == _baseFiles.end())
+            _baseFiles.push_back(std::move(file));
+    }
+
+    // build the config again in the right order: main file, base files, additional files, environment
+    std::vector<std::string> errors;
+    if (sConfigMgr->Reload(errors))
+        return true;
+
+    for (std::string& e : errors)
+    {
+        if (!error.empty())
+            error += "; ";
+        error += e;
+    }
+    return false;
+}
+
 bool ConfigMgr::LoadAdditionalDir(std::string const& dir, bool keepOnReload, std::vector<std::string>& loadedFiles, std::vector<std::string>& errors)
 {
     fs::path dirPath = dir;
@@ -241,6 +270,10 @@ bool ConfigMgr::Reload(std::vector<std::string>& errors)
     std::string error;
     if (!LoadInitial(_filename, std::move(_args), error))
         errors.push_back(std::move(error));
+
+    for (std::string const& baseFile : _baseFiles)
+        if (!LoadAdditionalFile(baseFile, false, error))
+            errors.push_back(std::move(error));
 
     for (std::string const& additionalFile : _additonalFiles)
         if (!LoadAdditionalFile(additionalFile, false, error))
