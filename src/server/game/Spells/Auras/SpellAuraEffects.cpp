@@ -885,6 +885,8 @@ Optional<SpellEffectValue> AuraEffect::CalculateEstimatedAmount(Unit const* cast
     switch (spellEffectInfo.ApplyAuraName)
     {
         case SPELL_AURA_PERIODIC_DAMAGE:
+            // with its fraction: the client shows a 5.97 tick as 6, and the ticks deal that on average (_periodicDamageRemainder)
+            return caster->SpellDamageBonusDoneExact(target, spellInfo, float(amount), DOT, spellEffectInfo, stackAmountForBonuses, nullptr, aurEff);
         case SPELL_AURA_PERIODIC_LEECH:
             return caster->SpellDamageBonusDone(target, spellInfo, amount, DOT, spellEffectInfo, stackAmountForBonuses, nullptr, aurEff);
         case SPELL_AURA_PERIODIC_HEAL:
@@ -5692,14 +5694,21 @@ void AuraEffect::HandlePeriodicDamageAurasTick(Unit* target, Unit* caster) const
     uint32 damage = std::max(GetAmountAsInt(), 0);
 
     // Script Hook For HandlePeriodicDamageAurasTick -- Allow scripts to change the Damage pre class mitigation calculations
+    uint32 const damageBeforeHook = damage;
     sScriptMgr->ModifyPeriodicDamageAurasTick(target, caster, damage);
 
     switch (GetAuraType())
     {
         case SPELL_AURA_PERIODIC_DAMAGE:
         {
+            // The amount keeps its fraction (unless a script set a value) and so does the caster's bonus; the whole points are dealt
+            // now and the rest is carried to the next tick.
+            float exact = damage == damageBeforeHook ? float(std::max(GetAmount(), SpellEffectValue(0))) : float(damage);
             if (caster)
-                damage = caster->SpellDamageBonusDone(target, GetSpellInfo(), damage, DOT, GetSpellEffectInfo(), stackAmountForBonuses, nullptr, this);
+                exact = caster->SpellDamageBonusDoneExact(target, GetSpellInfo(), exact, DOT, GetSpellEffectInfo(), stackAmountForBonuses, nullptr, this);
+            exact += _periodicDamageRemainder;
+            damage = uint32(std::max(exact, 0.0f));
+            _periodicDamageRemainder = std::max(exact, 0.0f) - float(damage);
             damage = target->SpellDamageBonusTaken(caster, GetSpellInfo(), damage, DOT);
 
             if (GetSpellInfo()->SpellFamilyName == SPELLFAMILY_GENERIC)

@@ -123,6 +123,9 @@ class TC_GAME_API AuraEffect
         int32 _periodicTimer;
         int32 _period;          // time between consecutive ticks
         uint32 _ticksDone;      // ticks counter
+        // A periodic damage tick deals whole points; the fraction left (a 5.97 tick deals 5) is added to the next tick, so the ticks add
+        // up to the full amount, as the client's tooltip counts them.
+        mutable float _periodicDamageRemainder = 0.0f;
         int32 _tickAdjust;      // ticks added to (or taken from) the count the duration gives, after ChangePeriodKeepingExpiry
 
         bool m_canBeRecalculated;
