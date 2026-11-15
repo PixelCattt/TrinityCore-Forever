@@ -28,6 +28,9 @@ namespace
 // 8-byte magic that prefixes every vmap-format file ("VMAP_4.E" + NUL).
 constexpr char VMAP_MAGIC[8] = { 'V', 'M', 'A', 'P', '_', '4', '.', 'E' };
 
+// VMapManager.cpp convertPositionToInternalRep: the vmap tiles store spawn positions as mid - world x / mid - world y.
+constexpr float kVmapMid = 0.5f * 64.0f * 533.33333333f;
+
 // ModelInstanceFlags - see src/common/Collision/Models/ModelInstance.h.
 constexpr uint8_t MOD_HAS_BOUND    = 1 << 0;
 constexpr uint8_t MOD_PATH_ONLY    = 1 << 2;
@@ -552,8 +555,11 @@ LoadedVmap loadVmaps(std::filesystem::path const& vmapsDir, uint32_t mapId,
                         local[2] *= spawn.scale;
                         float rotated[3];
                         mulVec(rot, local, rotated);
-                        out.v[corner][0] = rotated[0] + spawn.pos[0];
-                        out.v[corner][1] = rotated[1] + spawn.pos[1];
+                        // pos and rot are in the vmap's internal frame (VMapManager convertPositionToInternalRep:
+                        // internal x = mid - world x, internal y = mid - world y), so the placed vertex is turned
+                        // back into TC world space here.
+                        out.v[corner][0] = kVmapMid - (rotated[0] + spawn.pos[0]);
+                        out.v[corner][1] = kVmapMid - (rotated[1] + spawn.pos[1]);
                         out.v[corner][2] = rotated[2] + spawn.pos[2];
                     }
                     if (indexOk)
