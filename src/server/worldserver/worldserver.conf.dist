@@ -652,6 +652,16 @@ MapUpdate.Threads = 1
 Bots.SkipClientPackets = 1
 
 #
+#    Bots.SkipClientVisibility
+#        Description: A bot keeps no list of what its (missing) client has in view, so the visibility checks
+#                     for every object near a bot are not run when it moves. That list only ever decides which
+#                     packets a player gets. What others see of the bot and creature aggro are unchanged.
+#        Default:     1 - (Enabled)
+#                     0 - (Disabled, check as before; for comparing timings)
+
+Bots.SkipClientVisibility = 1
+
+#
 #    WorldTickStats.Log
 #        Description: Once a minute, write a [world_tick] line to the server log: how long a game step took
 #                     (average, p50, p95, p99, max), the map and session parts of it and the heaviest maps.

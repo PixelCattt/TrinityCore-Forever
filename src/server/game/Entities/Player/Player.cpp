@@ -26008,7 +26008,7 @@ inline void BeforeVisibilityDestroy<GameObject>(GameObject* t, Player* p)
 
 void Player::UpdateVisibilityOf(Trinity::IteratorPair<WorldObject**> targets)
 {
-    if (targets.begin() == targets.end())
+    if (targets.begin() == targets.end() || Trinity::HeadlessPackets::SkipVisibility(this))
         return;
 
     UpdateData udata(GetMapId());
@@ -26063,6 +26063,9 @@ void Player::UpdateVisibilityOf(Trinity::IteratorPair<WorldObject**> targets)
 
 void Player::UpdateVisibilityOf(WorldObject* target)
 {
+    if (Trinity::HeadlessPackets::SkipVisibility(this))
+        return;
+
     if (HaveAtClient(target))
     {
         if (!CanSeeOrDetect(target, { .DistanceCheck = true }))
@@ -26195,6 +26198,9 @@ void Player::SendInitialVisiblePackets(WorldObject* target) const
 template<class T>
 void Player::UpdateVisibilityOf(T* target, UpdateData& data, std::set<WorldObject*>& visibleNow)
 {
+    if (Trinity::HeadlessPackets::SkipVisibility(this))
+        return;
+
     if (HaveAtClient(target))
     {
         if (!CanSeeOrDetect(target, { .DistanceCheck = true }))
@@ -26263,6 +26269,12 @@ void Player::UpdateObjectVisibility(bool forced)
 
 void Player::UpdateVisibilityForPlayer()
 {
+    if (Trinity::HeadlessPackets::SkipVisibility(this))
+    {
+        m_clientGUIDs.clear();   // a bot keeps no view; also drops what it held before the switch was turned on
+        return;
+    }
+
     // updates visibility of all objects around point of view for current player
     Trinity::VisibleNotifier notifier(*this);
     Cell::VisitAllObjects(m_seer, notifier, GetSightRange());

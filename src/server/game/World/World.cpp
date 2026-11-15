@@ -595,6 +595,7 @@ void World::LoadConfigSettings(bool reload)
     TC_LOG_INFO("server.loading", "Using {} DBC Locale", localeNames[m_defaultDbcLocale]);
 
     Trinity::HeadlessPackets::Enabled.store(sConfigMgr->GetBoolDefault("Bots.SkipClientPackets"sv, true), std::memory_order_relaxed);
+    Trinity::HeadlessPackets::VisibilityEnabled.store(sConfigMgr->GetBoolDefault("Bots.SkipClientVisibility"sv, true), std::memory_order_relaxed);
     Trinity::WorldTickStats::Get().enabled.store(sConfigMgr->GetBoolDefault("WorldTickStats.Log"sv, false), std::memory_order_relaxed);
 
     ///- Read the player limit and the Message of the day from the config file

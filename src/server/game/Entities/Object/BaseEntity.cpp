@@ -737,4 +737,14 @@ namespace Trinity::HeadlessPackets
         WorldSession const* session = receiver->GetSession();
         return session && session->IsBot();
     }
+
+    std::atomic<bool> VisibilityEnabled{ true };
+
+    bool SkipVisibility(Player const* viewer)
+    {
+        if (!VisibilityEnabled.load(std::memory_order_relaxed) || !viewer)
+            return false;
+        WorldSession const* session = viewer->GetSession();
+        return session && session->IsBot();
+    }
 }
