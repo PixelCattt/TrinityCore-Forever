@@ -5035,6 +5035,14 @@ Recap.Announce = 3
 
 Classic.GuildFinder = 0
 
+#    Classic.AdventureGuide
+#        Description: Adventure Guide (Shift-J): boss abilities and loot of dungeons and raids. The official realm
+#                     has it closed (game rule 42, EncounterJournalDisabled).
+#        Default:     0 - (Closed, as on the official realm)
+#                     1 - (Open)
+
+Classic.AdventureGuide = 0
+
 #    Classic.OpcodeGroupShift
 #        Description: Client 1.60.1.70291 numbers the message groups one higher than 70245 (and changed some packet and
 #                     update field layouts). -1 picks it from the realm's game build (realmlist.gamebuild >= 70291).

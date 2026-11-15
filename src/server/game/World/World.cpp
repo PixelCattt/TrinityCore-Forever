@@ -1278,7 +1278,7 @@ void World::LoadConfigSettings(bool reload)
     _gameRules.clear();
     for (auto [rule, value] : std::initializer_list<std::pair<int32, int32>>{
         { 213, 1 }, { 216, 2 }, { 174, 1 }, { 206, 1 }, { 109, 1 }, { 114, 1 }, { 211, 1 }, { 112, 1 }, { 173, 1 }, { 154, 0 },
-        { 180, 0 }, { 181, 1 }, { 182, 1 }, { 195, 1 }, { 23, 1 }, { 98, 0 }, { 93, 2 }, { 102, 1 }, { 42, 1 }, { 40, 0 },
+        { 180, 0 }, { 181, 1 }, { 182, 1 }, { 195, 1 }, { 23, 1 }, { 98, 0 }, { 93, 2 }, { 102, 1 }, { 40, 0 },
         { 157, 1 }, { 190, 0 }, { 162, 1 }, { 209, 1 }, { 89, 1 }, { 177, 1 }, { 197, 1 }, { 199, -5 }, { 63, 1 }, { 90, 1 },
         { 244, 1 }, { 33, 20 }, { 129, 0 }, { 228, 1 }, { 241, 1 }, { 243, 1 }, { 101, 1 }, { 237, 0 },
         // official 70205 and 70235 sniffs also send these (not in 70124); 242 / 247 are suspected to switch on the new Social window tabs
@@ -1288,6 +1288,10 @@ void World::LoadConfigSettings(bool reload)
         { 251, 1 }, { 252, 1 }, { 253, 0 } })
         _gameRules.push_back({ .Rule = ::GameRule(rule), .Value = value });
     _gameRules.push_back({ .Rule = ::GameRule(200), .Value = 0.5f });
+
+    // EncounterJournalDisabled (42): the official realm sends 1, which closes the Adventure Guide (Shift-J). Classic.AdventureGuide
+    // opens it (rule 0): boss abilities and loot of dungeons and raids. Default off, as on the official realm.
+    _gameRules.push_back({ .Rule = ::GameRule::EncounterJournalDisabled, .Value = int32(sConfigMgr->GetBoolDefault("Classic.AdventureGuide", false) ? 0 : 1) });
 
     // Classic 1.60 Hardcore ruleset realm: C_GameRules.IsHardcoreActive() drives the client's Hardcore UI
     if (sConfigMgr->GetBoolDefault("Classic.Hardcore", false))
