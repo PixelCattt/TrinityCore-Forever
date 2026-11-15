@@ -21,6 +21,7 @@
 #include "Map.h"
 #include "Metric.h"
 #include "PathGenerator.h"
+#include "WorldTickStats.h"
 #include <chrono>
 #include <cstdio>
 #include <stdexcept>
@@ -121,6 +122,9 @@ class MapUpdateRequest
         void call()
         {
             TC_METRIC_TIMER("map_update_time_diff", TC_METRIC_TAG("map_id", std::to_string(m_map.GetId())));
+            bool const tickStats = Trinity::WorldTickStats::Enabled();
+            Trinity::WorldTickStats::Clock::time_point const start = tickStats ? Trinity::WorldTickStats::Clock::now()
+                                                                               : Trinity::WorldTickStats::Clock::time_point();
             // Wrap the map update in a try/catch so an uncaught exception
             // in any handler (spell scripts, BIH/DynamicTree builds,
             // ConditionMgr, etc.) doesn't terminate the world. Without
@@ -183,6 +187,8 @@ class MapUpdateRequest
                     m_map.GetId(), m_map.GetInstanceId());
             }
 #endif
+            if (tickStats)
+                Trinity::WorldTickStats::NoteMap(m_map.GetId(), Trinity::WorldTickStats::Since(start));
             m_updater.update_finished();
         }
 };

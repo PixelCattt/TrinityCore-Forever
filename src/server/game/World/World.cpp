@@ -110,6 +110,7 @@
 #include "WhoListStorage.h"
 #include "WorldSession.h"
 #include "WorldStateMgr.h"
+#include "WorldTickStats.h"
 #include <zlib.h>
 #include <filesystem>
 
@@ -591,6 +592,8 @@ void World::LoadConfigSettings(bool reload)
     }
 
     TC_LOG_INFO("server.loading", "Using {} DBC Locale", localeNames[m_defaultDbcLocale]);
+
+    Trinity::WorldTickStats::Get().enabled.store(sConfigMgr->GetBoolDefault("WorldTickStats.Log"sv, false), std::memory_order_relaxed);
 
     ///- Read the player limit and the Message of the day from the config file
     SetPlayerAmountLimit(sConfigMgr->GetIntDefault("PlayerLimit"sv, 100));
@@ -2244,10 +2247,22 @@ void World::LoadAutobroadcasts()
     TC_LOG_INFO("server.loading", ">> Loaded {} autobroadcast definitions in {} ms", m_Autobroadcasts.size(), GetMSTimeDiffToNow(oldMSTime));
 }
 
+namespace
+{
+    // [world_tick] accumulators (world thread): the world updates since the maps last ran.
+    uint64 _tickStatsTotalUs = 0;
+    uint64 _tickStatsMapsUs = 0;
+    uint64 _tickStatsSessionsUs = 0;
+    bool _tickStatsMapsRan = false;
+}
+
 /// Update the World !
 void World::Update(uint32 diff)
 {
     TC_METRIC_TIMER("world_update_time_total");
+    bool const tickStats = Trinity::WorldTickStats::Enabled();
+    Trinity::WorldTickStats::Clock::time_point const tickStart = tickStats ? Trinity::WorldTickStats::Clock::now()
+                                                                           : Trinity::WorldTickStats::Clock::time_point();
     ///- Update the game time and check for shutdown time
     _UpdateGameTime();
     time_t currentGameTime = GameTime::GetGameTime();
@@ -2386,7 +2401,11 @@ void World::Update(uint32 diff)
     {
         /// <li> Handle session updates when the timer has passed
         TC_METRIC_TIMER("world_update_time", TC_METRIC_TAG("type", "Update sessions"));
+        Trinity::WorldTickStats::Clock::time_point const sessionsStart = tickStats ? Trinity::WorldTickStats::Clock::now()
+                                                                                   : Trinity::WorldTickStats::Clock::time_point();
         UpdateSessions(diff);
+        if (tickStats)
+            _tickStatsSessionsUs += Trinity::WorldTickStats::Since(sessionsStart);
     }
 
     /// <li> Update uptime table
@@ -2435,7 +2454,15 @@ void World::Update(uint32 diff)
     ///- Update objects when the timer has passed (maps, transport, creatures, ...)
     {
         TC_METRIC_TIMER("world_update_time", TC_METRIC_TAG("type", "Update maps"));
+        Trinity::WorldTickStats::Clock::time_point const mapsStart = tickStats ? Trinity::WorldTickStats::Clock::now()
+                                                                               : Trinity::WorldTickStats::Clock::time_point();
+        Trinity::WorldTickStats::Get().mapsRan = false;
         sMapMgr->Update(diff);
+        if (tickStats && Trinity::WorldTickStats::Get().mapsRan)
+        {
+            _tickStatsMapsUs = Trinity::WorldTickStats::Since(mapsStart);
+            _tickStatsMapsRan = true;
+        }
     }
 
     {
@@ -2560,6 +2587,27 @@ void World::Update(uint32 diff)
         // Stats logger update
         sMetric->Update();
         TC_METRIC_VALUE("update_time_diff", diff);
+    }
+
+    // [world_tick]: the cost of one game step (the world updates since the maps last ran, plus that map update).
+    if (tickStats)
+    {
+        _tickStatsTotalUs += Trinity::WorldTickStats::Since(tickStart);
+        if (_tickStatsMapsRan)
+        {
+            std::string const line = Trinity::WorldTickStats::NoteTick(_tickStatsTotalUs, _tickStatsMapsUs, _tickStatsSessionsUs,
+                                                                       uint64(GameTime::GetGameTimeMS()));
+            if (!line.empty())
+                TC_LOG_INFO("server.worldtick", "[world_tick] {} | players={} sessions={}", line, uint32(ObjectAccessor::GetPlayers().size()),
+                            GetActiveSessionCount());
+            _tickStatsTotalUs = _tickStatsMapsUs = _tickStatsSessionsUs = 0;
+            _tickStatsMapsRan = false;
+        }
+    }
+    else
+    {
+        _tickStatsTotalUs = _tickStatsMapsUs = _tickStatsSessionsUs = 0;
+        _tickStatsMapsRan = false;
     }
 }
 

@@ -35,6 +35,7 @@
 #include "World.h"
 #include "WorldSession.h"
 #include "WorldStateMgr.h"
+#include "WorldTickStats.h"
 
 #include <boost/dynamic_bitset.hpp>
 #include <numeric>
@@ -417,6 +418,8 @@ void MapManager::Update(uint32 diff)
     i_timer.Update(diff);
     if (!i_timer.Passed())
         return;
+
+    Trinity::WorldTickStats::Get().mapsRan = true;
 
     MapMapType::iterator iter = i_maps.begin();
     while (iter != i_maps.end())

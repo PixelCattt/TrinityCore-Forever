@@ -641,6 +641,16 @@ AddonChannel = 1
 MapUpdate.Threads = 1
 
 #
+#    WorldTickStats.Log
+#        Description: Once a minute, write a [world_tick] line to the server log: how long a game step took
+#                     (average, p50, p95, p99, max), the map and session parts of it and the heaviest maps.
+#                     Used to measure a build before and after a change on the same scenario.
+#        Default:     0 - (Disabled)
+#                     1 - (Enabled)
+
+WorldTickStats.Log = 0
+
+#
 #    CleanCharacterDB
 #        Description: Clean out deprecated achievements, skills, spells and talents from the db.
 #        Default:     0 - (Disabled)
