@@ -20,6 +20,7 @@
 #include "DB2Structure.h"
 #include "Errors.h"
 #include "GameTime.h"
+#include "HeadlessPackets.h"
 #include "Log.h"
 #include "MovementPackets.h"
 #include "Player.h"
@@ -27,6 +28,7 @@
 #include "Transport.h"
 #include "UpdateData.h"
 #include "Vehicle.h"
+#include "WorldSession.h"
 
 namespace WowCS
 {
@@ -144,6 +146,9 @@ void BaseEntity::BuildCreateUpdateBlockForPlayer(UpdateData* data, Player* targe
 
 void BaseEntity::SendUpdateToPlayer(Player* player) const
 {
+    if (Trinity::HeadlessPackets::Skip(player))
+        return;
+
     // send create update to player
     UpdateData upd(player->GetMapId());
     WorldPacket packet;
@@ -220,6 +225,9 @@ void BaseEntity::DestroyForPlayer(Player const* target) const
 {
     ASSERT(target);
 
+    if (Trinity::HeadlessPackets::Skip(target))
+        return;
+
     UpdateData updateData(target->GetMapId());
     BuildDestroyUpdateBlock(&updateData);
     WorldPacket packet;
@@ -230,6 +238,9 @@ void BaseEntity::DestroyForPlayer(Player const* target) const
 void BaseEntity::SendOutOfRangeForPlayer(Player const* target) const
 {
     ASSERT(target);
+
+    if (Trinity::HeadlessPackets::Skip(target))
+        return;
 
     UpdateData updateData(target->GetMapId());
     BuildOutOfRangeUpdateBlock(&updateData);
@@ -703,6 +714,9 @@ void BaseEntity::BuildUpdateChangesMask()
 
 void BaseEntity::BuildFieldsUpdate(Player* player, UpdateDataMapType& data_map) const
 {
+    if (Trinity::HeadlessPackets::Skip(player))
+        return;
+
     UpdateDataMapType::iterator iter = data_map.emplace(player, player->GetMapId()).first;
     BuildValuesUpdateBlockForPlayer(&iter->second, iter->first);
 }
@@ -710,4 +724,17 @@ void BaseEntity::BuildFieldsUpdate(Player* player, UpdateDataMapType& data_map) 
 std::string BaseEntity::GetDebugInfo() const
 {
     return Trinity::StringFormat("{}", GetGUID());
+}
+
+namespace Trinity::HeadlessPackets
+{
+    std::atomic<bool> Enabled{ true };
+
+    bool Skip(Player const* receiver)
+    {
+        if (!Enabled.load(std::memory_order_relaxed) || !receiver)
+            return false;
+        WorldSession const* session = receiver->GetSession();
+        return session && session->IsBot();
+    }
 }

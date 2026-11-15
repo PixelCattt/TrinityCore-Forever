@@ -76,6 +76,7 @@
 #include "GridNotifiersImpl.h"
 #include "Group.h"
 #include "GroupMgr.h"
+#include "HeadlessPackets.h"
 #include "GameTables.h"
 #include "GameTime.h"
 #include "Guild.h"
@@ -26159,6 +26160,9 @@ void Player::UpdateTriggerVisibility()
 
 void Player::SendInitialVisiblePackets(WorldObject* target) const
 {
+    if (Trinity::HeadlessPackets::Skip(this))
+        return;
+
     auto sendVignette = [](Vignettes::VignetteData const& vignette, Player const* where)
     {
         if (!vignette.Data->IsInfiniteAOI() && Vignettes::CanSee(where, vignette))
@@ -26197,10 +26201,13 @@ void Player::UpdateVisibilityOf(T* target, UpdateData& data, std::set<WorldObjec
         {
             BeforeVisibilityDestroy<T>(target, this);
 
-            if (!target->IsDestroyedObject())
-                target->BuildOutOfRangeUpdateBlock(&data);
-            else
-                target->BuildDestroyUpdateBlock(&data);
+            if (!Trinity::HeadlessPackets::Skip(this))   // a bot has no client: only the guid list below changes
+            {
+                if (!target->IsDestroyedObject())
+                    target->BuildOutOfRangeUpdateBlock(&data);
+                else
+                    target->BuildDestroyUpdateBlock(&data);
+            }
 
             m_clientGUIDs.erase(target->GetGUID());
 
@@ -26213,12 +26220,15 @@ void Player::UpdateVisibilityOf(T* target, UpdateData& data, std::set<WorldObjec
     {
         if (CanSeeOrDetect(target, { .DistanceCheck = true }))
         {
-            if (_combatPlateOn)
-                if (Creature const* creature = target->ToCreature())
-                    RefreshCombatPlate(creature, GetPet());   // the create block carries the plate state from the start
-            target->BuildCreateUpdateBlockForPlayer(&data, this);
             m_clientGUIDs.insert(target->GetGUID());
-            visibleNow.insert(target);
+            if (!Trinity::HeadlessPackets::Skip(this))
+            {
+                if (_combatPlateOn)
+                    if (Creature const* creature = target->ToCreature())
+                        RefreshCombatPlate(creature, GetPet());   // the create block carries the plate state from the start
+                target->BuildCreateUpdateBlockForPlayer(&data, this);
+                visibleNow.insert(target);
+            }
 
             #ifdef TRINITY_DEBUG
                 TC_LOG_DEBUG("maps", "Object {} is visible now for player {}. Distance = {}", target->GetGUID().ToString(), GetGUID().ToString(), GetDistance(target));

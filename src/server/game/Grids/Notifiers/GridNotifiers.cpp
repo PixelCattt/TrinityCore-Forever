@@ -19,6 +19,7 @@
 #include "CellImpl.h"
 #include "CreatureAI.h"
 #include "GridNotifiersImpl.h"
+#include "HeadlessPackets.h"
 #include "ObjectAccessor.h"
 #include "Transport.h"
 #include "UpdateData.h"
@@ -68,10 +69,12 @@ void VisibleNotifier::SendToSelf()
         }
     }
 
+    bool const skipPackets = Trinity::HeadlessPackets::Skip(&i_player);
     for (ObjectGuid const& outOfRangeGuid : vis_guids)
     {
         i_player.m_clientGUIDs.erase(outOfRangeGuid);
-        i_data.AddOutOfRangeGUID(outOfRangeGuid);
+        if (!skipPackets)
+            i_data.AddOutOfRangeGUID(outOfRangeGuid);
 
         if (outOfRangeGuid.IsPlayer())
         {
