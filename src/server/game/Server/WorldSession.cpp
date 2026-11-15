@@ -1778,6 +1778,15 @@ uint32 WorldSession::DosProtection::GetMaxPacketCounterAllowed(uint32 opcode) co
             break;
         }
 
+        // Auto loot (or a fast-loot add-on) with full bags asks for every item again each frame until there is room: at a high frame rate
+        // that is well over the default 100 a second, and the player was kicked for it (Discord 11-14, varanday on 0.1.36.1: "flooding
+        // packet (opc: CMSG_LOOT_ITEM, count: 101)"). Each request is answered with "inventory full", nothing more.
+        case CMSG_LOOT_ITEM:
+        {
+            maxPacketCounterAllowed = 600;
+            break;
+        }
+
         case CMSG_QUEST_GIVER_ACCEPT_QUEST:             //   0               4
         case CMSG_QUEST_LOG_REMOVE_QUEST:               //   0               4
         case CMSG_QUEST_GIVER_CHOOSE_REWARD:            //   0               4
