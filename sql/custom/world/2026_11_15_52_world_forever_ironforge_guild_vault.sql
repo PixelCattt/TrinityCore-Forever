@@ -1,6 +1,7 @@
 -- Ironforge: no Guild Vault at the bank either. Found while checking the Darnassus fix (2026_11_15_50): the dev world has no
 -- Guild Vault gameobject (type 34) anywhere in Ironforge. Same fix as Darnassus: one vault in the Vault of Ironforge,
--- 2.5 yd in front of a banker, facing them.
+-- 2.5 yd in front of a banker, facing the same way the banker does, so its
+-- front looks at the players who come to the counter.
 -- INFERRED: the place (no sniff of an Ironforge vault) and the look: the Alliance vault of Stormwind (630865, scale 0.66).
 -- The banker is the first one (npcflag BANKER) in the Ironforge box of map 0, so the spot follows our own spawn. Nothing is
 -- added if a vault already stands in Ironforge. Safe to run again.
@@ -8,7 +9,7 @@ DELETE FROM `gameobject` WHERE `guid` = 838001001;
 INSERT INTO `gameobject` (`guid`,`id`,`map`,`zoneId`,`areaId`,`spawnDifficulties`,`phaseUseFlags`,`PhaseId`,`PhaseGroup`,`terrainSwapMap`,`position_x`,`position_y`,`position_z`,`orientation`,`rotation0`,`rotation1`,`rotation2`,`rotation3`,`spawntimesecs`,`animprogress`,`state`,`ScriptName`,`StringId`,`VerifiedBuild`)
 SELECT 838001001, 630865, 0, 0, 0, '0', 0, 0, 0, -1,
     c.`position_x` + 2.5 * COS(c.`orientation`), c.`position_y` + 2.5 * SIN(c.`orientation`), c.`position_z`,
-    MOD(c.`orientation` + PI(), 2 * PI()), 0, 0, SIN(MOD(c.`orientation` + PI(), 2 * PI()) / 2), COS(MOD(c.`orientation` + PI(), 2 * PI()) / 2),
+    c.`orientation`, 0, 0, SIN(c.`orientation` / 2), COS(c.`orientation` / 2),
     120, 255, 1, '', NULL, 0
 FROM `creature` c JOIN `creature_template` t ON t.`entry` = c.`id`
 WHERE c.`map` = 0 AND (t.`npcflag` & 131072) <> 0
