@@ -104,7 +104,7 @@ ItemRandomBonusListId GenerateItemRandomBonusListId(uint32 item_id)
     return *Trinity::Containers::SelectRandomWeightedContainerElement(tab->second.BonusListIDs, std::span(tab->second.Chances));
 }
 
-float GetRandomPropertyPoints(uint32 itemLevel, uint32 quality, uint32 inventoryType, uint32 subClass)
+float GetRandomPropertyPoints(uint32 itemLevel, uint32 quality, uint32 inventoryType, uint32 /*subClass*/)
 {
     uint32 propIndex;
 
@@ -114,17 +114,9 @@ float GetRandomPropertyPoints(uint32 itemLevel, uint32 quality, uint32 inventory
         case INVTYPE_BODY:
         case INVTYPE_CHEST:
         case INVTYPE_LEGS:
-        case INVTYPE_RANGED:
         case INVTYPE_2HWEAPON:
         case INVTYPE_ROBE:
-        case INVTYPE_THROWN:
             propIndex = 0;
-            break;
-        case INVTYPE_RANGEDRIGHT:
-            if (subClass == ITEM_SUBCLASS_WEAPON_WAND)
-                propIndex = 3;
-            else
-                propIndex = 0;
             break;
         case INVTYPE_WEAPON:
         case INVTYPE_WEAPONMAINHAND:
@@ -146,6 +138,13 @@ float GetRandomPropertyPoints(uint32 itemLevel, uint32 quality, uint32 inventory
         case INVTYPE_HOLDABLE:
             propIndex = 2;
             break;
+        // Classic 1.60: every ranged weapon (bow, gun, crossbow, thrown, wand) takes the fifth column, as the client's tooltip does;
+        // retail gives bows, guns and thrown the two-hand column and wands the one-hand one. With the client's RandPropPoints and
+        // ItemSparse: Ragefire Wand 7513 (item level 40, rare) +3 Intellect (one-hand column: +4), Mithril Blunderbuss 10508 (41,
+        // uncommon) +5 Agility (two-hand column: +17). Found by the Everlake core (GPL); our own code.
+        case INVTYPE_RANGED:
+        case INVTYPE_THROWN:
+        case INVTYPE_RANGEDRIGHT:
         case INVTYPE_RELIC:
             propIndex = 4;
             break;
