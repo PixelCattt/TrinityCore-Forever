@@ -947,8 +947,10 @@ struct classic_boss_thaddius : public ScriptedAI
 
         // The transition is not a fight of his own: the adds are dead and he stands immune for 13 s while the coils overload, so his
         // threat list may empty then (1114f: "phase 2 -> 0, threat list 0" between the coils' beam and his engage). It is filled again
-        // when he becomes attackable (EVENT_THAD_TRANSITION_2).
-        if (m_Phase != THAD_NOT_STARTED && m_Phase != THAD_TRANSITION)
+        // when he becomes attackable (EVENT_THAD_TRANSITION_2). Nor is his combat in it a stray one: the raid is on his threat list (naxx_thaddius
+        // 1115a: the adds died together at 133 s, and the startup check below, which the transition fell under, put him back to phase 0 at
+        // once with 35 on his threat list, "phase 2 -> 0, in combat").
+        if (m_Phase == THAD_PHASE1 || m_Phase == THAD_PHASE2)
         {
             if (me->GetThreatManager().IsThreatListEmpty(true))
             {
@@ -956,7 +958,7 @@ struct classic_boss_thaddius : public ScriptedAI
                 return;
             }
         }
-        else
+        else if (m_Phase == THAD_NOT_STARTED)
         {
             // He can act a bit weird if you stand next to him on server startup :/
             if (me->IsInCombat())
