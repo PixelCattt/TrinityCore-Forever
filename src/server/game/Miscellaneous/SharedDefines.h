@@ -1520,7 +1520,7 @@ enum SpellEffects
     SPELL_EFFECT_RESURRECT_WITH_AURA                = 172,
     SPELL_EFFECT_UNLOCK_GUILD_VAULT_TAB             = 173, // Guild tab unlocked (guild perk)
     SPELL_EFFECT_APPLY_AURA_ON_PET                  = 174, // NYI
-    SPELL_EFFECT_175                                = 175,
+    SPELL_EFFECT_JUMP_DEST_3                        = 175, // Classic 1.60 client data: jump to dest, same fields as SPELL_EFFECT_JUMP_DEST (Feral Charge (Cat), Spirit Leap)
     SPELL_EFFECT_SANCTUARY_2                        = 176, // NYI
     SPELL_EFFECT_DESPAWN_PERSISTENT_AREA_AURA       = 177,
     SPELL_EFFECT_178                                = 178,

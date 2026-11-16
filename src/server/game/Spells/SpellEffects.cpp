@@ -266,7 +266,7 @@ NonDefaultConstructible<SpellEffectHandlerFn> SpellEffectHandlers[TOTAL_SPELL_EF
     &Spell::EffectResurrectWithAura,                        //172 SPELL_EFFECT_RESURRECT_WITH_AURA
     &Spell::EffectUnlockGuildVaultTab,                      //173 SPELL_EFFECT_UNLOCK_GUILD_VAULT_TAB
     &Spell::EffectApplyAura,                                //174 SPELL_EFFECT_APPLY_AURA_ON_PET
-    &Spell::EffectNULL,                                     //175 SPELL_EFFECT_175
+    &Spell::EffectJumpDest,                                 //175 SPELL_EFFECT_JUMP_DEST_3
     &Spell::EffectSanctuary,                                //176 SPELL_EFFECT_SANCTUARY_2
     &Spell::EffectNULL,                                     //177 SPELL_EFFECT_DESPAWN_PERSISTENT_AREA_AURA
     &Spell::EffectUnused,                                   //178 SPELL_EFFECT_178 unused
