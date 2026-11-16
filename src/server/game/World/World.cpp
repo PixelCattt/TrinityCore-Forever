@@ -873,7 +873,7 @@ void World::LoadConfigSettings(bool reload)
         { .Name = "NoGrayAggro.Above"sv, .DefaultValue = 0, .Index = CONFIG_NO_GRAY_AGGRO_ABOVE },
         { .Name = "NoGrayAggro.Below"sv, .DefaultValue = 0, .Index = CONFIG_NO_GRAY_AGGRO_BELOW },
         { .Name = "Respawn.MinCheckIntervalMS"sv, .DefaultValue = 5000, .Index = CONFIG_RESPAWN_MINCHECKINTERVALMS },
-        { .Name = "Respawn.DynamicMode"sv, .DefaultValue = 0, .Index = CONFIG_RESPAWN_DYNAMICMODE, .Min = 0, .Max = 1 },
+        { .Name = "Respawn.DynamicMode"sv, .DefaultValue = 1, .Index = CONFIG_RESPAWN_DYNAMICMODE, .Min = 0, .Max = 1 },
         { .Name = "Respawn.GuidWarnLevel"sv, .DefaultValue = 12000000, .Index = CONFIG_RESPAWN_GUIDWARNLEVEL, .Min = 0, .Max = 16777215 },
         { .Name = "Respawn.GuidAlertLevel"sv, .DefaultValue = 16000000, .Index = CONFIG_RESPAWN_GUIDALERTLEVEL, .Min = 0, .Max = 16777215 },
         { .Name = "Respawn.RestartQuietTime"sv, .DefaultValue = 3, .Index = CONFIG_RESPAWN_RESTARTQUIETTIME, .Min = 0, .Max = 23 },

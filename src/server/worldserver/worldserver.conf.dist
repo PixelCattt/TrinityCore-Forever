@@ -2253,11 +2253,12 @@ Respawn.RestartQuietTime = 3
 #    Respawn.DynamicMode
 #        Description: Select which mode (if any) should be used to adjust respawn of creatures.
 #                     This will only affect creatures that have dynamic spawn rate scaling enabled in
-#                     the spawn group table (by default, gathering nodes and quest targets with respawn time <30min
-#                     1 - Use number of players in zone
-#        Default:     0 - No dynamic respawn function
+#                     the spawn group table (by default, gathering nodes and quest targets with respawn time <30min,
+#                     and on Forever the open-world combat creatures of spawn groups 901035 and 901036)
+#        Default:     1 - Use number of players in zone
+#                     0 - No dynamic respawn function
 
-Respawn.DynamicMode = 0
+Respawn.DynamicMode = 1
 
 #
 #    Respawn.DynamicEscortNPC
