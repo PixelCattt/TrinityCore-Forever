@@ -64,3 +64,5 @@ redistributing. Source files of the module do not carry per-file headers; this n
 - Weapon chance-on-hit rates in `sql/custom/world/2026_11_06_41_world_classic_weapon_proc_every_hit.sql` and
   `2026_11_16_80_world_forever_item_proc_ppm_measured.sql`: from [wowsims/forever](https://github.com/wowsims/forever)
   (`tools/database/overrides/weapon_procs.go`), MIT licence, copyright the wowsims contributors. Only the rates were taken.
+- Forever Combat Nameplates (`src/modules/PlayerbotV2/Addon/ForeverCombatNameplates` and the combat nameplate filter in `Player.cpp`,
+  `ChatHandler.cpp`, `WorldSession.cpp` and `ViewerDependentValues.h`): by SIN, GPL-2.0 (COPYING in the add-on folder).
