@@ -1,4 +1,4 @@
--- Knot Thimblejack (14338, Dire Maul North): right-clicking him opened nothing (chris 2026-11-16, quest 5518 complete). He only had
+-- Knot Thimblejack (14338, Dire Maul North): right-clicking him opened nothing (Karrz 2026-11-16, quest 5518 complete). He only had
 -- the quest giver flag, as in vanilla, but his script answers with a gossip window (his shackles text, the trap question and, once
 -- 5518 is turned in, "Please teach me how to make a Gordok Ogre Suit!"). This client opens a gossip window only for a creature
 -- with the talk flag, and the server shows that flag only when the creature has a gossip menu whose text exists

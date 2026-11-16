@@ -1,4 +1,4 @@
--- WoW Forever live realm: ironforge-1115.pkt (chris, 2026-11-15, snapshot at 13:19 while still recording): Dun Morogh, Kharanos
+-- WoW Forever live realm: ironforge-1115.pkt (Karrz, 2026-11-15, snapshot at 13:19 while still recording): Dun Morogh, Kharanos
 -- and part of Ironforge (throne room, the Commons, the bank, the lower halls). Only what our data lacks. Comes after 2026_11_15_55.
 -- Positions and rotations are read from the live CreateObject data. Safe to run more than once: every insert skips a spawn of
 -- the same entry already within 5 yards, so it also leaves alone what the 212000xx sniff imports already placed.
