@@ -672,6 +672,7 @@ void World::LoadConfigSettings(bool reload)
         { .Name = "ArenaLog.ExtendedInfo"sv, .DefaultValue = false, .Index = CONFIG_ARENA_LOG_EXTENDED_INFO },
         { .Name = "OffhandCheckAtSpellUnlearn"sv, .DefaultValue = true, .Index = CONFIG_OFFHAND_CHECK_AT_SPELL_UNLEARN },
         { .Name = "Respawn.DynamicEscortNPC"sv, .DefaultValue = false, .Index = CONFIG_RESPAWN_DYNAMIC_ESCORTNPC },
+        { .Name = "Respawn.DynamicOpenWorld"sv, .DefaultValue = false, .Index = CONFIG_RESPAWN_DYNAMIC_OPEN_WORLD },
         { .Name = "mmap.enablePathFinding"sv, .DefaultValue = true, .Index = CONFIG_ENABLE_MMAPS },
         { .Name = "vmap.enableIndoorCheck"sv, .DefaultValue = true, .Index = CONFIG_VMAP_INDOOR_CHECK },
         { .Name = "PlayerStart.AllSpells"sv, .DefaultValue = false, .Index = CONFIG_START_ALL_SPELLS },

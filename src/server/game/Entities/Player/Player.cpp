@@ -8239,7 +8239,11 @@ void Player::UpdateZone(uint32 newZone, uint32 newArea)
     uint32 const oldZone = m_zoneUpdateId;
     m_zoneUpdateId = newZone;
 
-    GetMap()->UpdatePlayerZoneStats(oldZone, newZone);
+    // The zone player count drives dynamic respawn timers (Map::ApplyDynamicRespawnScaling). Bots are not counted: a zone full of bots
+    // would otherwise respawn its mobs as if it were crowded with players. A session is a bot for its whole life, so the count stays
+    // balanced (the leave in Map::RemovePlayerFromMap comes through here too).
+    if (!GetSession()->IsBot())
+        GetMap()->UpdatePlayerZoneStats(oldZone, newZone);
 
     // call leave script hooks immedately (before updating flags)
     if (oldZone != newZone)

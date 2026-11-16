@@ -1783,8 +1783,7 @@ void GameObject::Update(uint32 diff)
             }
 
             uint32 respawnDelay = m_respawnDelayTime;
-            if (uint32 scalingMode = sWorld->getIntConfig(CONFIG_RESPAWN_DYNAMICMODE))
-                GetMap()->ApplyDynamicModeRespawnScaling(this, this->m_spawnId, respawnDelay, scalingMode);
+            GetMap()->ApplyDynamicRespawnScaling(this, this->m_spawnId, respawnDelay);
             m_respawnTime = GameTime::GetGameTime() + respawnDelay;
 
             // if option not set then object will be saved at grid unload

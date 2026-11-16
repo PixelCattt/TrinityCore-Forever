@@ -2254,7 +2254,7 @@ Respawn.RestartQuietTime = 3
 #        Description: Select which mode (if any) should be used to adjust respawn of creatures.
 #                     This will only affect creatures that have dynamic spawn rate scaling enabled in
 #                     the spawn group table (by default, gathering nodes and quest targets with respawn time <30min
-#                     1 - Use number of players in zone
+#                     1 - Use number of players in zone (real players only; bots are not counted)
 #        Default:     0 - No dynamic respawn function
 
 Respawn.DynamicMode = 0
@@ -2268,6 +2268,21 @@ Respawn.DynamicMode = 0
 #        Default:     0 - Disabled
 
 Respawn.DynamicEscortNPC = 0
+
+#
+#    Respawn.DynamicOpenWorld
+#        Description: Also scale the respawn of ordinary open-world combat creatures by the players in the zone, not only the
+#                     spawn groups flagged for it (Respawn.DynamicMode). Counts real players only, never bots. Uses
+#                     Respawn.DynamicRateCreature and Respawn.DynamicMinimumCreature: with the defaults, timers start to
+#                     shrink above 10 players in a zone (300 s becomes 150 s at 20 players), never below 10 seconds.
+#                     Covered: normal-rank creatures on continents (no dungeons, raids, battlegrounds or other instances)
+#                     that are hostile to players, or beasts that are not friendly to players, and are not in a spawn
+#                     group, a pool or quest spawn tracking. Elites, rares, bosses, service NPCs, quest givers and enders,
+#                     vehicles, triggers and civilians keep their timers. Works with Respawn.DynamicMode = 0 or 1.
+#        Default:     0 - Disabled
+#                     1 - Enabled
+
+Respawn.DynamicOpenWorld = 0
 
 #
 #    Respawn.DynamicRateCreature
