@@ -1302,7 +1302,7 @@ void WorldSession::HandleUnregisterAllAddonPrefixesOpcode(WorldPackets::Chat::Ch
 void WorldSession::HandleAddonRegisteredPrefixesOpcode(WorldPackets::Chat::ChatRegisterAddonPrefixes& packet)
 {
     // This is always sent after CMSG_CHAT_UNREGISTER_ALL_ADDON_PREFIXES
-    bool const announceCombatNameplates = GetClientBuild() == 70532 && GetPlayer() &&
+    bool const announceCombatNameplates = GetClientBuild() >= 70532 && GetPlayer() &&
         !advstd::ranges::contains(_registeredAddonPrefixes, Player::CombatNameplatePrefix) &&
         advstd::ranges::contains(packet.Prefixes, Player::CombatNameplatePrefix);
     _registeredAddonPrefixes.insert(_registeredAddonPrefixes.end(), packet.Prefixes.begin(), packet.Prefixes.end());

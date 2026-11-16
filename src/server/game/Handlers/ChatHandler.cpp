@@ -555,7 +555,7 @@ void WorldSession::HandleChatAddonMessage(ChatMsg type, std::string prefix, std:
     {
         // This protocol is local to the sender, including when a grouped
         // Classic client uses its group distribution instead of a self whisper.
-        if (GetClientBuild() != 70532 || (text != "ON" && text != "OFF") ||
+        if (GetClientBuild() < 70532 || (text != "ON" && text != "OFF") ||
             std::find(_registeredAddonPrefixes.begin(), _registeredAddonPrefixes.end(), prefix) == _registeredAddonPrefixes.end())
             return;
 
