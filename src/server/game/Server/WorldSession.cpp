@@ -1307,6 +1307,9 @@ void WorldSession::HandleAddonRegisteredPrefixesOpcode(WorldPackets::Chat::ChatR
         advstd::ranges::contains(packet.Prefixes, Player::CombatNameplatePrefix);
     _registeredAddonPrefixes.insert(_registeredAddonPrefixes.end(), packet.Prefixes.begin(), packet.Prefixes.end());
     _filterAddonMessages = _registeredAddonPrefixes.size() <= WorldPackets::Chat::ChatRegisterAddonPrefixes::MAX_PREFIXES;
+    if (advstd::ranges::contains(packet.Prefixes, Player::CombatNameplatePrefix))
+        TC_LOG_INFO("server.combatplates", "[combat_plates] {}: prefix registered (build {}, {} prefixes, filter {}), READY {}", GetPlayerInfo(),
+            GetClientBuild(), _registeredAddonPrefixes.size(), _filterAddonMessages, announceCombatNameplates ? "sent" : "not sent");
     if (announceCombatNameplates)
         GetPlayer()->WhisperAddon("READY", Player::CombatNameplatePrefix, false, GetPlayer());
 }

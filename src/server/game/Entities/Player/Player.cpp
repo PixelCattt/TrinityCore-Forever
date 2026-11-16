@@ -25917,6 +25917,8 @@ void Player::UpdateCombatNameplates(uint32 elapsed)
     if (_combatNameplateAckPending)
     {
         _combatNameplateAckPending = false;
+        TC_LOG_INFO("server.combatplates", "[combat_plates] {}: {} sent, prefix registered {}", GetSession()->GetPlayerInfo(),
+            _combatNameplatesEnabled ? "ACK ON" : "ACK OFF", GetSession()->IsAddonRegistered(CombatNameplatePrefix));
         WhisperAddon(_combatNameplatesEnabled ? "ACK ON" : "ACK OFF", CombatNameplatePrefix, false, this);
     }
 }

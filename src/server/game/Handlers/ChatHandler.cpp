@@ -532,7 +532,7 @@ void WorldSession::HandleChatAddonMessage(ChatMsg type, std::string prefix, std:
         return;
 
     // the ForeverBots add-on's own messages: say why one is dropped (see HandleChatAddonMessageTargetedOpcode)
-    bool const ownAddon = prefix == "PBC" || prefix == "FBOTS";
+    bool const ownAddon = prefix == "PBC" || prefix == "FBOTS" || prefix == Player::CombatNameplatePrefix;
 
     // Disabled addon channel?
     if (!sWorld->getBoolConfig(CONFIG_ADDON_CHANNEL))
@@ -557,25 +557,39 @@ void WorldSession::HandleChatAddonMessage(ChatMsg type, std::string prefix, std:
         // Classic client uses its group distribution instead of a self whisper.
         if (GetClientBuild() < 70532 || (text != "ON" && text != "OFF") ||
             std::find(_registeredAddonPrefixes.begin(), _registeredAddonPrefixes.end(), prefix) == _registeredAddonPrefixes.end())
+        {
+            TC_LOG_INFO("server.combatplates", "[combat_plates] {}: '{}' dropped: build {}, prefix registered {} ({} prefixes registered)", GetPlayerInfo(),
+                text.substr(0, 16), GetClientBuild(), advstd::ranges::contains(_registeredAddonPrefixes, prefix), _registeredAddonPrefixes.size());
             return;
+        }
 
         if (type == CHAT_MSG_WHISPER)
         {
             if (targetGuid && !targetGuid->IsEmpty())
             {
                 if (*targetGuid != sender->GetGUID())
+                {
+                    TC_LOG_INFO("server.combatplates", "[combat_plates] {}: dropped, whisper target {} is not the sender", GetPlayerInfo(), targetGuid->ToString());
                     return;
+                }
             }
             else
             {
                 ExtendedPlayerName name = ExtractExtendedPlayerName(target);
                 if (!normalizePlayerName(name.Name) || name.Name != sender->GetName())
+                {
+                    TC_LOG_INFO("server.combatplates", "[combat_plates] {}: dropped, whisper target '{}' is not the sender", GetPlayerInfo(), target);
                     return;
+                }
             }
         }
         else if (type != CHAT_MSG_PARTY && type != CHAT_MSG_RAID && type != CHAT_MSG_INSTANCE_CHAT)
+        {
+            TC_LOG_INFO("server.combatplates", "[combat_plates] {}: dropped, chat type {}", GetPlayerInfo(), uint32(type));
             return;
+        }
 
+        TC_LOG_INFO("server.combatplates", "[combat_plates] {}: request {} (chat type {})", GetPlayerInfo(), text, uint32(type));
         sender->RequestCombatNameplates(text == "ON", true);
         return;
     }
