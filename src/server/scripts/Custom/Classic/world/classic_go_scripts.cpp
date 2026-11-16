@@ -210,12 +210,59 @@ static bool IsAtAdventurerCamp(Unit* unit)
 // the campfire (spell focus 4) the player is resting at, nullptr if none is close enough. Searched as a spell's focus requirement is
 // (WorldSession::UpdateCampfireRest does the same): the nearest spell focus of any kind missed the fire when a forge or anvil stood
 // closer, and the minute of rest then gave no buffs (Discord, ikero3078 2026-11-11, Kharanos).
+// The Camp Chair is the camp's own seat. Its placement spell needs the caster within the fire's focus radius and puts the chair a
+// yard in front of them (1307229: dest caster front, range 1), so a chair set at the edge of the camp stands just outside that
+// radius, and whoever sat in it never got the rest (Discord, 6_1_8_8_1 "Bugs 3" 3, 2026-11-16: "the chair is too far away from
+// the campfire"). A chair belongs to the fire it stands near as any camp feature does (CAMP_FEATURE_RANGE, the same reach the
+// placement limit counts features with), so sitting in it rests at that fire.
+static constexpr uint32 GO_CAMP_CHAIR = 612275;
+static constexpr float CHAIR_SEAT_RANGE = 2.0f;     // a seated player stands on the chair's slot
+
+struct CampfireOfFeatureCheck
+{
+    explicit CampfireOfFeatureCheck(WorldObject const* feature) : _feature(feature) { }
+
+    bool operator()(GameObject* go) const
+    {
+        return go->GetGOInfo()->GetSpellFocusType() == SPELL_FOCUS_CAMPFIRE && go->isSpawned() && go->IsWithinDist(_feature, CAMP_FEATURE_RANGE);
+    }
+
+private:
+    WorldObject const* _feature;
+};
+
+static GameObject* FindCampfireOfFeature(WorldObject* feature)
+{
+    GameObject* fire = nullptr;
+    CampfireOfFeatureCheck check(feature);
+    Trinity::GameObjectSearcher<CampfireOfFeatureCheck> searcher(feature, fire, check);
+    Cell::VisitGridObjects(feature, searcher, CAMP_FEATURE_RANGE);
+    return fire;
+}
+
+static bool IsSittingInChair(Unit const* unit)
+{
+    switch (unit->GetStandState())
+    {
+        case UNIT_STAND_STATE_SIT_CHAIR:
+        case UNIT_STAND_STATE_SIT_LOW_CHAIR:
+        case UNIT_STAND_STATE_SIT_MEDIUM_CHAIR:
+        case UNIT_STAND_STATE_SIT_HIGH_CHAIR:
+            return true;
+        default:
+            return false;
+    }
+}
+
 static GameObject* FindCampfire(Unit* unit)
 {
     GameObject* fire = nullptr;
     Trinity::GameObjectFocusCheck check(unit, SPELL_FOCUS_CAMPFIRE);
     Trinity::GameObjectSearcher<Trinity::GameObjectFocusCheck> searcher(unit, fire, check);
     Cell::VisitGridObjects(unit, searcher, CAMPFIRE_RANGE);
+    if (!fire && IsSittingInChair(unit))
+        if (GameObject* chair = unit->FindNearestGameObject(GO_CAMP_CHAIR, CHAIR_SEAT_RANGE))
+            fire = FindCampfireOfFeature(chair);
     return fire;
 }
 
@@ -402,7 +449,8 @@ struct classic_go_camp_chair : public GameObjectAI
 
     bool OnGossipHello(Player* player) override
     {
-        if (!player->HasAura(SPELL_CAMPFIRE_REST) && FindCampfire(player))
+        // the player is not seated yet: the chair's own fire counts (see FindCampfireOfFeature)
+        if (!player->HasAura(SPELL_CAMPFIRE_REST) && (FindCampfire(player) || FindCampfireOfFeature(me)))
             player->CastSpell(player, SPELL_CAMPFIRE_REST, true);
         return false;
     }
