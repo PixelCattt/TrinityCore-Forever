@@ -3234,6 +3234,11 @@ bool Player::AddSpell(uint32 spellId, bool active, bool learning, bool dependent
         castSpell = true;
     else if (spellInfo->HasAttribute(SPELL_ATTR1_CAST_WHEN_LEARNED))
         castSpell = true;
+    // A hidden form spell (AuraEffect::HandleShapeshiftBoosts casts it at every shapeshift into one of its forms) learned while already
+    // in such a form goes on now, as it would at the next shapeshift (Feral Charge 1238122 teaches the Cat Form override 414925)
+    else if (!loading && IsInWorld() && spellInfo->Stances && spellInfo->HasAttribute(SPELL_ATTR0_DO_NOT_DISPLAY_SPELLBOOK_AURA_ICON_COMBAT_LOG))
+        if (ShapeshiftForm const form = GetShapeshiftForm(); form != FORM_NONE)
+            castSpell = (spellInfo->Stances & (UI64LIT(1) << (form - 1))) != 0;
 
     if (castSpell)
     {
