@@ -19,6 +19,7 @@
 #include "Errors.h"
 #include "SFMTRand.h"
 #include <boost/math/tools/roots.hpp>
+#include <array>
 #include <memory>
 #include <random>
 

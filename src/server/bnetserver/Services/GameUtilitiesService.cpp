@@ -25,6 +25,7 @@
 #include "RealmList.h"
 #include "RealmList.pb.h"
 #include "Session.h"
+#include "Util.h"
 #include "Types.h"
 #include <zlib.h>
 
