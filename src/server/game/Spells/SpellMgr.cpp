@@ -3361,6 +3361,16 @@ void SpellMgr::LoadSpellInfoCustomAttributes()
             // Roar
             if (spellInfoMutable->SpellFamilyFlags[0] & 0x8)
                 spellInfoMutable->AttributesCu |= SPELL_ATTR0_CU_AURA_CC;
+            // Classic 1.60: Shred (0x8000), Ravage (0x10000) and Pounce (0x20000) "Must be behind the target" (client tooltips). The client
+            // data carries no flag for it and the client does not check it, so Shred landed from any side (Discord 6_1_8_8_1, 0.1.36).
+            if (spellInfoMutable->SpellFamilyFlags[0] & 0x38000)
+                spellInfoMutable->AttributesCu |= SPELL_ATTR0_CU_REQ_CASTER_BEHIND_TARGET;
+            break;
+        case SPELLFAMILY_ROGUE:
+            // Classic 1.60: Backstab (0x4), Garrote (0x100) and Ambush (0x200), every rank and the Forever twins: "Must be behind the target"
+            // / "Must be stealthed and behind the target" (client tooltips), not flagged in the client data either.
+            if (spellInfoMutable->SpellFamilyFlags[0] & 0x304)
+                spellInfoMutable->AttributesCu |= SPELL_ATTR0_CU_REQ_CASTER_BEHIND_TARGET;
             break;
         case SPELLFAMILY_GENERIC:
             // Stoneclaw Totem effect
