@@ -22,6 +22,7 @@
 #include "Packet.h"
 #include "PacketUtilities.h"
 #include "ObjectGuid.h"
+#include "Optional.h"
 #include <array>
 
 namespace WorldPackets

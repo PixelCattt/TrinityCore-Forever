@@ -20,6 +20,7 @@
 #include "DBCEnums.h"
 #include "PacketOperators.h"
 #include "UpdateFields.h"
+#include "Util.h"
 
 namespace WorldPackets::Traits
 {

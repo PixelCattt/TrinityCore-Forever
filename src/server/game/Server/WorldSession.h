@@ -1001,6 +1001,20 @@ struct PacketCounter
     uint32 amountCounter;
 };
 
+// Classic 1.60 in-game Store: a purchase waiting for the player's confirmation (WorldSession::_shopPendingPurchase).
+// Declared outside WorldSession on purpose: a class nested in WorldSession with default member initializers is not yet
+// default-constructible where Optional<> of it is declared inside WorldSession, and clang caches that answer, so
+// Optional::emplace() then fails to compile with clang (GCC and MSVC accept it).
+struct ShopPendingPurchase
+{
+    uint64 PurchaseID = 0;
+    uint32 ProductID = 0;
+    uint32 ServerToken = 0;
+    ObjectGuid Target;
+    int64 TimeCreated = 0;
+    uint32 TransferRealmAddress = 0;    // realm transfer (character service window): destination realm
+};
+
 /// Player session in the World
 class TC_GAME_API WorldSession
 {
@@ -2094,15 +2108,6 @@ class TC_GAME_API WorldSession
         uint32 _battlenetRequestToken;
 
         // Classic 1.60 in-game Store: the purchase waiting for the player's confirmation
-        struct ShopPendingPurchase
-        {
-            uint64 PurchaseID = 0;
-            uint32 ProductID = 0;
-            uint32 ServerToken = 0;
-            ObjectGuid Target;
-            int64 TimeCreated = 0;
-            uint32 TransferRealmAddress = 0;    // realm transfer (character service window): destination realm
-        };
         Optional<ShopPendingPurchase> _shopPendingPurchase;
         Optional<std::pair<ObjectGuid, uint32>> _hardcoreTransferValidated;    // character, destination realm address of the token's check
         void StartShopPurchase(uint32 clientToken, uint32 productId, ObjectGuid target, uint32 transferRealmAddress);

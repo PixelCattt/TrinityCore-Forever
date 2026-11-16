@@ -22,6 +22,7 @@
 #include "ClubService.h"
 #include "ClubUtils.h"
 #include "Guild.h"
+#include "Log.h"
 #include "Player.h"
 
 namespace Battlenet::Services
