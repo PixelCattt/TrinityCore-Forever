@@ -2042,6 +2042,9 @@ void ClassicNaxxAddGossip(Player* player, char const* text, uint32 sender, uint3
     AddGossipItemFor(player, GossipOptionNpc::None, text, sender, action);
 }
 
+// learnId is the trainer spell whose LEARN_SPELL effect teaches knowId: Classic's 28251-28263, which the Forever client has.
+// The recipe item spells used here before (28212 and the rest) are missing from that client except 28245, so the cast
+// failed and 12 of the 13 recipes could not be learned.
 void LearnCraftIfCan(uint32 learnId, uint32 knowId, Player* pPlayer, ReputationRank minRank, uint32 currSkill)
 {
     ReputationRank argentDawnRep = pPlayer->GetReputationRank(FACTION_ID_ARGENT_DAWN_NAXX);
@@ -2175,44 +2178,44 @@ struct classic_mob_craftsman_omarion : public ScriptedAI
             ****************************/
 
             case GOSSIP_SELECT_GLACIAL_GLOVES:
-                LearnCraftIfCan(28212, 28205, pPlayer, CRACT1_REQ_RANK, tailorSkill);
+                LearnCraftIfCan(28261, 28205, pPlayer, CRACT1_REQ_RANK, tailorSkill);
                 break;
             case GOSSIP_SELECT_GLACIAL_WRISTS:
-                LearnCraftIfCan(28215, 28209, pPlayer, CRACT1_REQ_RANK, tailorSkill);
+                LearnCraftIfCan(28262, 28209, pPlayer, CRACT1_REQ_RANK, tailorSkill);
                 break;
             case GOSSIP_SELECT_GLACIAL_CHEST:
                 // spell castbar bug, displays as "glacial gloves"
-                LearnCraftIfCan(28213, 28207, pPlayer, CRAFT2_REQ_RANK, tailorSkill);
+                LearnCraftIfCan(28260, 28207, pPlayer, CRAFT2_REQ_RANK, tailorSkill);
                 break;
             case GOSSIP_SELECT_GLACIAL_CLOAK:
-                LearnCraftIfCan(28214, 28208, pPlayer, CRAFT2_REQ_RANK, tailorSkill);
+                LearnCraftIfCan(28263, 28208, pPlayer, CRAFT2_REQ_RANK, tailorSkill);
                 break;
             case GOSSIP_SELECT_POLAR_GLOVES:
-                LearnCraftIfCan(28229, 28220, pPlayer, CRACT1_REQ_RANK, leatherworkSkill);
+                LearnCraftIfCan(28255, 28220, pPlayer, CRACT1_REQ_RANK, leatherworkSkill);
                 break;
             case GOSSIP_SELECT_POLAR_WRISTS:
-                LearnCraftIfCan(28230, 28221, pPlayer, CRACT1_REQ_RANK, leatherworkSkill);
+                LearnCraftIfCan(28256, 28221, pPlayer, CRACT1_REQ_RANK, leatherworkSkill);
                 break;
             case GOSSIP_SELECT_POLAR_CHEST:
-                LearnCraftIfCan(28228, 28219, pPlayer, CRAFT2_REQ_RANK, leatherworkSkill);
+                LearnCraftIfCan(28254, 28219, pPlayer, CRAFT2_REQ_RANK, leatherworkSkill);
                 break;
             case GOSSIP_SELECT_ICYSCALE_GLOVES:
-                LearnCraftIfCan(28232, 28223, pPlayer, CRACT1_REQ_RANK, leatherworkSkill);
+                LearnCraftIfCan(28258, 28223, pPlayer, CRACT1_REQ_RANK, leatherworkSkill);
                 break;
             case GOSSIP_SELECT_ICYSCALE_WRISTS:
-                LearnCraftIfCan(28233, 28224, pPlayer, CRACT1_REQ_RANK, leatherworkSkill);
+                LearnCraftIfCan(28259, 28224, pPlayer, CRACT1_REQ_RANK, leatherworkSkill);
                 break;
             case GOSSIP_SELECT_ICYSCALE_CHEST:
-                LearnCraftIfCan(28231, 28222, pPlayer, CRAFT2_REQ_RANK, leatherworkSkill);
+                LearnCraftIfCan(28257, 28222, pPlayer, CRAFT2_REQ_RANK, leatherworkSkill);
                 break;
             case GOSSIP_SELECT_ICEBANE_GLOVES:
-                LearnCraftIfCan(28248, 28243, pPlayer, CRACT1_REQ_RANK, blacksmithSkill);
+                LearnCraftIfCan(28253, 28243, pPlayer, CRACT1_REQ_RANK, blacksmithSkill);
                 break;
             case GOSSIP_SELECT_ICEBANE_WRISTS:
-                LearnCraftIfCan(28249, 28244, pPlayer, CRACT1_REQ_RANK, blacksmithSkill);
+                LearnCraftIfCan(28252, 28244, pPlayer, CRACT1_REQ_RANK, blacksmithSkill);
                 break;
             case GOSSIP_SELECT_ICEBANE_CHEST:
-                LearnCraftIfCan(28245, 28242, pPlayer, CRAFT2_REQ_RANK, blacksmithSkill);
+                LearnCraftIfCan(28251, 28242, pPlayer, CRAFT2_REQ_RANK, blacksmithSkill);
                 break;
             default:
                 break;
