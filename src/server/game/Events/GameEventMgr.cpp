@@ -1694,14 +1694,23 @@ void GameEventMgr::SetHolidayEventTime(GameEventData& event)
         return;
 
     HolidaysEntry const* holiday = sHolidaysStore.LookupEntry(event.holiday_id);
-    if (!holiday->Date[0] || !holiday->Duration[0]) // Invalid definitions
+    if (!holiday->Date[0]) // Invalid definitions
     {
-        TC_LOG_ERROR("sql.sql", "Missing date or duration for holiday {}.", event.holiday_id);
+        TC_LOG_ERROR("sql.sql", "Missing date for holiday {}.", event.holiday_id);
         return;
     }
 
     uint8 stageIndex = event.holidayStage - 1;
-    event.length = holiday->Duration[stageIndex] * HOUR / MINUTE;
+    // The client's duration for this stage wins. Some holidays have dates but no durations at all (the Forever client's
+    // Noblegarden, 181): those keep the length of their game_event row instead of dropping the client's dates.
+    if (holiday->Duration[stageIndex])
+        event.length = holiday->Duration[stageIndex] * HOUR / MINUTE;
+    else if (!event.length)
+    {
+        TC_LOG_ERROR("sql.sql", "Holiday {} has no duration for stage {} and game_event {} has no length.", event.holiday_id,
+            event.holidayStage, event.description);
+        return;
+    }
 
     Hours stageOffset = 0h;
     for (uint8 i = 0; i < stageIndex; ++i)
