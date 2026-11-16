@@ -3166,34 +3166,9 @@ class spell_dru_classic_feral_charge_cat : public SpellScript
         return SPELL_CAST_OK;
     }
 
-    void HandleLeap(SpellEffIndex effIndex)
-    {
-        // effect 175 is now SPELL_EFFECT_JUMP_DEST_3 and runs EffectJumpDest itself: this script does the jump, so one jump only
-        PreventHitDefaultEffect(effIndex);
-        Unit* caster = GetCaster();
-        WorldLocation const* dest = GetHitDest();
-        if (!dest || caster->IsInFlight())
-            return;
-
-        SpellEffectInfo const& effect = GetEffectInfo();
-        Optional<float> speedMultiplier = effect.Amplitude > 0.0f ? Optional<float>(effect.Amplitude) : std::nullopt;
-        Optional<float> minHeight = effect.MiscValue ? Optional<float>(effect.MiscValue / 10.0f) : std::nullopt;
-        Optional<float> maxHeight = effect.MiscValueB ? Optional<float>(effect.MiscValueB / 10.0f) : std::nullopt;
-
-        MovementFacingTarget facing;
-        if (Unit const* target = GetExplTargetUnit())
-            facing = target;
-        else
-            facing = dest->GetOrientation();
-
-        caster->GetMotionMaster()->MoveJump(EVENT_JUMP, *dest, {}, minHeight, maxHeight, facing,
-            GetSpellInfo()->HasAttribute(SPELL_ATTR9_JUMPCHARGE__NO_FACING_CONTROL), false, speedMultiplier);
-    }
-
     void Register() override
     {
         OnCheckCast += SpellCheckCastFn(spell_dru_classic_feral_charge_cat::CheckCast);
-        OnEffectLaunch += SpellEffectFn(spell_dru_classic_feral_charge_cat::HandleLeap, EFFECT_0, SPELL_EFFECT_JUMP_DEST_3);
     }
 };
 
