@@ -705,24 +705,24 @@ public:
 
                 if (item->IsInUpdateQueue())
                 {
-                    uint16 qp = item->GetQueuePos();
-                    if (qp > updateQueue.size())
+                    size_t qp = item->GetQueuePos();
+                    if (qp >= updateQueue.size())
                     {
-                        handler->PSendSysMessage("The item with slot %d and %s has its queuepos (%d) larger than the update queue size! ", item->GetSlot(), item->GetGUID().ToString().c_str(), qp);
+                        handler->PSendSysMessage("The item with slot %d and %s has its queuepos (%zu) larger than the update queue size! ", item->GetSlot(), item->GetGUID().ToString().c_str(), qp);
                         error = true;
                         continue;
                     }
 
                     if (updateQueue[qp] == nullptr)
                     {
-                        handler->PSendSysMessage("The item with slot %d and %s has its queuepos (%d) pointing to NULL in the queue!", item->GetSlot(), item->GetGUID().ToString().c_str(), qp);
+                        handler->PSendSysMessage("The item with slot %d and %s has its queuepos (%zu) pointing to NULL in the queue!", item->GetSlot(), item->GetGUID().ToString().c_str(), qp);
                         error = true;
                         continue;
                     }
 
                     if (updateQueue[qp] != item)
                     {
-                        handler->PSendSysMessage("The item with slot %d and %s has a queuepos (%d) that points to another item in the queue (bag: %d, slot: %d, %s)", item->GetSlot(), item->GetGUID().ToString().c_str(), qp, updateQueue[qp]->GetBagSlot(), updateQueue[qp]->GetSlot(), updateQueue[qp]->GetGUID().ToString().c_str());
+                        handler->PSendSysMessage("The item with slot %d and %s has a queuepos (%zu) that points to another item in the queue (bag: %d, slot: %d, %s)", item->GetSlot(), item->GetGUID().ToString().c_str(), qp, updateQueue[qp]->GetBagSlot(), updateQueue[qp]->GetSlot(), updateQueue[qp]->GetGUID().ToString().c_str());
                         error = true;
                         continue;
                     }
@@ -773,24 +773,24 @@ public:
 
                         if (item2->IsInUpdateQueue())
                         {
-                            uint16 qp = item2->GetQueuePos();
-                            if (qp > updateQueue.size())
+                            size_t qp = item2->GetQueuePos();
+                            if (qp >= updateQueue.size())
                             {
-                                handler->PSendSysMessage("The item in bag %d at slot %d having %s has a queuepos (%d) larger than the update queue size! ", bag->GetSlot(), item2->GetSlot(), item2->GetGUID().ToString().c_str(), qp);
+                                handler->PSendSysMessage("The item in bag %d at slot %d having %s has a queuepos (%zu) larger than the update queue size! ", bag->GetSlot(), item2->GetSlot(), item2->GetGUID().ToString().c_str(), qp);
                                 error = true;
                                 continue;
                             }
 
                             if (updateQueue[qp] == nullptr)
                             {
-                                handler->PSendSysMessage("The item in bag %d at slot %d having %s has a queuepos (%d) that points to NULL in the queue!", bag->GetSlot(), item2->GetSlot(), item2->GetGUID().ToString().c_str(), qp);
+                                handler->PSendSysMessage("The item in bag %d at slot %d having %s has a queuepos (%zu) that points to NULL in the queue!", bag->GetSlot(), item2->GetSlot(), item2->GetGUID().ToString().c_str(), qp);
                                 error = true;
                                 continue;
                             }
 
                             if (updateQueue[qp] != item2)
                             {
-                                handler->PSendSysMessage("The item in bag %d at slot %d having %s has a queuepos (%d) that points to another item in the queue (bag: %d, slot: %d, %s)", bag->GetSlot(), item2->GetSlot(), item2->GetGUID().ToString().c_str(), qp, updateQueue[qp]->GetBagSlot(), updateQueue[qp]->GetSlot(), updateQueue[qp]->GetGUID().ToString().c_str());
+                                handler->PSendSysMessage("The item in bag %d at slot %d having %s has a queuepos (%zu) that points to another item in the queue (bag: %d, slot: %d, %s)", bag->GetSlot(), item2->GetSlot(), item2->GetGUID().ToString().c_str(), qp, updateQueue[qp]->GetBagSlot(), updateQueue[qp]->GetSlot(), updateQueue[qp]->GetGUID().ToString().c_str());
                                 error = true;
                                 continue;
                             }

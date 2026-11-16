@@ -379,6 +379,10 @@ Player::~Player()
     // it must be unloaded already in PlayerLogout and accessed only for logged in player
     //m_social = nullptr;
 
+    for (Item* item : m_itemUpdateQueue)
+        if (item)
+            RemoveItemFromUpdateQueueOf(item, this);
+
     // Note: buy back item already deleted from DB when player was saved
     for (uint8 i = 0; i < PLAYER_SLOTS_COUNT; ++i)
         delete m_items[i];
@@ -22396,6 +22400,7 @@ void Player::_SaveInventory(CharacterDatabaseTransaction trans)
         if (!item)
             continue;
 
+        RemoveItemFromUpdateQueueOf(item, this);
         Bag* container = item->GetContainer();
         if (item->GetState() != ITEM_REMOVED)
         {

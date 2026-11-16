@@ -339,8 +339,8 @@ class TC_GAME_API Item : public Object
         // Update States
         ItemUpdateState GetState() const { return uState; }
         void SetState(ItemUpdateState state, Player* forplayer = nullptr);
-        bool IsInUpdateQueue() const { return uQueuePos != -1; }
-        uint16 GetQueuePos() const { return uQueuePos; }
+        bool IsInUpdateQueue() const { return _updateQueueOwner != nullptr; }
+        size_t GetQueuePos() const { return uQueuePos; }
         void FSetState(ItemUpdateState state)               // forced
         {
             uState = state;
@@ -474,7 +474,9 @@ class TC_GAME_API Item : public Object
         uint8 m_slot;
         Bag* m_container;
         ItemUpdateState uState;
-        int16 uQueuePos;
+        Player* _updateQueueOwner = nullptr;
+        size_t uQueuePos = 0;
+        void DetachFromUpdateQueue();
         bool mb_in_trade;                                   // true if item is currently in trade-window
         ObjectGuid m_refundRecipient;
         uint64 m_paidMoney;

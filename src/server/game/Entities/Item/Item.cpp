@@ -499,7 +499,6 @@ Item::Item()
 
     m_slot = 0;
     uState = ITEM_NEW;
-    uQueuePos = -1;
     m_container = nullptr;
     m_lootGenerated = false;
     mb_in_trade = false;
@@ -513,7 +512,20 @@ Item::Item()
     memset(&_bonusData, 0, sizeof(_bonusData));
 }
 
-Item::~Item() = default;
+Item::~Item()
+{
+    DetachFromUpdateQueue();
+}
+
+void Item::DetachFromUpdateQueue()
+{
+    if (!_updateQueueOwner)
+        return;
+    auto& queue = _updateQueueOwner->GetItemUpdateQueue();
+    ASSERT(uQueuePos < queue.size() && queue[uQueuePos] == this);
+    queue[uQueuePos] = nullptr;
+    _updateQueueOwner = nullptr;
+}
 
 bool Item::Create(ObjectGuid::LowType guidlow, uint32 itemId, ItemContext context, Player const* owner)
 {
@@ -1333,9 +1345,7 @@ void Item::SetState(ItemUpdateState state, Player* forplayer)
     }
     else
     {
-        // unset in queue
-        // the item must be removed from the queue manually
-        uQueuePos = -1;
+        DetachFromUpdateQueue();
         uState = ITEM_UNCHANGED;
     }
 }
@@ -1358,6 +1368,7 @@ void AddItemToUpdateQueueOf(Item* item, Player* player)
         return;
 
     player->m_itemUpdateQueue.push_back(item);
+    item->_updateQueueOwner = player;
     item->uQueuePos = player->m_itemUpdateQueue.size() - 1;
 }
 
@@ -1368,18 +1379,8 @@ void RemoveItemFromUpdateQueueOf(Item* item, Player* player)
 
     ASSERT(player != nullptr);
 
-    if (player->GetGUID() != item->GetOwnerGUID())
-    {
-        TC_LOG_DEBUG("entities.player.items", "RemoveItemFromUpdateQueueOf - Owner's guid ({}) and player's guid ({}) don't match!",
-            item->GetOwnerGUID().ToString(), player->GetGUID().ToString());
-        return;
-    }
-
-    if (player->m_itemUpdateQueueBlocked)
-        return;
-
-    player->m_itemUpdateQueue[item->uQueuePos] = nullptr;
-    item->uQueuePos = -1;
+    if (item->_updateQueueOwner == player)
+        item->DetachFromUpdateQueue();
 }
 
 uint8 Item::GetBagSlot() const

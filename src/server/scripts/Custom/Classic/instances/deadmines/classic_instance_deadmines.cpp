@@ -235,13 +235,13 @@ public:
             {
                 if (data == IN_PROGRESS)
                 {
-                    if (GameObject* go = instance->GetGameObject(m_uiIronCladGUID))
-                    {
-                        // no breaking the door if it's open
-                        if (!(go->GetGoState() == GO_STATE_ACTIVE))
-                            go->UseDoorOrButton(0, true);
-                        m_uiIronDoorTimer = 3000;
-                    }
+                    GameObject* door = instance->GetGameObject(m_uiIronCladGUID);
+                    if (!door)
+                        return;
+
+                    if (door->GetGoState() == GO_STATE_READY)
+                        door->UseDoorOrButton(0, true);
+                    m_uiIronDoorTimer = 3000;
                 }
                 m_auiEncounter[0] = data;
             }
@@ -341,6 +341,7 @@ public:
                                 ClassicScriptText(CDM_INST_SAY_ALARM2, mrSmite);
                                 m_uiIronDoorStep = 0;
                                 m_uiIronDoorTimer = 0;
+                                m_auiEncounter[0] = DONE;
                                 TC_LOG_DEBUG("scripts", "Instance Deadmines: Iron door event reached end.");
                                 break;
                             default:
