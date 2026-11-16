@@ -551,6 +551,35 @@ void WorldSession::HandleChatAddonMessage(ChatMsg type, std::string prefix, std:
 
     sender->UpdateSpeakTime(Player::ChatFloodThrottle::ADDON);
 
+    if (prefix == Player::CombatNameplatePrefix)
+    {
+        // This protocol is local to the sender, including when a grouped
+        // Classic client uses its group distribution instead of a self whisper.
+        if (GetClientBuild() != 70532 || (text != "ON" && text != "OFF") ||
+            std::find(_registeredAddonPrefixes.begin(), _registeredAddonPrefixes.end(), prefix) == _registeredAddonPrefixes.end())
+            return;
+
+        if (type == CHAT_MSG_WHISPER)
+        {
+            if (targetGuid && !targetGuid->IsEmpty())
+            {
+                if (*targetGuid != sender->GetGUID())
+                    return;
+            }
+            else
+            {
+                ExtendedPlayerName name = ExtractExtendedPlayerName(target);
+                if (!normalizePlayerName(name.Name) || name.Name != sender->GetName())
+                    return;
+            }
+        }
+        else if (type != CHAT_MSG_PARTY && type != CHAT_MSG_RAID && type != CHAT_MSG_INSTANCE_CHAT)
+            return;
+
+        sender->RequestCombatNameplates(text == "ON", true);
+        return;
+    }
+
     if (prefix == AddonChannelCommandHandler::PREFIX && AddonChannelCommandHandler(this).ParseCommands(text.c_str()))
         return;
 

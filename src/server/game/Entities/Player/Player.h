@@ -2829,6 +2829,10 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
 
         bool HaveAtClient(BaseEntity const* u) const;
 
+        inline static constexpr char CombatNameplatePrefix[] = "FCN_PLATES1";
+        void RequestCombatNameplates(bool enabled, bool acknowledge);
+        bool HidesCombatNameplate(Unit const* unit) const;
+
         bool IsNeverVisibleFor(WorldObject const* seer, bool allowServersideObjects) const override;
 
         bool IsVisibleGloballyFor(Player const* player) const;
@@ -3576,6 +3580,14 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
 
     private:
         std::unique_ptr<SpellCastRequest> _pendingSpellCastRequest;
+
+        void UpdateCombatNameplates(uint32 elapsed);
+        bool RefreshCombatNameplate(Unit const* unit, Pet const* pet);
+        bool _combatNameplatesRequested = false;
+        bool _combatNameplatesEnabled = false;
+        bool _combatNameplateAckPending = false;
+        uint32 _combatNameplateTimer = 0;
+        GuidUnorderedSet _hiddenCombatNameplates;
         void ExecutePendingSpellCastRequest();
         bool ProcessItemCast(SpellCastRequest& castRequest, SpellCastTargets const& targets);
         bool CanExecutePendingSpellCastRequest();

@@ -971,6 +971,7 @@ void Player::Update(uint32 p_time)
     SetCanDelayTeleport(false);
 
     UpdateParkedPet(p_time);
+    UpdateCombatNameplates(p_time);
 
     // The pet remembered at login comes back a moment after the player is in the world, as a summon during play does. Created while the
     // Classic 1.60 client is still on its loading screen, the client froze on the pet (warlock demon out at logout, 20 Oct).
@@ -25835,6 +25836,87 @@ bool Player::HaveAtClient(BaseEntity const* u) const
     return u == this || m_clientGUIDs.find(u->GetGUID()) != m_clientGUIDs.end();
 }
 
+void Player::RequestCombatNameplates(bool enabled, bool acknowledge)
+{
+    // Chat and prefix handlers run in the world session pass. Apply the last
+    // request and send its acknowledgement together on the player's map tick.
+    _combatNameplatesRequested = enabled;
+    _combatNameplateAckPending = acknowledge;
+}
+
+bool Player::HidesCombatNameplate(Unit const* unit) const
+{
+    return _combatNameplatesEnabled && _hiddenCombatNameplates.contains(unit->GetGUID());
+}
+
+bool Player::RefreshCombatNameplate(Unit const* unit, Pet const* pet)
+{
+    ObjectGuid const guid = unit->GetGUID();
+    if (!guid.IsCreatureOrVehicle())
+        return false;
+
+    auto engaged = [&guid](Unit const* participant)
+    {
+        auto const& refs = participant->GetCombatManager().GetPvECombatRefs();
+        auto it = refs.find(guid);
+        return it != refs.end() && !it->second->IsSuppressedFor(participant);
+    };
+
+    // Leave scripted show/hide flags, player-controlled units and friendly
+    // plates alone. IsValidAttackTarget also checks neutral, attackable NPCs.
+    if (_combatNameplatesEnabled && !unit->IsControlledByPlayer() &&
+        !unit->HasUnitFlag(UNIT_FLAG_FORCE_NAMEPLATE) && !unit->HasUnitFlag3(UNIT_FLAG3_FORCE_HIDE_NAMEPLATE) &&
+        !engaged(this) && !(pet && engaged(pet)) && IsValidAttackTarget(unit))
+        return _hiddenCombatNameplates.insert(guid).second;
+
+    return _hiddenCombatNameplates.erase(guid) != 0;
+}
+
+void Player::UpdateCombatNameplates(uint32 elapsed)
+{
+    if (!_combatNameplatesEnabled && !_combatNameplatesRequested && !_combatNameplateAckPending)
+        return;
+
+    if (_combatNameplateTimer > elapsed)
+    {
+        _combatNameplateTimer -= elapsed;
+        return;
+    }
+    _combatNameplateTimer = 250;
+    _combatNameplatesEnabled = _combatNameplatesRequested;
+
+    // Selection, another player's fight and distance are not combat references.
+    // Recheck only this viewer's known creatures to catch pet replacement,
+    // charm, faction changes and threat suppression without altering the units.
+    UF::UnitData::Base unitMask;
+    unitMask.MarkChanged(&UF::UnitData::Flags3);
+    UpdateData updates(GetMapId());
+    Pet const* pet = _combatNameplatesEnabled ? GetPet() : nullptr;
+    for (ObjectGuid const& guid : m_clientGUIDs)
+    {
+        if (!guid.IsCreatureOrVehicle())
+            continue;
+        if (Creature* creature = ObjectAccessor::GetCreatureOrPetOrVehicle(*this, guid))
+            if (RefreshCombatNameplate(creature, pet))
+                creature->BuildValuesUpdateForPlayerWithMask(&updates, {}, unitMask.GetChangesMask(), this, false);
+    }
+    std::erase_if(_hiddenCombatNameplates, [this](ObjectGuid const& guid) { return !m_clientGUIDs.contains(guid); });
+    if (!_combatNameplatesEnabled)
+        _hiddenCombatNameplates.clear();
+
+    if (updates.HasData())
+    {
+        WorldPacket packet;
+        updates.BuildPacket(&packet);
+        SendDirectMessage(&packet);
+    }
+    if (_combatNameplateAckPending)
+    {
+        _combatNameplateAckPending = false;
+        WhisperAddon(_combatNameplatesEnabled ? "ACK ON" : "ACK OFF", CombatNameplatePrefix, false, this);
+    }
+}
+
 bool Player::IsNeverVisibleFor(WorldObject const* seer, bool allowServersideObjects) const
 {
     if (Unit::IsNeverVisibleFor(seer, allowServersideObjects))
@@ -26047,6 +26129,9 @@ void Player::UpdateVisibilityOf(WorldObject* target)
     {
         if (CanSeeOrDetect(target, { .DistanceCheck = true }))
         {
+            if (_combatNameplatesEnabled)
+                if (Creature* creature = target->ToCreature())
+                    RefreshCombatNameplate(creature, GetPet());
             target->SendUpdateToPlayer(this);
             m_clientGUIDs.insert(target->GetGUID());
 
@@ -26172,6 +26257,9 @@ void Player::UpdateVisibilityOf(T* target, UpdateData& data, std::set<WorldObjec
             m_clientGUIDs.insert(target->GetGUID());
             if (!Trinity::HeadlessPackets::Skip(this))
             {
+                if (_combatNameplatesEnabled)
+                    if (Creature* creature = target->ToCreature())
+                        RefreshCombatNameplate(creature, GetPet());
                 target->BuildCreateUpdateBlockForPlayer(&data, this);
                 visibleNow.insert(target);
             }

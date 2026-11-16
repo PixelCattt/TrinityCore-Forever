@@ -381,6 +381,9 @@ public:
         if (flags & UNIT_FLAG3_ALREADY_SKINNED && unit->IsCreature() && !unit->ToCreature()->IsSkinnedBy(receiver))
             flags &= ~UNIT_FLAG3_ALREADY_SKINNED;
 
+        if (receiver->HidesCombatNameplate(unit))
+            flags |= UNIT_FLAG3_FORCE_HIDE_NAMEPLATE;
+
         return flags;
     }
 };
