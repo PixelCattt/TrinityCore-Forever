@@ -1867,8 +1867,9 @@ class classic_spell_warr_gore_drinker_enrage : public AuraScript
 ## classic_spell_undead_touch_of_the_grave
 ######*/
 
-// 1260189 - Touch of the Grave (Undead racial, 1.60): "Your spells and attacks have a chance to drain Health from the target, up to
-// $s1% of your maximum Health." The client data procs a dummy aura (20%, 25 sec recovery) and has no trigger for the drain
+// 1260189 / 1260201 - Touch of the Grave (Undead racial, 1.60): "Your spells and attacks have a chance to drain Health from the target,
+// up to $s1% of your maximum Health." Warriors, paladins and rogues learn 1260189 (20%), priests, mages and warlocks learn 1260201 (30%)
+// (SkillLineAbility class masks 11 and 400). The client data procs a dummy aura (15 sec recovery) and has no trigger for the drain
 // 1260198, whose health leech base points are a placeholder 5: the drain is cast here for $s1% of the Undead's maximum health.
 class classic_spell_undead_touch_of_the_grave : public AuraScript
 {
