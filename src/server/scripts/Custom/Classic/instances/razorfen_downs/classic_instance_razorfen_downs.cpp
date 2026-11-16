@@ -27,6 +27,7 @@
 #include "TemporarySummon.h"
 #include "classic_dungeon_encounter_tracker.h"
 #include "classic_razorfen_downs.h"
+#include <set>
 
 namespace
 {
@@ -226,9 +227,6 @@ public:
             return _encounter[0] == DONE || GetBossState(CLASSIC_RFD_ENC_TUTENKASH) == DONE;
         }
 
-        // The wave's creatures used to count themselves through their stock scripts; those became plain SmartAI
-        // (world 2026_10_16_10), so after the first strike the gong never unlocked. The instance tracks them now: a
-        // wave killed to the last creature is cleared, a wave with a creature gone alive is struck again.
         void FinishGongSummon(ObjectGuid guid, bool killed)
         {
             if (!_gongSummons.erase(guid))
@@ -246,13 +244,13 @@ public:
                 gong->RemoveFlag(GO_FLAG_NOT_SELECTABLE);
         }
 
-        GuidSet _gongSummons;                          // creatures of the running gong wave
+        std::set<ObjectGuid> _gongSummons;
         bool _gongWaveLost = false;
         ObjectGuid _gongGUID;
         ObjectGuid _cupFire1GUID;
         ObjectGuid _cupFire2GUID;
         uint32 _encounter[CLASSIC_RFD_MAX_ENCOUNTER];
-        uint8 _gongWaves;                              // gong waves cleared, 3 = Tuten'kash dead
+        uint32 _gongWaves;
         PersistentInstanceScriptValue<uint32> _savedTutenKash;
     };
 
