@@ -5,7 +5,7 @@
 Built ForeverCore yourself, or joining a friend? Put `WoWForeverLauncher.exe` in any folder, start it, pick join and
 enter the server's address. Send the same link to friends who want to join.
 
-A server for the **WoW Forever client (Classic 1.60.1, build 70888)**, based on TrinityCore.
+A server for the **WoW Forever client (Classic 1.60.1, build 70938)**, based on TrinityCore. Older supported builds (70888, 70790 and the rest in `repack/client-builds.txt`) keep working.
 
 - Blizzlike: it plays like Blizzard's realms. Fixes come from real game data or fix the server itself.
 - No custom items, quests or rates. Every option starts at Blizzard's setting.
@@ -52,6 +52,10 @@ More on each one: [doc/OptionalServerOptions.md](doc/OptionalServerOptions.md) a
 | `Classic.ForeverCreatureHealth` | 0 | Creature health from sniffed Forever creatures instead of the vanilla numbers |
 | `Classic.ForeverKillXp` | 0 | Kill XP for lower level mobs from the Forever sniff formula |
 | `Classic.Shop.Enabled` | 0 | In-game store |
+| `Forever.VanillaAoE` | 0 | Vanilla Consecration and Improved Blizzard |
+| `Classic.AdventureGuide` | 0 | The Adventure Guide is shown |
+| `Respawn.DynamicOpenWorld` | 0 | Open world respawns speed up when lots of players are around (thanks SIN) |
+| `Instance.NefarianCapAdds` | 0 | Nefarian phase 1 calls at most 42 drakonids |
 
 These follow Forever's own changes and are on by default:
 
@@ -59,6 +63,7 @@ These follow Forever's own changes and are on by default:
 |---|---|---|
 | `Classic.Respawn.Level1to10Pct` ... `Level31to60Pct` | 50, 70, 85, 100 | Faster respawns in low level zones. All 100 = off |
 | `Classic.CreatureHealth.RaiseFromLevel`, `.RaiseAt60Pct`, `.Raids` | 20, 20, 0 | More health for higher level creatures, up to +20% at 60, not in raids |
+| `Forever.DayCycle.Speed` | 1 | Day and night speed, 1 to 24. Players can use `.time day`, `.time night` and `.time auto` for themselves |
 
 All `Rate.*` settings are 1, and the auction house bot is off.
 
@@ -98,6 +103,7 @@ Other modules go in `src/modules/` too, see [src/modules/README.md](src/modules/
 - [VMaNGOS](https://github.com/vmangos/core) for the vanilla world, [CMaNGOS classic-db](https://github.com/cmangos/classic-db)
   and [Questie](https://github.com/Questie/Questie) for quest, spawn and drop data.
 - The AnoCore project, for Forever quest data and spawns.
+- SIN, for the dynamic open world respawns.
 - Everyone who sent fixes, bug reports and packet captures.
 
 Not made or supported by the TrinityCore team or by Blizzard Entertainment, so please don't ask them about it. No game
