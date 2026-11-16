@@ -30,6 +30,7 @@
 #include "SpellAuras.h"
 #include "SpellAuraEffects.h"
 #include "World.h"
+#include "ClassicPetAttackSpeed.h"
 #include <G3D/g3dmath.h>
 #include <atomic>
 #include <numeric>
@@ -1610,6 +1611,12 @@ void Guardian::UpdateDamagePhysical(WeaponAttackType attType)
     UnitMods unitMod = UNIT_MOD_DAMAGE_MAINHAND;
 
     float att_speed = float(GetBaseAttackTime(BASE_ATTACK))/1000.0f;
+    // Classic 1.60: a hunter pet swings at 2.0 sec and its Faster / Slower Attack passive gives it its wild speed. Attack power counts per
+    // second of that speed, as when the beast had it as its own swing time (vanilla: a pet's attack power is worth the same damage per
+    // second at any speed); the haste of Frenzy and other auras still adds damage per second.
+    if (IsHunterPet())
+        if (ClassicPetAttackSpeed::Step const* step = ClassicPetAttackSpeed::ForWildAttackTime(GetCreatureTemplate()->BaseAttackTime))
+            att_speed = ClassicPetAttackSpeed::SwingMs(step->pct) / 1000.0f;
 
     // Classic 1.60: vanilla 14 attack power per 1 damage per second
     float base_value  = GetFlatModifierValue(unitMod, BASE_VALUE) + GetTotalAttackPowerValue(attType, false) / 14.0f * att_speed + bonusDamage;

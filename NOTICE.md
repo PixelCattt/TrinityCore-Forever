@@ -57,6 +57,7 @@ redistributing. Source files of the module do not carry per-file headers; this n
   credits EG Link (CC BY 4.0), Polestar forever-db, QuestieDB, ForeverDB.net (GPL-3.0), NorgannonDB by zmarotrix (GPL-3.0), Icy Veins'
   WoW Forever database (db.icy-veins.com/wow-forever) and Wowhead's WoW Forever database (www.wowhead.com/forever). Changed: compared with our world and only rows we lacked were written as ours.
 - Ideas from the Everlake core (https://github.com/buildthehomelab/wow-trinitycore-everlake, GPL-2.0, a fork of this core), written
-  as our own code: the hunter pet's food type taken from the client's Item table (`ObjectMgr::LoadItemTemplates`).
+  as our own code: the hunter pet's food type taken from the client's Item table (`ObjectMgr::LoadItemTemplates`), and the hunter
+  pet's wild attack speed through the client's Faster / Slower Attack passives (`ClassicPetAttackSpeed.h`).
 - From the Everlake core (https://github.com/buildthehomelab/wow-trinitycore-everlake, GPL, a fork of this core), written as our
   own code: ranged weapons and wands take the ranged stat budget column (`GetRandomPropertyPoints`, ItemEnchantmentMgr.cpp).

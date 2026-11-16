@@ -39,6 +39,7 @@
 #include "SpellMgr.h"
 #include "SpellPackets.h"
 #include "Unit.h"
+#include "ClassicPetAttackSpeed.h"
 #include "Util.h"
 #include "World.h"
 #include "WorldSession.h"
@@ -1365,9 +1366,10 @@ bool Guardian::InitStatsForLevel(uint8 petlevel)
 
     SetStatFlatModifier(UNIT_MOD_ARMOR, BASE_VALUE, float(petlevel * 50));
 
-    // Classic 1.60 (vanilla): pets keep their creature's attack speed (a tamed beast keeps the speed it had in the wild);
-    // retail forced 2.0 sec
-    uint32 const attackTime = cinfo->BaseAttackTime ? cinfo->BaseAttackTime : BASE_ATTACK_TIME;
+    // Classic 1.60: a hunter pet swings at 2.0 sec and keeps the speed it had in the wild through its Faster / Slower Attack passive
+    // (ClassicPetAttackSpeed.h, learned in LearnPetPassives); other pets keep their creature's attack speed
+    uint32 const attackTime = petType == HUNTER_PET ? ClassicPetAttackSpeed::BaseAttackTimeMs
+                            : cinfo->BaseAttackTime ? cinfo->BaseAttackTime : BASE_ATTACK_TIME;
     SetBaseAttackTime(BASE_ATTACK, attackTime);
     SetBaseAttackTime(OFF_ATTACK, attackTime);
     SetBaseAttackTime(RANGED_ATTACK, cinfo->RangeAttackTime ? cinfo->RangeAttackTime : BASE_ATTACK_TIME);
@@ -2245,6 +2247,11 @@ void Pet::LearnPetPassives()
         for (uint32 spellId : petStore->second)
             addSpell(spellId, ACT_DECIDE, PETSPELL_NEW, PETSPELL_FAMILY);
     }
+
+    // Classic 1.60: the passive that gives a hunter pet (2.0 sec swing) the attack speed its beast has in the wild
+    if (getPetType() == HUNTER_PET)
+        if (ClassicPetAttackSpeed::Step const* step = ClassicPetAttackSpeed::ForWildAttackTime(cInfo->BaseAttackTime))
+            addSpell(step->spellId, ACT_DECIDE, PETSPELL_NEW, PETSPELL_FAMILY);
 }
 
 void Pet::CastPetAuras(bool current)
