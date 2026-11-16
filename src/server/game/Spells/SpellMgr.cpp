@@ -4289,6 +4289,39 @@ void SpellMgr::LoadSpellInfoCorrections()
         });
     });
 
+    // Classic 1.60: two Dire Maul / Felwood world buffs are dummy auras in the client data, so they gave nothing (naxx_patchwerk 1116 run 7:
+    // both on every tank, the tanks at 10.9k, the stamina and health of the other buffs adding up exactly without them).
+    // Mol'dar's Moxie (22818): stamina increased by 15% (the dummy's misc value is the stat, 2 = stamina).
+    ApplySpellFix({ 22818 }, [](SpellInfo* spellInfo)
+    {
+        ApplySpellEffectFix(spellInfo, EFFECT_0, [](SpellEffectInfo* spellEffectInfo)
+        {
+            if (spellEffectInfo->ApplyAuraName != SPELL_AURA_DUMMY || spellEffectInfo->MiscValue != STAT_STAMINA)
+                return;
+            spellEffectInfo->ApplyAuraName = SPELL_AURA_MOD_TOTAL_STAT_PERCENTAGE;
+            spellEffectInfo->MiscValueB = 1 << STAT_STAMINA;
+        });
+    });
+
+    // Songflower Serenade (15366): 5% critical strike chance and 15 to all stats. Told apart by their amounts, not by their order.
+    ApplySpellFix({ 15366 }, [](SpellInfo* spellInfo)
+    {
+        auto const fix = [](SpellEffectInfo* spellEffectInfo)
+        {
+            if (spellEffectInfo->ApplyAuraName != SPELL_AURA_DUMMY)
+                return;
+            if (std::lround(spellEffectInfo->BasePoints) == 5)
+                spellEffectInfo->ApplyAuraName = SPELL_AURA_MOD_CRIT_PCT;
+            else if (std::lround(spellEffectInfo->BasePoints) == 15)
+            {
+                spellEffectInfo->ApplyAuraName = SPELL_AURA_MOD_STAT;
+                spellEffectInfo->MiscValue = -1;   // all stats
+            }
+        };
+        ApplySpellEffectFix(spellInfo, EFFECT_0, fix);
+        ApplySpellEffectFix(spellInfo, EFFECT_1, fix);
+    });
+
     // Parasitic Shadowfiend Passive
     ApplySpellFix({ 41913 }, [](SpellInfo* spellInfo)
     {
