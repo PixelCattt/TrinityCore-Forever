@@ -1,4 +1,4 @@
--- SIN's fixes (1amcoff1n), Quest and World Fixes for 0.1.36, the rest of his file 2026_11_14_01 (put in on chris's word,
+-- SIN's fixes (1amcoff1n), Quest and World Fixes for 0.1.36, the rest of his file 2026_11_14_01 (put in on Karrz's word,
 -- 2026-11-16): the Snowbound map pin and Ceramic Jar focus move, Gar'im in the cave, and the Ylva banner script names with the
 -- Headsplitter delete. His statements as he wrote them.
 START TRANSACTION;
