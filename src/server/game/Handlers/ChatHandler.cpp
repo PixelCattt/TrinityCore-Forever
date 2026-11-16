@@ -347,6 +347,21 @@ ChatMessageResult WorldSession::HandleChatMessage(ChatMsg type, Language lang, s
                 (HasPermission(rbac::RBAC_PERM_CAN_FILTER_WHISPERS) && !sender->isAcceptWhispers() && !sender->IsInWhisperWhiteList(receiver->GetGUID())))
                 sender->AddWhisperWhiteList(receiver->GetGUID());
 
+            // The solo trade addon uses a self-whisper as its request transport.
+            // Dispatch it privately before Whisper() can emit a GM conversation invite.
+            if (receiver == sender && msg.starts_with("FBTrade ") && msg.size() < 140)
+            {
+                size_t split = msg.find(' ', 8);
+                if (split > 8 && split <= 16 && msg.find_first_not_of("0123456789abcdef", 8) == split)
+                {
+                    std::string_view payload = std::string_view(msg).substr(split + 1);
+                    if (payload == "view" || (!payload.empty() && payload.find_first_not_of("0123456789:") == std::string_view::npos))
+                    {
+                        sScriptMgr->OnPlayerChatSent(sender, type, lang, msg, receiver);
+                        break;
+                    }
+                }
+            }
             GetPlayer()->Whisper(msg, lang, receiver);
             sScriptMgr->OnPlayerChatSent(GetPlayer(), type, lang, msg, receiver);
             break;
