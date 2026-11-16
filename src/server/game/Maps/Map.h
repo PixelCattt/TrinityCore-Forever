@@ -718,7 +718,7 @@ class TC_GAME_API Map : public GridRefManager<NGridType>
 
     public:
         void ProcessRespawns();
-        void ApplyDynamicRespawnScaling(WorldObject const* obj, ObjectGuid::LowType spawnId, uint32& respawnDelay) const;
+        void ApplyDynamicModeRespawnScaling(WorldObject const* obj, ObjectGuid::LowType spawnId, uint32& respawnDelay, uint32 mode) const;
 
     private:
         // if return value is true, we can respawn
