@@ -379,12 +379,6 @@ Player::~Player()
     // it must be unloaded already in PlayerLogout and accessed only for logged in player
     //m_social = nullptr;
 
-    // items still listed for an inventory save forget this player before it goes, so none of them points at it afterwards
-    for (Item* item : m_itemUpdateQueue)
-        if (item)
-            RemoveItemFromUpdateQueueOf(item, this);
-    m_itemUpdateQueue.clear();
-
     // Note: buy back item already deleted from DB when player was saved
     for (uint8 i = 0; i < PLAYER_SLOTS_COUNT; ++i)
         delete m_items[i];
@@ -22401,9 +22395,6 @@ void Player::_SaveInventory(CharacterDatabaseTransaction trans)
         Item* item = m_itemUpdateQueue[i];
         if (!item)
             continue;
-
-        // The item leaves the list before it is saved: saving may delete it (ITEM_REMOVED), and the list is emptied below.
-        RemoveItemFromUpdateQueueOf(item, this);
 
         Bag* container = item->GetContainer();
         if (item->GetState() != ITEM_REMOVED)
