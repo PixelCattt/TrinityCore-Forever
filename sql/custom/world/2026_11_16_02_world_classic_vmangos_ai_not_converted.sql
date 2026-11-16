@@ -3,7 +3,8 @@
 -- their migrations leave them (2021-2025). Event mapping as in the conversion: aggro 4, HP 2 (min, max), OOC timer 1, spawned 63,
 -- leaving combat 7, spell hit 8, death 6; a VMaNGOS event without the repeatable flag is not repeatable here; talk uses the
 -- client's BroadcastText (classic_broadcast_text_type: 0 say, 2 emote); two random talk scripts become one weighted group.
---   1755 Marzon the Silent Blade, 1946 Lillith Nefara: their line on aggro.
+--   1946 Lillith Nefara: her line on aggro. (Marzon the Silent Blade 1755 says his in classic_npc_marzon_the_silent_blade, The
+--   Attack! 434; he is only listed below so that rows an earlier draft of this file gave him are removed.)
 --   1981 Dark Iron Ambusher, 7805 Wastewander Scofflaw: flee for help at 15% health.
 --   2434 Shadowy Assassin: turns hostile (faction 97) when attacked.
 --   4196 Silithid Swarm: despawns when it leaves combat.
@@ -23,13 +24,12 @@
 -- scene, for one) stay as they are. Also safe on a world DB where an earlier draft of this file ran up to the texts.
 
 UPDATE `creature_template` SET `AIName` = 'SmartAI'
-WHERE `entry` IN (1755, 1946, 1981, 2434, 4196, 4264, 7805, 11296, 11636, 11637, 11875, 12385, 12904, 14081, 14101, 15917) AND `ScriptName` = ''
+WHERE `entry` IN (1946, 1981, 2434, 4196, 4264, 7805, 11296, 11636, 11637, 11875, 12385, 12904, 14081, 14101, 15917) AND `ScriptName` = ''
 AND `AIName` IN ('', 'SmartAI');
 
 DELETE FROM `smart_scripts` WHERE `source_type` = 0 AND `comment` LIKE 'VMaNGOS EventAI %'
 AND `entryorguid` IN (1755, 1946, 1981, 2434, 4196, 4264, 7805, 11296, 11636, 11637, 11875, 12385, 12904, 14081, 14101, 15917);
 INSERT INTO `smart_scripts` (`entryorguid`,`source_type`,`id`,`link`,`Difficulties`,`event_type`,`event_phase_mask`,`event_chance`,`event_flags`,`event_param1`,`event_param2`,`event_param3`,`event_param4`,`event_param5`,`event_param_string`,`action_type`,`action_param1`,`action_param2`,`action_param3`,`action_param4`,`action_param5`,`action_param6`,`action_param7`,`action_param_string`,`target_type`,`target_param1`,`target_param2`,`target_param3`,`target_param4`,`target_param_string`,`target_x`,`target_y`,`target_z`,`target_o`,`comment`) VALUES
-(1755,0,100,0,'',4,0,100,1,0,0,0,0,0,'',1,20,0,1,0,0,0,0,'',2,0,0,0,0,'',0,0,0,0,'VMaNGOS EventAI 175501'),
 (1946,0,100,0,'',4,0,100,1,0,0,0,0,0,'',1,20,0,1,0,0,0,0,'',2,0,0,0,0,'',0,0,0,0,'VMaNGOS EventAI 194601'),
 (1981,0,100,0,'',2,0,100,1,0,15,0,0,0,'',25,0,0,0,0,0,0,0,'',1,0,0,0,0,'',0,0,0,0,'VMaNGOS EventAI 198101'),
 (7805,0,100,0,'',2,0,100,1,0,15,0,0,0,'',25,0,0,0,0,0,0,0,'',1,0,0,0,0,'',0,0,0,0,'VMaNGOS EventAI 780501'),
@@ -54,7 +54,6 @@ INSERT INTO `smart_scripts` (`entryorguid`,`source_type`,`id`,`link`,`Difficulti
 
 DELETE FROM `creature_text` WHERE `CreatureID` IN (1755, 1946, 4264, 11296, 11636, 11637) AND `comment` = 'VMaNGOS EventAI';
 INSERT INTO `creature_text` (`CreatureID`,`GroupID`,`ID`,`Text`,`Type`,`Language`,`Probability`,`Emote`,`Duration`,`Sound`,`SoundPlayType`,`BroadcastTextId`,`TextRange`,`comment`) VALUES
-(1755,20,0,'(BroadcastText 3936)',12,0,100,0,0,0,0,3936,0,'VMaNGOS EventAI'),
 (1946,20,0,'(BroadcastText 427)',12,0,100,0,0,0,0,427,0,'VMaNGOS EventAI'),
 (4264,20,0,'(BroadcastText 1415)',16,0,100,0,0,0,0,1415,0,'VMaNGOS EventAI'),
 (11296,20,0,'(BroadcastText 7205)',12,0,12.5,0,0,0,0,7205,0,'VMaNGOS EventAI'),
