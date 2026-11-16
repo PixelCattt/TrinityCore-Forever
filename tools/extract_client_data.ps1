@@ -25,7 +25,8 @@
     workflow which only needs maps/ + dbc/ + live CASC access.
 
 .PARAMETER Threads
-    Worker count for vmap4extractor and mmaps_generator. Default: 0 (all cores).
+    Worker count for vmap4extractor, vmap4assembler and mmaps_generator. Default: 0 = automatic, two cores less than the PC has
+    and at most one per 2.5 GB of RAM (at least 1), so the PC stays usable while the pathfinding data is built.
 
 .PARAMETER Resume
     Safe to run again after an interruption. Each finished stage leaves a marker file (.extract-maps.done, .extract-vmaps.done,
@@ -63,6 +64,17 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+
+# Keep the PC usable (GitHub #13): with every core busy at normal priority the desktop starved for the whole mmaps build.
+# Automatic worker count, and this script plus every tool it starts runs below normal priority (child processes inherit it).
+if ($Threads -le 0) {
+    $Threads = [math]::Max(1, [Environment]::ProcessorCount - 2)
+    try {
+        $ramGb = (Get-CimInstance Win32_ComputerSystem -ErrorAction Stop).TotalPhysicalMemory / 1GB
+        if ($ramGb -gt 0) { $Threads = [math]::Max(1, [math]::Min($Threads, [math]::Floor($ramGb / 2.5))) }
+    } catch { }
+}
+try { (Get-Process -Id $PID).PriorityClass = 'BelowNormal' } catch { }
 
 function Write-Step($msg) {
     Write-Host ""
@@ -138,7 +150,7 @@ Did you point at _retail_/Data/ instead of _retail_/ ?"
 Write-Host "Client : $ClientPath"
 Write-Host "Output : $OutputPath"
 Write-Host "Locale : $Locale"
-Write-Host "Threads: $(if ($Threads -le 0) { '(all cores)' } else { $Threads })"
+Write-Host "Threads: $Threads (below normal priority)"
 Write-Host "Mode   : $(if ($MapsOnly) { 'MAPS-ONLY (road workflow)' } else { 'FULL' })$(if ($Resume) { ' (resumable)' })"
 
 # map_gx_gy tiles of the six start positions worldserver checks before it starts (World.cpp ExistMapAndVMap): without them it shuts down
@@ -267,9 +279,12 @@ If the game shows an update in the Battle.net app, let it finish first; with a g
     foreach ($d in Get-ChildItem (Join-Path $OutputPath 'vmaps') -Directory -ErrorAction SilentlyContinue) { if ($d.Name -match '^\d+$') { $expect[[int]$d.Name] = 1 } }
     $gen = Start-Process (Join-Path (Get-Location).Path 'mmaps_generator.exe') -ArgumentList $mmapArgs -WorkingDirectory (Get-Location).Path -NoNewWindow -PassThru
     $null = $gen.Handle   # Windows PowerShell 5.1 leaves ExitCode empty unless the process handle is read right after the start
+    try { $gen.PriorityClass = 'BelowNormal' } catch { }
     while (-not $gen.WaitForExit(60000)) {
+        # a map's .mmap is written when the map starts, so the tiles (.mmtile) are what shows real progress
+        $tiles = @(Get-ChildItem (Join-Path $OutputPath 'mmaps') -Filter '*.mmtile' -ErrorAction SilentlyContinue).Count
         $done = @(Get-ChildItem (Join-Path $OutputPath 'mmaps') -Filter '*.mmap' -ErrorAction SilentlyContinue).Count
-        Write-Host ("Pathfinding data: {0} of about {1} maps done, still working ({2} minutes so far)..." -f $done, $expect.Count, [math]::Round($clock.Elapsed.TotalMinutes))
+        Write-Host ("Pathfinding data: {0} tiles written, {1} of about {2} maps started, still working ({3} minutes so far)..." -f $tiles, $done, $expect.Count, [math]::Round($clock.Elapsed.TotalMinutes))
     }
     $genCode = $gen.ExitCode
     if ($genCode -ne 0) {
@@ -305,3 +320,5 @@ Check that dbc/, maps/, and vmaps/0000/*.vmtree exist in OutputPath."
 finally {
     Pop-Location
 }
+# a run that only used cmdlets (every stage already done) leaves $LASTEXITCODE unset, which the caller reads as a failure
+exit 0
