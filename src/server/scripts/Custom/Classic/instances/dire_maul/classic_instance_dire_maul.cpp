@@ -1011,8 +1011,10 @@ enum ClassicDMKnotThimblejack
     QUEST_FREE_KNOT             = 5525,
     QUEST_FREE_KNOT_REPEATABLE  = 7429,
 
-    GOSSIP_MENU_1               = 6795, // npc_text
-    GOSSIP_MENU_2               = 6883, // npc_text
+    // npc_text of his own (2026_11_16_04_world_classic_scripted_npc_texts.sql): Classic's 6795 / 6883 are not in this world,
+    // and a gossip with a missing text never opened on the client, so right-clicking him did nothing at all (chris 11-16).
+    GOSSIP_MENU_1               = 91014338, // "Please, please, please tell me you are here to get me out of these shackles..." (9220)
+    GOSSIP_MENU_2               = 91014339, // "Well, from what I've gathered while waiting to be eaten by these yokels..." (9369)
 
     GO_KNOTS_BALL_AND_CHAIN     = 179511
 };
@@ -1100,7 +1102,6 @@ struct classic_npc_knot_thimblejack : public ScriptedAI
                 AddGossipItemFor(player, GossipOptionNpc::None, GOSSIP_ITEM_KNOT_OGRE_SUIT, GOSSIP_SENDER_MAIN, GOSSIP_ACTION_INFO_DEF + 3);
         }
 
-        // TODO(classic): npc_text 6795 / 6883 must exist in the TC world DB (VMaNGOS npc_text ids)
         SendGossipMenuFor(player, GOSSIP_MENU_1, me->GetGUID());
         return true;
     }

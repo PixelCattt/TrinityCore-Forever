@@ -100,13 +100,16 @@ public:
                 // the profession's own line (202), so that is the line the 260 requirement reads.
                 switch (me->GetEntry())
                 {
+                    // Zap's and Jhordy's texts are the ones of their own gossip menus (6092: 7249, and 7254 once the device is
+                    // known; 6094: 7251 and 7253). The old ids were wrong for this world: 6092 is a menu id, and as a text it is
+                    // the spirit healer's line ("It is not yet your time..."); 7252 does not exist.
                     case NPC_ZAP:
-                        canLearn = CanLearn(player, 6092, 0, SKILL_ENGINEERING, 260, S_GOBLIN, SPELL_TO_EVERLOOK, npcTextId);
+                        canLearn = CanLearn(player, 7249, 7254, SKILL_ENGINEERING, 260, S_GOBLIN, SPELL_TO_EVERLOOK, npcTextId);
                         if (canLearn)
                             gossipItem = GOSSIP_ZAP;
                         break;
                     case NPC_JHORDY:
-                        canLearn = CanLearn(player, 7251, 7252, SKILL_ENGINEERING, 260, S_GNOMISH, SPELL_TO_GADGET, npcTextId);
+                        canLearn = CanLearn(player, 7251, 7253, SKILL_ENGINEERING, 260, S_GNOMISH, SPELL_TO_GADGET, npcTextId);
                         if (canLearn)
                             gossipItem = GOSSIP_JHORDY;
                         break;
@@ -125,8 +128,11 @@ public:
                 }
             }
 
+            // The learn line is option 0 of the menu on Zap and Jhordy (the only one their menus have here; asking for option 2
+            // found nothing, so no engineer ever saw it) and option 2 on the Outland pair.
             if (canLearn)
-                AddGossipItemFor(player, gossipItem, 2, me->GetEntry(), GOSSIP_ACTION_INFO_DEF + 1);
+                AddGossipItemFor(player, gossipItem, (gossipItem == GOSSIP_ZAP || gossipItem == GOSSIP_JHORDY) ? 0 : 2, me->GetEntry(),
+                    GOSSIP_ACTION_INFO_DEF + 1);
 
             SendGossipMenuFor(player, npcTextId ? npcTextId : player->GetGossipTextId(me), me->GetGUID());
             return true;
@@ -157,7 +163,9 @@ public:
                     break;
             }
 
-            return false;
+            // The option itself points at another menu (6093 / 6095); the device is learned, so the window closes here.
+            CloseGossipMenuFor(player);
+            return true;
         }
     };
 
