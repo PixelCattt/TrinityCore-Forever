@@ -21,6 +21,8 @@
 
 #include "ScriptMgr.h"
 #include "Player.h"
+#include "ObjectAccessor.h"
+#include "SpellScript.h"
 #include "QuestDef.h"
 #include "ScriptedCreature.h"
 #include "ScriptedEscortAI.h"
@@ -158,7 +160,125 @@ private:
     uint8 _dwarves;
 };
 
+namespace
+{
+constexpr uint32 BannerQuest = 86585;
+constexpr uint32 Ylva = 269153;
+constexpr uint32 BannerEnemies[] = { 1163, 1166, 269185 };
+Position const BannerEntrances[] = {
+    { -6057.93f, -2857.48f, 413.368f, 0.0f },
+    { -6093.99f, -2923.09f, 418.864f, 0.0f }
+};
+
+struct classic_npc_ylva_banner : ScriptedAI
+{
+    using ScriptedAI::ScriptedAI;
+    ObjectGuid challenger;
+    ObjectGuid enemy;
+    uint8 wave = 0;
+    uint32 nextWave = 0;
+
+    void Reset() override
+    {
+        ObjectGuid previous = enemy;
+        enemy.Clear();
+        challenger.Clear();
+        wave = 0;
+        nextWave = 0;
+        if (Creature* active = ObjectAccessor::GetCreature(*me, previous))
+            active->DespawnOrUnsummon();
+    }
+
+    void SetGUID(ObjectGuid const& guid, int32) override
+    {
+        if (challenger.IsEmpty())
+        {
+            challenger = guid;
+            nextWave = 1;
+        }
+    }
+
+    uint32 GetData(uint32) const override { return !challenger.IsEmpty(); }
+
+    void SummonedCreatureDies(Creature* summon, Unit*) override
+    {
+        if (summon->GetGUID() != enemy)
+            return;
+        enemy.Clear();
+        if (++wave == 3)
+            Reset();
+        else
+            nextWave = 1500;
+    }
+
+    void SummonedCreatureDespawn(Creature* summon) override
+    {
+        if (summon->GetGUID() == enemy)
+        {
+            enemy.Clear();
+            Reset();
+        }
+    }
+
+    void UpdateAI(uint32 diff) override
+    {
+        if (challenger.IsEmpty())
+            return;
+        Player* player = ObjectAccessor::GetPlayer(*me, challenger);
+        if (!player || !player->IsAlive() || !me->IsWithinDistInMap(player, 90.0f))
+        {
+            Reset();
+            return;
+        }
+        if (!nextWave)
+            return;
+        if (diff < nextWave)
+        {
+            nextWave -= diff;
+            return;
+        }
+        nextWave = 0;
+        if (Creature* mob = me->SummonCreature(BannerEnemies[wave], BannerEntrances[wave % 2],
+            TEMPSUMMON_TIMED_DESPAWN_OUT_OF_COMBAT, 60s))
+        {
+            enemy = mob->GetGUID();
+            mob->AI()->AttackStart(player);
+        }
+        else
+            Reset();
+    }
+};
+
+class classic_spell_ironforge_banner : public SpellScript
+{
+    SpellCastResult CheckCast()
+    {
+        Player* player = GetCaster()->ToPlayer();
+        if (!player || player->GetQuestStatus(BannerQuest) != QUEST_STATUS_INCOMPLETE)
+            return SPELL_FAILED_CANT_DO_THAT_RIGHT_NOW;
+        Creature* ylva = player->FindNearestCreature(Ylva, 15.0f);
+        if (!ylva || !ylva->IsAIEnabled())
+            return SPELL_FAILED_NOT_HERE;
+        return ylva->AI()->GetData(BannerQuest) ? SPELL_FAILED_NOT_READY : SPELL_CAST_OK;
+    }
+
+    void RaiseBanner()
+    {
+        if (Creature* ylva = GetCaster()->FindNearestCreature(Ylva, 15.0f))
+            ylva->AI()->SetGUID(GetCaster()->GetGUID(), BannerQuest);
+    }
+
+    void Register() override
+    {
+        OnCheckCast += SpellCheckCastFn(classic_spell_ironforge_banner::CheckCast);
+        AfterCast += SpellCastFn(classic_spell_ironforge_banner::RaiseBanner);
+    }
+};
+}
+
 void AddSC_classic_loch_modan()
 {
     RegisterCreatureAI(classic_npc_miran);
+    RegisterCreatureAI(classic_npc_ylva_banner);
+    RegisterSpellScript(classic_spell_ironforge_banner);
 }
