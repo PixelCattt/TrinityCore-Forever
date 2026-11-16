@@ -61,3 +61,6 @@ redistributing. Source files of the module do not carry per-file headers; this n
   pet's wild attack speed through the client's Faster / Slower Attack passives (`ClassicPetAttackSpeed.h`).
 - From the Everlake core (https://github.com/buildthehomelab/wow-trinitycore-everlake, GPL, a fork of this core), written as our
   own code: ranged weapons and wands take the ranged stat budget column (`GetRandomPropertyPoints`, ItemEnchantmentMgr.cpp).
+- Weapon chance-on-hit rates in `sql/custom/world/2026_11_06_41_world_classic_weapon_proc_every_hit.sql` and
+  `2026_11_16_80_world_forever_item_proc_ppm_measured.sql`: from [wowsims/forever](https://github.com/wowsims/forever)
+  (`tools/database/overrides/weapon_procs.go`), MIT licence, copyright the wowsims contributors. Only the rates were taken.
