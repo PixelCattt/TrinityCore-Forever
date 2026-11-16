@@ -8452,9 +8452,19 @@ void Player::DuelComplete(DuelCompleteType type)
 
     if (type != DUEL_INTERRUPTED)
     {
+        // Classic 1.60: live sends each name with its surname ("Name Surname"), the client prints the strings as they come
+        auto nameWithSurname = [](Player const* player)
+        {
+            std::string name = player->GetName();
+            std::string const surname = sCharacterCache->GetCharacterSurnameByGuid(player->GetGUID());
+            if (!surname.empty())
+                name += " " + surname;
+            return name;
+        };
+
         WorldPackets::Duel::DuelWinner duelWinner;
-        duelWinner.BeatenName = (type == DUEL_WON ? opponent : this)->GetName();
-        duelWinner.WinnerName = (type == DUEL_WON ? this : opponent)->GetName();
+        duelWinner.BeatenName = nameWithSurname(type == DUEL_WON ? opponent : this);
+        duelWinner.WinnerName = nameWithSurname(type == DUEL_WON ? this : opponent);
         duelWinner.BeatenVirtualRealmAddress = (type == DUEL_WON ? opponent : this)->m_playerData->VirtualPlayerRealm;
         duelWinner.WinnerVirtualRealmAddress = (type == DUEL_WON ? this : opponent)->m_playerData->VirtualPlayerRealm;
         duelWinner.Fled = type != DUEL_WON;

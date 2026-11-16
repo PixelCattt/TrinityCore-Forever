@@ -70,13 +70,17 @@ void DuelResponse::Read()
 
 WorldPacket const* DuelWinner::Write()
 {
-    _worldPacket << SizedString::BitsSize<6>(BeatenName);
-    _worldPacket << SizedString::BitsSize<6>(WinnerName);
+    // Classic 1.60 (live 70938 sniff, 2026-11-16): both names are zero-terminated strings with a 24 bit length that counts the
+    // terminator, then the Fled bit, flush, both realms and the names. Retail sends 6 bit lengths without terminators, which this
+    // client reads as part of a 24 bit length. The names are shown as written, so the caller passes "Name Surname".
+    _worldPacket << SizedCString::BitsSize<24>(BeatenName);
+    _worldPacket << SizedCString::BitsSize<24>(WinnerName);
     _worldPacket << Bits<1>(Fled);
+    _worldPacket.FlushBits();
     _worldPacket << uint32(BeatenVirtualRealmAddress);
     _worldPacket << uint32(WinnerVirtualRealmAddress);
-    _worldPacket << SizedString::Data(BeatenName);
-    _worldPacket << SizedString::Data(WinnerName);
+    _worldPacket << SizedCString::Data(BeatenName);
+    _worldPacket << SizedCString::Data(WinnerName);
 
     return &_worldPacket;
 }
