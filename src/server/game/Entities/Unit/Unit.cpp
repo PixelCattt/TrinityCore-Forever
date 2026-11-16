@@ -13174,7 +13174,10 @@ void Unit::KnockbackFrom(Position const& origin, float speedXY, float speedZ, fl
         }
     }
 
-    if (!player)
+    // A bot has no client to answer SMSG_MOVE_KNOCK_BACK, so a knockback or a pull never moved it: the server flies it as it flies a creature.
+    // naxx_thaddius 1116: Magnetic Pull left both tanks where they stood while Stalagg and Feugen swapped victims, and each add walked off its
+    // platform across the room to the other tank.
+    if (!player || (player == this && player->GetSession()->IsBot()))
         GetMotionMaster()->MoveKnockbackFrom(origin, speedXY, speedZ, angle, spellEffectExtraData);
     else
     {
