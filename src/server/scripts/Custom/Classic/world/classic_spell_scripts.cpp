@@ -2172,17 +2172,27 @@ class classic_spell_shadow_storm_min_range : public SpellScript
 // 1258773 - Testing the Wells (Forever quest 92742, Westfall): the Well Testing Kit 254545 casts a dummy on a "nearby entry" target that
 // nothing in the data names, so every use failed with an invalid target and the two water samples could never be had (Discord
 // 2026-11-09). The target is the caster now (SpellMgr::LoadSpellInfoCorrections); next to a well the kit gives that well's sample.
-// Wells: the players' map spots 56.5,18.8 (Furlbrow's Pumpkin Farm) and 46.0,38.3 (the Molsen Farm), turned into world spots with
-// Gryan Stoutmantle and Salma Saldean as fit points; the 25 yd radius covers the guess.
+// Well spots: the objective points of the quest data (ATT Forever, Westfall 56.7,18.7 Jansen Stead and 46.2,38.3 Molsen Farm) through
+// the Westfall map frame fitted on 44 of our spawns (0.6% median error, about 20 yards). The first version fitted the map on two NPCs
+// only: its Jansen Stead well sat 35 yards from this one (Molsen 16), more than its 25 yard reach, and the kit was reported broken
+// again (Discord, voldemargreed "bugs 3", 2026-11-13). INFERRED: the live well bunnies were never sniffed; 35 yards covers the fit.
 class classic_spell_quest_testing_the_wells : public SpellScript
 {
     struct Well { float x, y; uint32 sample; };
     static constexpr Well WELLS[] =
     {
-        { -9839.2f, 1038.2f, 254546 },
-        { -10294.1f, 1405.4f, 254547 },
+        { -9809.3f, 1020.8f, 254546 },      // Jansen Stead
+        { -10279.7f, 1398.3f, 254547 },     // Molsen Farm
     };
-    static constexpr float WELL_RADIUS = 25.0f;
+    static constexpr float WELL_RADIUS = 35.0f;
+
+    bool Validate(SpellInfo const* /*spellInfo*/) override
+    {
+        for (Well const& well : WELLS)
+            if (!sObjectMgr->GetItemTemplate(well.sample))
+                return false;
+        return true;
+    }
 
     Well const* NearestWell() const
     {
@@ -2197,7 +2207,15 @@ class classic_spell_quest_testing_the_wells : public SpellScript
 
     SpellCastResult CheckWell()
     {
-        return NearestWell() ? SPELL_CAST_OK : SPELL_FAILED_NOT_HERE;
+        Player* player = GetCaster()->ToPlayer();
+        if (!player)
+            return SPELL_FAILED_DONT_REPORT;
+        Well const* well = NearestWell();
+        if (!well)
+            return SPELL_FAILED_NOT_HERE;
+        if (player->HasItemCount(well->sample, 1, true))   // this farm's sample is already in the bags or bank
+            return SPELL_FAILED_DONT_REPORT;
+        return SPELL_CAST_OK;
     }
 
     void HandleDummy(SpellEffIndex /*effIndex*/)
@@ -2206,7 +2224,7 @@ class classic_spell_quest_testing_the_wells : public SpellScript
         Well const* well = NearestWell();
         if (!player || !well)
             return;
-        if (player->GetItemCount(well->sample) == 0)
+        if (!player->HasItemCount(well->sample, 1, true))
             player->AddItem(well->sample, 1);
     }
 
