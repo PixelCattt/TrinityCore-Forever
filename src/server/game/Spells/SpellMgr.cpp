@@ -3962,6 +3962,14 @@ void SpellMgr::LoadSpellInfoCorrections()
         spellInfo->Attributes |= SPELL_ATTR0_ALLOW_WHILE_MOUNTED;
     });
 
+    // Forever Skyborne racial buffs Elemental Blessing (Skysight) and Energized (Read Ley Line): next to an Elemental Convergence or a
+    // ley line the buff is doubled (classic_spell_skyborne_racial_focus), so the aura sends its real amounts; without them the client
+    // tooltip showed the single 15% / 50% from the client data
+    ApplySpellFix({ 1259688, 1270842 }, [](SpellInfo* spellInfo)
+    {
+        spellInfo->AttributesEx8 |= SPELL_ATTR8_AURA_POINTS_ON_CLIENT;
+    });
+
     // Classic 1.60 Hoof-Shaped Foot Pedal (item 269902): the centaur form ends on entering combat only outside Desolace, which its
     // script (classic_spell_hoof_shaped_foot_pedal) does; the interrupt in the client data would end it in Desolace too.
     ApplySpellFix({ 1286814 }, [](SpellInfo* spellInfo)
