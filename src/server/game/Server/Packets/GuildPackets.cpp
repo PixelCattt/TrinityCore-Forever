@@ -185,7 +185,10 @@ void GuildInviteByName::Read()
 
 WorldPacket const* GuildInvite::Write()
 {
+    // Classic 1.60 (live 70938 sniff 4, 2026-11-15): the inviter's surname (9 bit length) follows the name, like the other guild
+    // messages; bits name (6), surname (9), guild (7), old guild (7), and the surname text right after the name text
     _worldPacket << SizedString::BitsSize<6>(InviterName);
+    _worldPacket << SizedString::BitsSize<9>(InviterSurname);
     _worldPacket << SizedString::BitsSize<7>(GuildName);
     _worldPacket << SizedString::BitsSize<7>(OldGuildName);
     _worldPacket.FlushBits();
@@ -203,6 +206,7 @@ WorldPacket const* GuildInvite::Write()
     _worldPacket << int32(AchievementPoints);
 
     _worldPacket << SizedString::Data(InviterName);
+    _worldPacket << SizedString::Data(InviterSurname);
     _worldPacket << SizedString::Data(GuildName);
     _worldPacket << SizedString::Data(OldGuildName);
 

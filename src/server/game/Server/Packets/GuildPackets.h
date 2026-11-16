@@ -219,6 +219,7 @@ namespace WorldPackets
             uint32 OldGuildVirtualRealmAddress = 0;
             uint32 InviterVirtualRealmAddress = 0;
             std::string InviterName;
+            std::string InviterSurname;
             std::string GuildName;
             std::string OldGuildName;
         };

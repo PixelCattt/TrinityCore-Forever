@@ -1765,6 +1765,7 @@ void Guild::HandleInviteMember(WorldSession* session, std::string_view name)
     invite.AchievementPoints = GetAchievementMgr().GetAchievementPoints();
 
     invite.InviterName = player->GetName();
+    invite.InviterSurname = sCharacterCache->GetCharacterSurnameByGuid(player->GetGUID());
     invite.GuildName = GetName();
 
     if (Guild* oldGuild = pInvitee->GetGuild())
