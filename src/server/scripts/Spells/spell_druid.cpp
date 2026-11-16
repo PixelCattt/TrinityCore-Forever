@@ -3166,8 +3166,10 @@ class spell_dru_classic_feral_charge_cat : public SpellScript
         return SPELL_CAST_OK;
     }
 
-    void HandleLeap(SpellEffIndex /*effIndex*/)
+    void HandleLeap(SpellEffIndex effIndex)
     {
+        // effect 175 is now SPELL_EFFECT_JUMP_DEST_3 and runs EffectJumpDest itself: this script does the jump, so one jump only
+        PreventHitDefaultEffect(effIndex);
         Unit* caster = GetCaster();
         WorldLocation const* dest = GetHitDest();
         if (!dest || caster->IsInFlight())
@@ -3191,7 +3193,7 @@ class spell_dru_classic_feral_charge_cat : public SpellScript
     void Register() override
     {
         OnCheckCast += SpellCheckCastFn(spell_dru_classic_feral_charge_cat::CheckCast);
-        OnEffectLaunch += SpellEffectFn(spell_dru_classic_feral_charge_cat::HandleLeap, EFFECT_0, SPELL_EFFECT_175);
+        OnEffectLaunch += SpellEffectFn(spell_dru_classic_feral_charge_cat::HandleLeap, EFFECT_0, SPELL_EFFECT_JUMP_DEST_3);
     }
 };
 
