@@ -25864,9 +25864,13 @@ bool Player::RefreshCombatNameplate(Unit const* unit, Pet const* pet)
 
     // Leave scripted show/hide flags, player-controlled units and friendly
     // plates alone. IsValidAttackTarget also checks neutral, attackable NPCs.
+    // A dead hostile NPC is no longer a valid target, and the client then
+    // drew its plate as a large grey name over the corpse mid-fight: a
+    // corpse is out of every fight, so its plate is hidden too.
+    bool const hostile = unit->IsAlive() ? IsValidAttackTarget(unit) : !IsFriendlyTo(unit);
     if (_combatNameplatesEnabled && !unit->IsControlledByPlayer() &&
         !unit->HasUnitFlag(UNIT_FLAG_FORCE_NAMEPLATE) && !unit->HasUnitFlag3(UNIT_FLAG3_FORCE_HIDE_NAMEPLATE) &&
-        !engaged(this) && !(pet && engaged(pet)) && IsValidAttackTarget(unit))
+        !engaged(this) && !(pet && engaged(pet)) && hostile)
         return _hiddenCombatNameplates.insert(guid).second;
 
     return _hiddenCombatNameplates.erase(guid) != 0;
