@@ -1089,7 +1089,9 @@ struct classic_npc_knot_thimblejack : public ScriptedAI
 
         AddGossipItemFor(player, GossipOptionNpc::None, GOSSIP_ITEM_KNOT_WHY_TRAP, GOSSIP_SENDER_MAIN, GOSSIP_ACTION_INFO_DEF + 1);
 
-        if (player->GetQuestRewardStatus(QUEST_GORDOK_OGRE_SUIT) && player->GetQuestStatus(QUEST_GORDOK_OGRE_SUIT) == QUEST_STATUS_COMPLETE)
+        // Once turned in, the quest's status is QUEST_STATUS_REWARDED and its entry leaves the active quest list, so it can
+        // never also read as QUEST_STATUS_COMPLETE: the reward check alone is the test.
+        if (player->GetQuestRewardStatus(QUEST_GORDOK_OGRE_SUIT))
         {
             if (player->GetBaseSkillValue(SKILL_LEATHERWORKING) >= 275 && !player->HasSpell(SPELL_GORDOK_OGRE_SUIT_L))
                 AddGossipItemFor(player, GossipOptionNpc::None, GOSSIP_ITEM_KNOT_OGRE_SUIT, GOSSIP_SENDER_MAIN, GOSSIP_ACTION_INFO_DEF + 2);

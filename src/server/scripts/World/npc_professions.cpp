@@ -96,15 +96,17 @@ public:
 
             if (player->HasSkill(SKILL_ENGINEERING))
             {
+                // The Forever client has no "Classic Engineering" tier line (2506): Engineering's rank and recipes live on
+                // the profession's own line (202), so that is the line the 260 requirement reads.
                 switch (me->GetEntry())
                 {
                     case NPC_ZAP:
-                        canLearn = CanLearn(player, 6092, 0, SKILL_CLASSIC_ENGINEERING, 260, S_GOBLIN, SPELL_TO_EVERLOOK, npcTextId);
+                        canLearn = CanLearn(player, 6092, 0, SKILL_ENGINEERING, 260, S_GOBLIN, SPELL_TO_EVERLOOK, npcTextId);
                         if (canLearn)
                             gossipItem = GOSSIP_ZAP;
                         break;
                     case NPC_JHORDY:
-                        canLearn = CanLearn(player, 7251, 7252, SKILL_CLASSIC_ENGINEERING, 260, S_GNOMISH, SPELL_TO_GADGET, npcTextId);
+                        canLearn = CanLearn(player, 7251, 7252, SKILL_ENGINEERING, 260, S_GNOMISH, SPELL_TO_GADGET, npcTextId);
                         if (canLearn)
                             gossipItem = GOSSIP_JHORDY;
                         break;
