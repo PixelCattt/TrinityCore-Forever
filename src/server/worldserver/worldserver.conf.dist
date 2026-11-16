@@ -4988,6 +4988,15 @@ Load.Locales = 1
 ###################################################################################################
 # DEATH RECAP (deathcam)
 #
+#    Classic.Hardcore
+#        Description: Classic 1.60 Hardcore ruleset realm: death is permanent (no spirit healer, corpse run or resurrection
+#                     brings a character back; only staff with .revive), and the client shows its Hardcore interface.
+#                     Read at server start.
+#        Default:     0 - (Normal realm)
+#                     1 - (Hardcore realm)
+
+Classic.Hardcore = 0
+
 #    Recap.Enable
 #        Description: Record the last seconds around players and let anyone watch a death again
 #                     (".recap <number>", or click [Recap] with the ForeverRecap addon).

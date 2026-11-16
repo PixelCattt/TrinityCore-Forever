@@ -28,6 +28,7 @@
 #include "Metric.h"
 #include "PhasingHandler.h"
 #include "Player.h"
+#include "World.h"
 #include "WorldSession.h"
 #include <algorithm>
 #include <array>
@@ -947,7 +948,7 @@ void PathGenerator::CreateFilter()
             // is flat, so water was the cheapest ground there is: a hunter's pet swam across a lake to reach a target on the far
             // shore when the walk round it was barely longer, and when the land and water routes cost about the same, each re-path
             // picked the other one and the pet turned back and forth. Swimming is also about a third slower than running.
-            float const liquidCost = std::max(1.0f, sConfigMgr->GetFloatDefault("Pathfinding.PetLiquidCost", 2.5f));
+            float const liquidCost = std::max(1.0f, sWorld->getFloatConfig(CONFIG_PATHFINDING_PET_LIQUID_COST));
             _filter.setAreaCost(NAV_AREA_WATER, liquidCost);
             _filter.setAreaCost(NAV_AREA_MAGMA_SLIME, liquidCost);
         }
@@ -989,16 +990,16 @@ void PathGenerator::CreateFilter()
     //   Pathfinding.PreferRoads = 1
     //   Pathfinding.RoadCost          = 0.5   (lower = stronger preference)
     //   Pathfinding.RoadCostMounted   = 0.35  (extra discount when mounted)
-    if (sConfigMgr->GetBoolDefault("Pathfinding.PreferRoads", false))
+    if (sWorld->getBoolConfig(CONFIG_PATHFINDING_PREFER_ROADS))
     {
-        float roadCost = sConfigMgr->GetFloatDefault("Pathfinding.RoadCost", 0.5f);
+        float roadCost = sWorld->getFloatConfig(CONFIG_PATHFINDING_ROAD_COST);
 
         // Mount-aware: a mounted unit gains additional benefit from
         // roads (mount speed buff cleanly applies, no terrain skidding).
         // Apply a tighter cost when the source unit is mounted.
         if (Unit const* sourceUnit = _source ? _source->ToUnit() : nullptr)
             if (sourceUnit->IsMounted())
-                roadCost = sConfigMgr->GetFloatDefault("Pathfinding.RoadCostMounted", 0.35f);
+                roadCost = sWorld->getFloatConfig(CONFIG_PATHFINDING_ROAD_COST_MOUNTED);
 
         _filter.setAreaCost(NAV_AREA_ROAD, roadCost);
     }
@@ -1013,7 +1014,7 @@ void PathGenerator::CreateFilter()
     // a hill for the road bonus alone. Default 0.0 (disabled, stock pathing);
     // the bot module's playerbot.conf sets 1.0:
     //   Pathfinding.SlopeCoefficient = 1.0
-    float slopeCoef = sConfigMgr->GetFloatDefault("Pathfinding.SlopeCoefficient", 0.0f);
+    float slopeCoef = sWorld->getFloatConfig(CONFIG_PATHFINDING_SLOPE_COEFFICIENT);
     _filter.SetSlopeCoefficient(slopeCoef);
 
     // Map-type gate: dungeon/raid instances have spurious "road" tags on

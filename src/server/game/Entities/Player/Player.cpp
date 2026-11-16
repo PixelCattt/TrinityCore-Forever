@@ -4739,7 +4739,7 @@ bool Player::RefuseHardcoreResurrect()
 {
     // Classic 1.60 Hardcore ruleset realm (Classic.Hardcore = 1): death is permanent, no spirit healer, corpse run or resurrection spell
     // brings the character back, also not on game master accounts. Only staff using the .revive command can (SetHardcoreReviveAllowed).
-    if (IsAlive() || m_hardcoreReviveAllowed || !sConfigMgr->GetBoolDefault("Classic.Hardcore", false))
+    if (IsAlive() || m_hardcoreReviveAllowed || !sWorld->getBoolConfig(CONFIG_CLASSIC_HARDCORE))
         return false;
 
     ChatHandler(GetSession()).SendSysMessage("Hardcore: this character has fallen. Death is permanent on this realm.");
