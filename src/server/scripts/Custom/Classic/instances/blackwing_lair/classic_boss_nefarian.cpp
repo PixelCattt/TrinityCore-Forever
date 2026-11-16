@@ -185,7 +185,7 @@ struct classic_boss_nefarian : public ScriptedAI
         if (uiType != POINT_MOTION_TYPE)
             return;
 
-        // The landing flight, step by step: in chris's dev raids 2026-11-14 (13:30, 15:10) he stood at -7535,-1251 hitting the raid for 25 s
+        // The landing flight, step by step: in Karrz's dev raids 2026-11-14 (13:30, 15:10) he stood at -7535,-1251 hitting the raid for 25 s
         // and nobody could attack him, short of point 2 (-7496,-1252), so the flight never reached its end there.
         TC_LOG_INFO("scripts.classic", "BWL Nefarian reached landing point {} at {:.1f},{:.1f},{:.1f}", uiPointId, me->GetPositionX(), me->GetPositionY(),
                     me->GetPositionZ());

@@ -1012,7 +1012,7 @@ enum ClassicDMKnotThimblejack
     QUEST_FREE_KNOT_REPEATABLE  = 7429,
 
     // npc_text of his own (2026_11_16_04_world_classic_scripted_npc_texts.sql): Classic's 6795 / 6883 are not in this world,
-    // and a gossip with a missing text never opened on the client, so right-clicking him did nothing at all (chris 11-16).
+    // and a gossip with a missing text never opened on the client, so right-clicking him did nothing at all (Karrz 11-16).
     GOSSIP_MENU_1               = 91014338, // "Please, please, please tell me you are here to get me out of these shackles..." (9220)
     GOSSIP_MENU_2               = 91014339, // "Well, from what I've gathered while waiting to be eaten by these yokels..." (9369)
 

@@ -65,7 +65,7 @@ std::unordered_set<uint32> const BlockedServerOpcodes =
     SMSG_HEALTH_UPDATE,     // does not exist in Classic (health is sent through UnitData)
     SMSG_GUILD_CHALLENGE_COMPLETED, // does not exist in Classic (guild switch has one case less, see TranslateServerOpcode)
     // Classic has no guild challenges, but the client still asks for them (CMSG_GUILD_CHALLENGE_UPDATE_REQUEST) when the guild
-    // window refreshes. Our answer goes out on Classic index 0x1A, which the 70938 client reads as "challenge completed": chris
+    // window refreshes. Our answer goes out on Classic index 0x1A, which the 70938 client reads as "challenge completed": Karrz
     // 2026-11-16 got "Guild Dungeon Challenge complete! Guild has earned 0 gold." right after a guild invite, with the guild window
     // open (the 96-byte answer starts with zero counts). Classic has nothing to answer with, so the answer is not sent.
     SMSG_GUILD_CHALLENGE_UPDATE,

@@ -1991,7 +1991,7 @@ enum OmarionMisc
 
     GOSSIP_MENU_INTRO   = 8507,
     // "Perhaps I can teach you something..." (BroadcastText 12258). Classic's npc_text 8508 is another NPC's line in this world
-    // (chris 11-16: "I'm sure that help from Farstrider Enclave will be here soon..."), so the text has an id of its own
+    // (Karrz 11-16: "I'm sure that help from Farstrider Enclave will be here soon..."), so the text has an id of its own
     // (2026_11_16_04_world_classic_scripted_npc_texts.sql).
     GOSSIP_MENU_CRAFTER = 91016365,
     GOSSIP_MENU_NOCRAFT = 8516,
@@ -2090,7 +2090,7 @@ struct classic_mob_craftsman_omarion : public ScriptedAI
     }
 
     // One profession's page: every pattern the player's reputation allows and that they do not know yet, then "I need to go".
-    // Each line checks its own recipe, so learning one leaves the others on the page (chris 11-16: after Glacial Gloves the
+    // Each line checks its own recipe, so learning one leaves the others on the page (Karrz 11-16: after Glacial Gloves the
     // page held only "I need to go").
     void SendPatternPage(Player* player, uint32 profession)
     {

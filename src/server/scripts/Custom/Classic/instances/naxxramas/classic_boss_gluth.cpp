@@ -128,7 +128,7 @@ struct classic_boss_gluth : public ScriptedAI
     {
         // He should aggro just at the edge of the sewer pipe players jump from. Only a player in his own room: the
         // 49 y reach goes through the wall into Patchwerk's room (one floor lower, ~294 against his ~297.8), and a
-        // raid fighting Patchwerk pulled him in (chris 11-15: "2 bosses on us").
+        // raid fighting Patchwerk pulled him in (Karrz 11-15: "2 bosses on us").
         if (pWho->GetTypeId() == TYPEID_PLAYER
             && !me->IsInCombat()
             && me->IsWithinDistInMap(pWho, 49.0f)
