@@ -4182,7 +4182,21 @@ void Map::SendZoneDynamicInfo(uint32 zoneId, Player* player) const
 
     SendZoneWeather(itr->second, player);
 
-    for (ZoneDynamicInfo::LightOverride const& lightOverride : itr->second.LightOverrides)
+    SendZoneLightOverrides(itr->second, player);
+}
+
+void Map::SendZoneLightOverrides(uint32 zoneId, Player* player) const
+{
+    auto itr = _zoneDynamicInfo.find(zoneId);
+    if (itr == _zoneDynamicInfo.end())
+        return;
+
+    SendZoneLightOverrides(itr->second, player);
+}
+
+void Map::SendZoneLightOverrides(ZoneDynamicInfo const& zoneDynamicInfo, Player* player) const
+{
+    for (ZoneDynamicInfo::LightOverride const& lightOverride : zoneDynamicInfo.LightOverrides)
     {
         WorldPackets::Misc::OverrideLight overrideLight;
         overrideLight.AreaLightID = lightOverride.AreaLightId;
@@ -4304,11 +4318,19 @@ void Map::SetZoneOverrideLight(uint32 zoneId, uint32 areaLightId, uint32 overrid
         lightOverride.TransitionMilliseconds = static_cast<uint32>(transitionTime.count());
     }
 
-    WorldPackets::Misc::OverrideLight overrideLight;
-    overrideLight.AreaLightID = areaLightId;
-    overrideLight.OverrideLightID = overrideLightId;
-    overrideLight.TransitionMilliseconds = static_cast<uint32>(transitionTime.count());
-    SendZoneMessage(zoneId, overrideLight.Write());
+    // when the zone's light ends, a player who keeps their own sky (.time day / night) goes back to that sky, not the map's light
+    for (MapReference const& ref : GetPlayers())
+    {
+        Player* player = ref.GetSource();
+        if (!player->IsInWorld() || player->GetZoneId() != zoneId)
+            continue;
+
+        WorldPackets::Misc::OverrideLight overrideLight;
+        overrideLight.AreaLightID = areaLightId;
+        overrideLight.OverrideLightID = overrideLightId ? int32(overrideLightId) : player->GetSkyOverrideLight(areaLightId);
+        overrideLight.TransitionMilliseconds = static_cast<uint32>(transitionTime.count());
+        player->SendDirectMessage(overrideLight.Write());
+    }
 }
 
 void Map::UpdateAreaDependentAuras()

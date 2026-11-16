@@ -42,6 +42,22 @@ namespace DayCycle
         return v == uint8(SkyMode::Day) ? SkyMode::Day : v == uint8(SkyMode::Night) ? SkyMode::Night : SkyMode::Auto;
     }
 
+    // The client takes a new clock in the middle of a session (its clock shows it) but does not light the world again from
+    // it: the sky changes only at the next login. So .time day / night also put a fixed light over every area light of the
+    // map (SMSG_OVERRIDE_LIGHT, the same packet scripted events use to darken a zone). Two Light.db2 records of the Forever
+    // client whose LightParams have a single LightData keyframe, so they look the same at any hour: 15377 (map 2940, its
+    // global light, params 6730) is daylight, 16854 (map 2991, params 7601) is night. Found and tried in game by SIN
+    // (Personal Day and Night pack, 0.1.35).
+    constexpr int32 DayLightID = 15377;
+    constexpr int32 NightLightID = 16854;
+    constexpr int32 LightTransitionMs = 200;
+
+    // the light put over the map's area lights for a sky mode; 0: none, the map's own lights
+    constexpr int32 OverrideLightFor(SkyMode mode)
+    {
+        return mode == SkyMode::Day ? DayLightID : mode == SkyMode::Night ? NightLightID : 0;
+    }
+
     // the client's speed for the realm clock: game minutes per real second
     constexpr float NormalSpeed = 0.01666667f;
 

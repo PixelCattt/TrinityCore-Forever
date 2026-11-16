@@ -1288,6 +1288,11 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         void SendDayCycle() const;
         DayCycle::SkyMode GetSkyMode() const;
         void SetSkyMode(DayCycle::SkyMode mode);   // saved at once and sent
+        // .time day / night: a fixed light over every area light of the map (the client does not light the world again from
+        // a new clock); restore: give the map its own lights back (.time auto). Open world maps only.
+        void SendSkyLights(bool restore = false);
+        // the light this player's sky puts over an area light of the map they are on; 0: none
+        int32 GetSkyOverrideLight(uint32 areaLightId) const;
         void SendSupercededSpell(uint32 oldSpell, uint32 newSpell) const;
         void SendTransferAborted(uint32 mapid, TransferAbortReason reason, uint8 arg = 0, int32 mapDifficultyXConditionID = 0) const;
 

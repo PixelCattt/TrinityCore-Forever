@@ -556,6 +556,8 @@ class TC_GAME_API Map : public GridRefManager<NGridType>
         void SendRemoveTransports(Player* player);
         void SendUpdateTransportVisibility(Player* player);
         void SendZoneDynamicInfo(uint32 zoneId, Player* player) const;
+        void SendZoneLightOverrides(uint32 zoneId, Player* player) const;
+        void SendZoneLightOverrides(ZoneDynamicInfo const& zoneDynamicInfo, Player* player) const;
         void SendZoneWeather(uint32 zoneId, Player* player) const;
         void SendZoneWeather(ZoneDynamicInfo const& zoneDynamicInfo, Player* player) const;
         void SendZoneText(uint32 zoneId, const char* text, WorldSession const* self = nullptr, Optional<Team> team = { }) const;

@@ -26570,6 +26570,48 @@ void Player::SetSkyMode(DayCycle::SkyMode mode)
     CharacterDatabase.Execute(stmt);
 
     SendDayCycle();
+    if (IsInWorld())
+    {
+        SendSkyLights(true);
+        GetMap()->SendZoneLightOverrides(GetZoneId(), this);   // a zone's scripted light (an event darkening it) still wins
+    }
+}
+
+int32 Player::GetSkyOverrideLight(uint32 areaLightId) const
+{
+    if (!IsInWorld() || GetMap()->Instanceable())
+        return 0;
+
+    int32 const skyLight = DayCycle::OverrideLightFor(GetSkyMode());
+    if (!skyLight || !sLightStore.HasRecord(skyLight))
+        return 0;
+
+    LightEntry const* areaLight = sLightStore.LookupEntry(areaLightId);
+    if (!areaLight || areaLight->ContinentID != int32(GetMapId()) || int32(areaLightId) == skyLight)
+        return 0;
+
+    return skyLight;
+}
+
+void Player::SendSkyLights(bool restore /*= false*/)
+{
+    if (!IsInWorld() || GetMap()->Instanceable())
+        return;
+
+    if (!restore && DayCycle::OverrideLightFor(GetSkyMode()) == 0)
+        return;
+
+    for (LightEntry const* light : sLightStore)
+    {
+        if (light->ContinentID != int32(GetMapId()))
+            continue;
+
+        WorldPackets::Misc::OverrideLight overrideLight;
+        overrideLight.AreaLightID = light->ID;
+        overrideLight.OverrideLightID = GetSkyOverrideLight(light->ID);
+        overrideLight.TransitionMilliseconds = DayCycle::LightTransitionMs;
+        SendDirectMessage(overrideLight.Write());
+    }
 }
 
 void Player::SendInitialPacketsAfterAddToMap()
@@ -26592,6 +26634,7 @@ void Player::SendInitialPacketsAfterAddToMap()
     // update zone
     uint32 newzone, newarea;
     GetZoneAndAreaId(newzone, newarea);
+    SendSkyLights();                                         // before UpdateZone: the zone's scripted lights win
     UpdateZone(newzone, newarea);                            // also call SendInitWorldStates();
 
     GetSession()->SendLoadCUFProfiles();
