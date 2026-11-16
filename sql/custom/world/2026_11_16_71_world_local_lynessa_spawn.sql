@@ -1,5 +1,5 @@
 -- Sentinel Lynessa Duskblossom (275744), Teldrassil: SIN's fix (his Forever Bots 0.1.35 pack "Ban'ethil Barrow Den spawn
--- fix", apply.sql, chris 2026-11-16: swap to his). Her three-spot pool 1302288 as it was in 0.1.35 (2026_11_05_99), with spot
+-- fix", apply.sql, Karrz 2026-11-16: swap to his). Her three-spot pool 1302288 as it was in 0.1.35 (2026_11_05_99), with spot
 -- 27574402 moved to the floor a player picked in game (9870.52, 1557.70, 1329.29, facing 5.34).
 -- Only what is needed to run here: our 0.1.36 file 2026_11_12_25 deleted spots 27574401/27574402, moved 27574400 down into the
 -- den and dropped the pool. Those rows come back first exactly as 2026_11_05_99 had them; then his file runs unchanged.

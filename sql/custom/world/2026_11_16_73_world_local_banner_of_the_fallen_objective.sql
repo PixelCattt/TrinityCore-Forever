@@ -1,4 +1,4 @@
--- Banner of the Fallen (86585): SIN's quest rows (Quest and World Fixes for 0.1.36, his 2026_11_14_01, chris 2026-11-16: put
+-- Banner of the Fallen (86585): SIN's quest rows (Quest and World Fixes for 0.1.36, his 2026_11_14_01, Karrz 2026-11-16: put
 -- them in as he wrote them). His statements, unchanged. On our data the quest, its addon, level, giver and ender already exist
 -- (2026_11_13_41), so those inserts change nothing; the one new row is his kill objective 99086585 (Headsplitter 269185,
 -- StorageIndex 0), next to our live objectives 475904 (the banner, StorageIndex 0) and 475960 (Headsplitter, StorageIndex 1).
