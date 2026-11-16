@@ -128,6 +128,12 @@ static constexpr CampFeature CampFeatures[] =
     { 612087, false, SPELL_BOOSTED_INTELLECT },     // Greenhouse (1307248), over an Incense Candle
     { 612136, false, SPELL_EXTRA_STRENGTH },        // Master Forge (1307261), over a Sharpening Wheel
     { 612110, false, SPELL_BOOSTED_STAMINA },       // Plague Doctor's Laboratory (1307265), over a First Aid Kit
+    // the other four tier 2/3 features were missing, so a camp that had upgraded its Lute, Chair, Banner or Lodestone lost that buff
+    // and the rest only started over (Discord, 6_1_8_8_1 2026-11-16: "the timer resets instead of applying")
+    { 612130, false, SPELL_BOOSTED_STATS_LUTE },    // Arcane Salvager (1307223), over an Enchanted Lute
+    { 612088, false, SPELL_BOOSTED_CRIT },          // Field Guide (1307243), over a Camp Chair
+    { 612142, false, SPELL_BOOSTED_SPIRIT },        // Loom (1307255), over a Faction Banner
+    { 612134, false, SPELL_BOOSTED_ATTACK_POWER },  // Molten Foundry (1307264), over a Lodestone
 };
 
 // The buffs scale with level in steps (client tooltips: "$?$PL<12[3]?$PL<24[8]...[$1230124s1]"); the spell's own value is the
