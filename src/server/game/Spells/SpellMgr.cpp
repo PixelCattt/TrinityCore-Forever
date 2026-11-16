@@ -3969,6 +3969,62 @@ void SpellMgr::LoadSpellInfoCorrections()
         spellInfo->AuraInterruptFlags &= ~SpellAuraInterruptFlags::EnteringCombat;
     });
 
+    // Classic 1.60 world buffs: the client's spells are dummy auras that only carry the numbers; live puts the effect on a hidden copy
+    // (Rallying Cry 1304452, Warchief's Blessing 1304594, Slip'kik's Savvy 1304751). Each dummy effect becomes the aura the copy has.
+    // Rallying Cry of the Dragonslayer: crit chance of all spells and attacks, attack power, ranged attack power, spell damage, healing
+    ApplySpellFix({ 22888 }, [](SpellInfo* spellInfo)
+    {
+        ApplySpellEffectFix(spellInfo, EFFECT_0, [](SpellEffectInfo* spellEffectInfo)
+        {
+            spellEffectInfo->ApplyAuraName = SPELL_AURA_MOD_CRIT_PCT;
+        });
+        ApplySpellEffectFix(spellInfo, EFFECT_1, [](SpellEffectInfo* spellEffectInfo)
+        {
+            spellEffectInfo->ApplyAuraName = SPELL_AURA_MOD_ATTACK_POWER;
+        });
+        ApplySpellEffectFix(spellInfo, EFFECT_2, [](SpellEffectInfo* spellEffectInfo)
+        {
+            spellEffectInfo->ApplyAuraName = SPELL_AURA_MOD_RANGED_ATTACK_POWER;
+        });
+        ApplySpellEffectFix(spellInfo, EFFECT_3, [](SpellEffectInfo* spellEffectInfo)
+        {
+            spellEffectInfo->ApplyAuraName = SPELL_AURA_MOD_DAMAGE_DONE;
+            spellEffectInfo->MiscValue = SPELL_SCHOOL_MASK_MAGIC;
+        });
+        ApplySpellEffectFix(spellInfo, EFFECT_4, [](SpellEffectInfo* spellEffectInfo)
+        {
+            spellEffectInfo->ApplyAuraName = SPELL_AURA_MOD_HEALING_DONE;
+            spellEffectInfo->MiscValue = SPELL_SCHOOL_MASK_MAGIC;
+        });
+    });
+
+    // Warchief's Blessing: health, 15% haste to all spells and attacks (live's copy: melee and ranged haste plus cast speed), mana per 5 sec
+    ApplySpellFix({ 16609 }, [](SpellInfo* spellInfo)
+    {
+        ApplySpellEffectFix(spellInfo, EFFECT_0, [](SpellEffectInfo* spellEffectInfo)
+        {
+            spellEffectInfo->ApplyAuraName = SPELL_AURA_MOD_INCREASE_HEALTH;
+        });
+        ApplySpellEffectFix(spellInfo, EFFECT_1, [](SpellEffectInfo* spellEffectInfo)
+        {
+            spellEffectInfo->ApplyAuraName = SPELL_AURA_MELEE_SLOW;
+        });
+        ApplySpellEffectFix(spellInfo, EFFECT_2, [](SpellEffectInfo* spellEffectInfo)
+        {
+            spellEffectInfo->ApplyAuraName = SPELL_AURA_MOD_POWER_REGEN;
+            spellEffectInfo->MiscValue = POWER_MANA;
+        });
+    });
+
+    // Slip'kik's Savvy: crit chance of all spells and attacks
+    ApplySpellFix({ 22820 }, [](SpellInfo* spellInfo)
+    {
+        ApplySpellEffectFix(spellInfo, EFFECT_0, [](SpellEffectInfo* spellEffectInfo)
+        {
+            spellEffectInfo->ApplyAuraName = SPELL_AURA_MOD_CRIT_PCT;
+        });
+    });
+
     // Classic 1.60 warrior Deep Wounds: the bleed tick (412613) never misses, never crits and ignores armor
     ApplySpellFix({ 412613 }, [](SpellInfo* spellInfo)
     {
