@@ -25845,7 +25845,9 @@ bool Player::CombatPlateHidden(Unit const* unit, Pet const* pet) const
         return false;
     if (unit->HasUnitFlag(UNIT_FLAG_FORCE_NAMEPLATE) || unit->HasUnitFlag3(UNIT_FLAG3_FORCE_HIDE_NAMEPLATE))
         return false;
-    if (!IsValidAttackTarget(unit))
+    // A mob that died is no longer a valid attack target, and its plate came back as a large grey name over the corpse mid-fight
+    // (chris 11-16, a Noxious Plaguebat in the Eastern Plaguelands). A corpse is out of every fight: an unfriendly one stays hidden.
+    if (unit->IsAlive() ? !IsValidAttackTarget(unit) : IsFriendlyTo(unit))
         return false;
     auto fights = [unit](Unit const* side)
     {
