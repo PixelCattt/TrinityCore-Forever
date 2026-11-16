@@ -660,11 +660,15 @@
     { 0x450006, 0x440006 }, // CMSG_PING (0.0)
     { 0x450007, 0x440007 }, // CMSG_LOG_DISCONNECT (0.0)
     { 0x450008, 0x440008 }, // CMSG_SUSPEND_TOKEN_RESPONSE (3.8)
-    { 0x45000A, 0x440009 }, // CMSG_ENABLE_NAGLE (0.0)
-    { 0x45000B, 0x44000A }, // CMSG_QUEUED_MESSAGES_END (0.0)
-    { 0x45000D, 0x44000B }, // CMSG_LOG_STREAMING_ERROR (0.0)
-    { 0x45000E, 0x44000D }, // CMSG_QUERY_PLAYER_NAME_BY_COMMUNITY_ID (0.0)
-    { 0x45000F, 0x44000E }, // CMSG_QUERY_PLAYER_NAMES_FOR_COMMUNITY (0.0)
+    // 0x450009-0x45000F use retail's index (they were one place too high before 0.1.37). Live 70938 capture 2026-11-15: the client
+    // sends 0x46000A (0x45000A here) right after every SMSG_RESUME_COMMS with a 4-byte rising client time = CMSG_QUEUED_MESSAGES_END.
+    // Read as ENABLE_NAGLE it switched Nagle on after each loading screen and HandleQueuedMessagesEnd never ran.
+    { 0x450009, 0x440009 }, // CMSG_ENABLE_NAGLE
+    { 0x45000A, 0x44000A }, // CMSG_QUEUED_MESSAGES_END
+    { 0x45000B, 0x44000B }, // CMSG_LOG_STREAMING_ERROR
+    { 0x45000D, 0x44000D }, // CMSG_QUERY_PLAYER_NAME_BY_COMMUNITY_ID
+    { 0x45000E, 0x44000E }, // CMSG_QUERY_PLAYER_NAMES_FOR_COMMUNITY
+    { 0x45000F, 0x44000F }, // CMSG_LATENCY_REPORT (the client answers SMSG_LATENCY_REPORT_PING with it)
     // 0x450010 is CMSG_QUERY_PLAYER_NAMES, not LATENCY_REPORT: PC capture 2026-10-05 (70205), sent right after another
     // player's create with uint32 count 1 + that player's packed guid; unanswered, every other player showed as "Unknown".
     // Indices match retail again from here, so 0x450011 falls to the default mapping (retail 0x440011).
