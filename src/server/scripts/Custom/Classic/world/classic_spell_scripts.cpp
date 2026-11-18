@@ -422,8 +422,11 @@ class classic_spell_pal_judgement_of_command : public SpellScript
 
 // 5373, 1826 - Judgement of Light / Judgement of Wisdom "Intermediate": the judgement debuff (20185, 20186 and their ranks) procs this dummy
 // from the judged enemy at whoever hits it, and nothing turned it into the heal or the mana (the client spell does neither itself). The rank's
-// own spell (20267 / 20341-20343 heal, 20268 / 20352-20353 mana) is cast by the paladin that judged, so its talents (Improved Judgement of
-// Light) and healing modifiers apply; the vanilla amounts are in those spells.
+// own spell (20267 / 20341-20343 heal, 20268 / 20352-20353 mana) targets its own caster (ImplicitTarget 1), so the attacker casts it on
+// itself, with the paladin that judged as the original caster for credit. The client gives those spells no class mask and no bonus
+// coefficient, so no talent or healing modifier of the paladin's could change them; the vanilla amounts are in those spells. A proc
+// cast never sets the original caster, so GetOriginalCaster() here is the judged enemy itself: the old code had it cast the
+// self-targeted heal / mana, which went to the enemy (Discord, dumpins 2026-11-17).
 class classic_spell_pal_judgement_intermediate : public SpellScript
 {
     static uint32 GetRankSpell(bool light, uint32 debuffId)
@@ -467,10 +470,9 @@ class classic_spell_pal_judgement_intermediate : public SpellScript
             if (!rankSpell)
                 continue;
 
-            Unit* paladin = GetOriginalCaster();
-            if (!paladin)
-                paladin = aurApp->GetBase()->GetCaster();
-            (paladin ? paladin : judged)->CastSpell(attacker, rankSpell, CastSpellExtraArgs(TRIGGERED_FULL_MASK).SetTriggeringSpell(GetSpell()));
+            attacker->CastSpell(attacker, rankSpell, CastSpellExtraArgs(TRIGGERED_FULL_MASK)
+                .SetOriginalCaster(aurApp->GetBase()->GetCasterGUID())
+                .SetTriggeringSpell(GetSpell()));
             break;
         }
     }

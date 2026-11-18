@@ -2394,6 +2394,12 @@ void ScriptMgr::OnGroupSubgroupChange(Group* group, ObjectGuid guid, uint8 subgr
     FOREACH_SCRIPT(GroupScript)->OnSubgroupChange(group, guid, subgroup);
 }
 
+void ScriptMgr::OnGroupMemberRoleSet(Group* group, ObjectGuid setter, ObjectGuid target, uint8 oldRole, uint8 newRole)
+{
+    ASSERT(group);
+    FOREACH_SCRIPT(GroupScript)->OnMemberRoleSet(group, setter, target, oldRole, newRole);
+}
+
 // Unit
 void ScriptMgr::OnHeal(Unit* healer, Unit* reciever, uint32& gain)
 {
@@ -3373,6 +3379,10 @@ void GroupScript::OnDisband(Group* /*group*/)
 }
 
 void GroupScript::OnSubgroupChange(Group* /*group*/, ObjectGuid /*guid*/, uint8 /*subgroup*/)
+{
+}
+
+void GroupScript::OnMemberRoleSet(Group* /*group*/, ObjectGuid /*setter*/, ObjectGuid /*target*/, uint8 /*oldRole*/, uint8 /*newRole*/)
 {
 }
 

@@ -4114,6 +4114,9 @@ void Spell::EffectCharge()
             Position pos = unitTarget->GetFirstCollisionPosition(unitTarget->GetCombatReach(), unitTarget->GetRelativeAngle(m_caster));
 
             m_preGeneratedPath = std::make_unique<PathGenerator>(unitCaster);
+            m_preGeneratedPath->SetSlopeCoefficient(0.0f);  // shortest way, as in Spell::CheckCast for charges
+            m_preGeneratedPath->SetDisableRoadBonus(true);
+            m_preGeneratedPath->SetIgnoreLiquidRouteCheck(true);  // straight at the target, a bot's liquid avoidance aside
             m_preGeneratedPath->CalculatePath(pos.GetPositionX(), pos.GetPositionY(), pos.GetPositionZ(), false);
         }
 

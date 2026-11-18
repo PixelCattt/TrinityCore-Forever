@@ -116,3 +116,61 @@ TEST_CASE("Environment variables", "[Config]")
 
     std::remove(filePath.c_str());
 }
+
+namespace
+{
+    std::string WriteTempConfig(std::string const& text)
+    {
+        auto path = boost::filesystem::temp_directory_path() / boost::filesystem::unique_path("deleteme-%%%%-%%%%.conf");
+        std::ofstream stream(path.c_str());
+        stream << text;
+        return path.string();
+    }
+}
+
+// Drop-in files (worldserver.conf.d/*.conf, modules) are merged into the main config by LoadAdditionalFile. A file without a
+// [section] header lost every key: its first key was read as the section.
+TEST_CASE("Drop-in config files", "[Config]")
+{
+    std::string mainFile = WriteTempConfig("[worldserver]\nMain.Key = 1\n");
+    std::string err;
+    REQUIRE(sConfigMgr->LoadInitial(mainFile, std::vector<std::string>(), err));
+
+    SECTION("with one section header")
+    {
+        std::string dropIn = WriteTempConfig("[playerbot]\nDropIn.Sectioned = 7\nDropIn.SectionedToo = 8\n");
+        REQUIRE(sConfigMgr->LoadAdditionalFile(dropIn, false, err));
+        REQUIRE(sConfigMgr->GetIntDefault("DropIn.Sectioned", 0) == 7);
+        REQUIRE(sConfigMgr->GetIntDefault("DropIn.SectionedToo", 0) == 8);
+        std::remove(dropIn.c_str());
+    }
+
+    SECTION("without a section header")
+    {
+        std::string dropIn = WriteTempConfig("DropIn.Flat = 5\nDropIn.FlatToo = 6\n");
+        REQUIRE(sConfigMgr->LoadAdditionalFile(dropIn, false, err));
+        REQUIRE(sConfigMgr->GetIntDefault("DropIn.Flat", 0) == 5);
+        REQUIRE(sConfigMgr->GetIntDefault("DropIn.FlatToo", 0) == 6);
+        std::remove(dropIn.c_str());
+    }
+
+    SECTION("with one key and no section header")
+    {
+        std::string dropIn = WriteTempConfig("DropIn.Single = 9\n");
+        REQUIRE(sConfigMgr->LoadAdditionalFile(dropIn, false, err));
+        REQUIRE(sConfigMgr->GetIntDefault("DropIn.Single", 0) == 9);
+        std::remove(dropIn.c_str());
+    }
+
+    SECTION("with two section headers")
+    {
+        std::string dropIn = WriteTempConfig("[first]\nDropIn.First = 3\n[second]\nDropIn.Second = 4\n");
+        REQUIRE(sConfigMgr->LoadAdditionalFile(dropIn, false, err));
+        REQUIRE(sConfigMgr->GetIntDefault("DropIn.First", 0) == 3);
+        REQUIRE(sConfigMgr->GetIntDefault("DropIn.Second", 0) == 4);
+        std::remove(dropIn.c_str());
+    }
+
+    REQUIRE(sConfigMgr->GetIntDefault("Main.Key", 0) == 1);
+    std::remove(mainFile.c_str());
+}

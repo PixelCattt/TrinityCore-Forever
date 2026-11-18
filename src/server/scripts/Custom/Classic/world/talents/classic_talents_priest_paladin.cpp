@@ -813,13 +813,18 @@ class classic_spell_pal_reckoning : public AuraScript
 };
 
 // 1326084 - Reckoning (stored extra attacks): the next melee swing of the paladin, whatever its outcome, uses every stack as an extra attack.
+// Unit::Update swings the queued extra attacks only while a last extra attack spell is set; the add extra attacks effect sets it when it
+// casts (Spell::cast), this script has to set it itself. Without it the stacks were used up but no extra attack came (Discord, dumpins
+// 2026-11-17), and the stale queue then kept Windfury and the other extra attack procs from adding theirs.
 class classic_spell_pal_reckoning_stored : public AuraScript
 {
     void HandleProc(AuraEffect const* /*aurEff*/, ProcEventInfo& /*eventInfo*/)
     {
         uint8 const attacks = GetStackAmount();
+        uint32 const spellId = GetId();
         Unit* paladin = GetTarget();
         Remove();
+        paladin->SetLastExtraAttackSpell(spellId);
         paladin->AddExtraAttacks(attacks);
     }
 

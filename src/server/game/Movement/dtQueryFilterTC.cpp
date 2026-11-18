@@ -51,6 +51,16 @@ namespace
 
 dtQueryFilterTC::dtQueryFilterTC() = default;
 
+bool dtQueryFilterTC::passFilter(dtPolyRef ref, dtMeshTile const* tile, dtPoly const* poly) const
+{
+    if (!dtQueryFilter::passFilter(ref, tile, poly))
+        return false;
+    for (dtPolyRef const excluded : _excludedPolys)
+        if (excluded == ref)
+            return false;
+    return true;
+}
+
 void dtQueryFilterTC::BeginPathStats() const
 {
     _maxSlopeFactorThisPath = 1.0f;

@@ -22,6 +22,12 @@
 #include "MapUtils.h"
 #include "World.h"
 
+namespace
+{
+// TactKey.db2
+constexpr uint32 TactKeyTableHash = 0xDF2F53CF;
+}
+
 void WorldSession::HandleDBQueryBulk(WorldPackets::Hotfix::DBQueryBulk& dbQuery)
 {
     DB2StorageBase const* store = sDB2Manager.GetStorage(dbQuery.TableHash);
@@ -50,6 +56,12 @@ void WorldSession::HandleDBQueryBulk(WorldPackets::Hotfix::DBQueryBulk& dbQuery)
         {
             TC_LOG_TRACE("network", "CMSG_DB_QUERY_BULK: {} requested non-existing entry {} in datastore: {}", GetPlayerInfo(), record.RecordID, dbQuery.TableHash);
             dbReply.Timestamp = GameTime::GetGameTime();
+
+            // A TACT key we don't hold: answer "not public", as live does for every key Blizzard hasn't released. A client
+            // with an empty hotfix cache asks for dozens of them while entering the world, and the 1.60.1.70938 client
+            // crashes (null read) after a batch of Invalid answers for TactKey.
+            if (dbQuery.TableHash == TactKeyTableHash)
+                dbReply.Status = DB2Manager::HotfixRecord::Status::NotPublic;
         }
 
         SendPacket(dbReply.Write());

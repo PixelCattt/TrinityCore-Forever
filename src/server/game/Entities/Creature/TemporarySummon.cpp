@@ -250,6 +250,15 @@ void TempSummon::InitStats(WorldObject* summoner, Milliseconds duration)
             // Classic 1.60 (vanilla): a creature's summoned pet, guardian or totem has the caster's level (plus the spell's offset), not the fixed
             // vanilla level of its creature (VMaNGOS Spell::EffectSummonPet / EffectSummonGuardian): Twilight Shadowmages (26) summoned level 47 voidwalkers
             bool classicCasterLevel = false;
+            // A totem always has its caster's level (VMaNGOS Totem::Summon: SetLevel(owner->GetLevel())). The vanilla level of the totem's creature
+            // is the level of the spell rank that summons it, so a level 40 shaman's Stoneskin Totem was level 9 and its Searing Totem level 19 at
+            // any caster level: mobs drew a level 9 totem from 15 + 11 yards away and went for it instead of the player (6_1_8_8_1, Discord bugs 3
+            // #6 "totems have an unusually large aggro range"), and a low totem's spells missed and were resisted far more.
+            if (IsTotem() && sObjectMgr->GetCreatureClassicLevel(GetEntry()))
+            {
+                level = uint8(std::clamp<int32>(unitSummoner->GetLevel(), 1, STRONG_MAX_LEVEL));
+                classicCasterLevel = true;
+            }
             if (unitSummoner->IsCreature() && !unitSummoner->IsCharmedOwnedByPlayerOrPlayer() && sObjectMgr->GetCreatureClassicLevel(GetEntry()))
             {
                 if (int8 const* offset = sObjectMgr->GetSpellClassicSummonLevelOffset(m_unitData->CreatedBySpell))
@@ -261,6 +270,16 @@ void TempSummon::InitStats(WorldObject* summoner, Milliseconds duration)
                         classicCasterLevel = true;
                     }
                 }
+            }
+
+            // Classic 1.60 (vanilla): a player's totem has the player's level (cMaNGOS / VMaNGOS EffectSummonTotem: the totem's level is the
+            // caster's). A totem template whose content tuning holds it to a low level made a level 1 totem, and a creature's aggro radius
+            // grows a yard for every level its target is below it (Creature::GetAttackDistance, up to 45 yd): mobs ran at a shaman's
+            // Stoneskin Totem from across the camp (Discord 2026-11-16, "totems with a huge aggro range").
+            if (!classicCasterLevel && IsTotem() && unitSummoner->IsPlayer())
+            {
+                level = std::max<uint8>(unitSummoner->GetLevel(), 1);
+                classicCasterLevel = true;
             }
 
             ApplyLevelScaling(unitSummoner->m_unitData->ContentTuningID, unitSummoner->m_unitData->ScalingLevelDelta);

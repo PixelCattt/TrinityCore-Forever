@@ -25,10 +25,14 @@
 #include "Item.h"
 #include "ItemTemplate.h"
 #include "Log.h"
+#include "ObjectMgr.h"
 #include "Random.h"
+#include "StringConvert.h"
 #include "StringFormat.h"
+#include "Util.h"
 #include "World.h"
 #include <algorithm>
+#include <unordered_set>
 
 namespace AuctionBotBuyerPolicy
 {
@@ -43,6 +47,9 @@ namespace
     bool _fair = false;
     float _fairMinChance = 35.0f;     // percent at the price cap
     uint32 _dropFloorPerLevel = 0;    // copper per item level, 0 = off
+    bool _excludeVendorItems = false;
+    std::unordered_set<uint32> _vendorItems;      // sold for gold by a spawned vendor with unlimited stock
+    std::unordered_set<uint32> _excludedItemIds;  // AuctionHouseBot.Buyer.ExcludeItemIDs
 
     time_t _dayStart = 0;
     uint64 _spentToday = 0;
@@ -97,10 +104,54 @@ namespace
     // (the same stand-in the seller uses when an item has no buy price).
     uint64 FairUnitPrice(ItemTemplate const* proto)
     {
+        // a known market price is what the item is worth, also below 1 silver and below the stand-ins
+        // (AuctionHouseBot.Vanilla.MarketPrices); the seller lists at the same price
+        if (uint64 market = AuctionBotVanilla::MarketUnitPrice(proto))
+            return market;
+
         uint64 buy = proto->GetBuyPrice() / std::max<uint32>(1, proto->GetBuyCount());
         uint64 sell = uint64(proto->GetSellPrice()) * 4;
         // the seller's market value when AuctionHouseBot.Vanilla.ValueCurve is on, so the buyer pays what the bot asks
         return std::max<uint64>({ buy, sell, AuctionBotVanilla::UnitValue(proto), SILVER, DropFloor(proto) });
+    }
+
+    // Items any vendor in the world sells for gold without a stock limit (npc_vendor maxcount 0, no extended cost). The buyer's
+    // price never goes below the vendor's own (FairUnitPrice), and with the SILVER and drop floors it pays more than the vendor
+    // asks for cheap goods: a player bought arrows, thread and reagents from vendors and sold them to the buyer, about 8000 gold
+    // on one server (Discord 2026-11-18, Tasko). Limited-stock vendor items stay eligible. Only vendors with a spawn count.
+    void BuildVendorItems()
+    {
+        _vendorItems.clear();
+        std::unordered_set<uint32> spawned;
+        for (auto const& [spawnId, data] : sObjectMgr->GetAllCreatureData())
+            spawned.insert(data.id);
+
+        for (uint32 entry : spawned)
+        {
+            VendorItemData const* items = sObjectMgr->GetNpcVendorItemList(entry);
+            if (!items)
+                continue;
+            for (VendorItem const& item : items->m_items)
+                if (item.Type == ITEM_VENDOR_TYPE_ITEM && !item.maxcount && !item.ExtendedCost)
+                    _vendorItems.insert(item.item);
+        }
+    }
+
+    void ParseExcludedItemIds()
+    {
+        _excludedItemIds.clear();
+        std::string const list = sConfigMgr->GetStringDefault("AuctionHouseBot.Buyer.ExcludeItemIDs", "");
+        for (std::string_view token : Trinity::Tokenize(list, ',', false))
+        {
+            while (!token.empty() && token.front() == ' ')
+                token.remove_prefix(1);
+            while (!token.empty() && token.back() == ' ')
+                token.remove_suffix(1);
+            if (Optional<uint32> itemId = Trinity::StringTo<uint32>(token); itemId && *itemId)
+                _excludedItemIds.insert(*itemId);
+            else if (!token.empty())
+                TC_LOG_ERROR("server.loading", "AuctionHouseBot.Buyer.ExcludeItemIDs: '{}' is not an item id, ignored", token);
+        }
     }
 }
 
@@ -118,9 +169,21 @@ void LoadConfig()
     _fair = sConfigMgr->GetBoolDefault("AuctionHouseBot.Buyer.FairPricing", false);
     _fairMinChance = std::clamp(sConfigMgr->GetFloatDefault("AuctionHouseBot.Buyer.FairMinChance", 35.0f), 0.0f, 100.0f);
     _dropFloorPerLevel = sConfigMgr->GetIntDefault("AuctionHouseBot.Buyer.DropFloorPerLevel", 100);
+    _excludeVendorItems = sConfigMgr->GetBoolDefault("AuctionHouseBot.Buyer.ExcludeUnlimitedVendorItems", true);
+    if (_excludeVendorItems)
+        BuildVendorItems();
+    else
+        _vendorItems.clear();
+    ParseExcludedItemIds();
+    TC_LOG_INFO("ahbot", "AHBot buyer: leaves alone {} unlimited vendor items and {} listed item ids", _vendorItems.size(), _excludedItemIds.size());
 
     TC_LOG_INFO("ahbot", "AHBot buyer: stackable items {}, fair pricing {}, price cap x{:.2f}, delay {}-{} s, max {} per hour, budget {}g a day, drop floor {} copper per item level",
         _stacks ? "on" : "off", _fair ? "on" : "off", _maxPriceMultiplier, _minDelay, _maxDelay, _maxBuysPerHour, _dailyBudget / GOLD, _dropFloorPerLevel);
+}
+
+bool Excluded(uint32 itemId)
+{
+    return _vendorItems.contains(itemId) || _excludedItemIds.contains(itemId);
 }
 
 bool StacksEnabled()

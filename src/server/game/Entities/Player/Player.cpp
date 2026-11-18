@@ -12581,6 +12581,16 @@ Item* Player::EquipItem(uint16 pos, Item* pItem, bool update)
 
             _ApplyItemMods(pItem, slot, true);
 
+            // Classic 1.60: a weapon put in a hand starts that hand's swing from the beginning (vanilla; live's main hand does this, and its
+            // off-hand starting at about 45% is reported as a bug: forever-bugs #126). Our timers kept running through the swap, so a swap
+            // right after a swing gave a free early swing with the new weapon.
+            if (pProto && pProto->GetClass() == ITEM_CLASS_WEAPON)
+            {
+                WeaponAttackType const attType = Player::GetAttackBySlot(slot, pProto->GetInventoryType());
+                if (attType != MAX_ATTACK)
+                    resetAttackTimer(attType);
+            }
+
             if (pProto && IsInCombat() && (pProto->GetClass() == ITEM_CLASS_WEAPON || pProto->GetInventoryType() == INVTYPE_RELIC) && m_weaponChangeTimer == 0)
             {
                 uint32 cooldownSpell = GetClass() == CLASS_ROGUE ? 6123 : 6119;

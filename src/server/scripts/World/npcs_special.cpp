@@ -765,6 +765,8 @@ public:
 ## npc_injured_patient (handles all the patients, no matter Horde or Alliance)
 #####*/
 
+static constexpr float PATIENT_BLEED_PER_MS = 0.05f;
+
 class npc_injured_patient : public CreatureScript
 {
 public:
@@ -781,10 +783,14 @@ public:
         {
             DoctorGUID.Clear();
             Coord = nullptr;
+            Saved = false;
+            BleedCarry = 0.0f;
         }
 
         ObjectGuid DoctorGUID;
         Position const* Coord;
+        bool Saved;
+        float BleedCarry;   // the part of a health point the last ticks lost but could not take yet
 
         void Reset() override
         {
@@ -836,6 +842,7 @@ public:
 
             //regen health
             me->RemoveUnitFlag(UNIT_FLAG_IN_COMBAT);
+            Saved = true;
 
             //stand up
             me->SetStandState(UNIT_STAND_STATE_STAND);
@@ -860,13 +867,21 @@ public:
             }
         }
 
-        void UpdateAI(uint32 /*diff*/) override
+        void UpdateAI(uint32 diff) override
         {
-            //lower HP on every world tick makes it a useful counter, not officlone though
-            if (me->IsAlive() && me->GetHealth() > 6)
-                me->ModifyHealth(-5);
+            // a bandaged patient does not bleed any more
+            if (Saved || !me->IsAlive())
+                return;
 
-            if (me->IsAlive() && me->GetHealth() <= 6)
+            // The patient loses 50 health a second (VMaNGOS, GPL-2.0: 0.05 per ms). It was 5 on every update, so on a 10 ms map update
+            // a patient bled 500 a second, ten times faster, and died before a bandage could finish (Triage, Fox, 17 Nov).
+            BleedCarry += float(diff) * PATIENT_BLEED_PER_MS;
+            uint64 const loss = uint64(BleedCarry);
+            BleedCarry -= float(loss);
+            if (loss && me->GetHealth() > 1 + loss)
+                me->ModifyHealth(-int64(loss));
+
+            if (me->GetHealth() <= 1 + loss)
             {
                 me->RemoveUnitFlag(UNIT_FLAG_IN_COMBAT);
                 me->SetUninteractible(true);

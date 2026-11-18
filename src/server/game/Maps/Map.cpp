@@ -1790,6 +1790,41 @@ bool Map::isInLineOfSight(PhaseShift const& phaseShift, float x1, float y1, floa
     return true;
 }
 
+bool Map::FindClosedDoorOnSegment(PhaseShift const& phaseShift, G3D::Vector3 const& from, G3D::Vector3 const& to, G3D::Vector3& hit) const
+{
+    G3D::Vector3 const delta = to - from;
+    float const length = delta.magnitude();
+    if (length < 0.01f)
+        return false;
+    G3D::Ray const ray = G3D::Ray::fromOriginAndDirection(from, delta / length);
+
+    // every grid the leg's box covers: a long leg (a straight shortcut) can cross a corner grid neither end lies in
+    GridCoord const a = Trinity::ComputeGridCoord(from.x, from.y);
+    GridCoord const b = Trinity::ComputeGridCoord(to.x, to.y);
+    float best = length;
+    bool found = false;
+    for (uint32 gx = std::min(a.x_coord, b.x_coord); gx <= std::max(a.x_coord, b.x_coord); ++gx)
+    {
+        for (uint32 gy = std::min(a.y_coord, b.y_coord); gy <= std::max(a.y_coord, b.y_coord); ++gy)
+        {
+            for (GameObjectModel const* model : GetGameObjectModelsInGrid((MAX_NUMBER_OF_GRIDS - 1) - gx, (MAX_NUMBER_OF_GRIDS - 1) - gy))
+            {
+                if (!model->IsDoor() || !model->IsCollisionEnabled())
+                    continue;
+                float dist = best;
+                if (model->IntersectRay(ray, dist, true, phaseShift, VMAP::ModelIgnoreFlags::Nothing) && dist <= best)
+                {
+                    best = dist;
+                    found = true;
+                }
+            }
+        }
+    }
+    if (found)
+        hit = from + ray.direction() * best;
+    return found;
+}
+
 bool Map::getObjectHitPos(PhaseShift const& phaseShift, float x1, float y1, float z1, float x2, float y2, float z2, float& rx, float& ry, float& rz, float modifyDist)
 {
     G3D::Vector3 startPos(x1, y1, z1);
@@ -2046,17 +2081,31 @@ bool Map::CheckRespawn(RespawnInfo* info)
             // escort check for creatures only (if the world config boolean is set)
             bool const isEscort = (sWorld->getBoolConfig(CONFIG_RESPAWN_DYNAMIC_ESCORTNPC) && data->spawnGroupData->flags & SPAWNGROUP_FLAG_ESCORTQUESTNPC);
 
+            // A spawn has one body: it does not come back while its corpse still lies there. The respawn delay and the corpse decay
+            // are equal for most creatures (Corpse.Decay.Normal 300 s), and a shorter, scaled respawn made the creature stand up again
+            // beside its own corpse ("the corpse came back to life", Discord 2026-11-09, Dun Morogh). The respawn waits for the corpse
+            // to decay or be removed; the corpse keeps its loot until then.
+            bool corpseStillThere = false;
             auto range = _creatureBySpawnIdStore.equal_range(info->spawnId);
             for (auto it = range.first; it != range.second; ++it)
             {
                 Creature* creature = it->second;
                 if (!creature->IsAlive())
+                {
+                    if (creature->getDeathState() == CORPSE && !creature->IsSummon())
+                        corpseStillThere = true;
                     continue;
+                }
                 // escort NPCs are allowed to respawn as long as all other instances are already escorting
                 if (isEscort && creature->IsEscorted())
                     continue;
                 alreadyExists = true;
                 break;
+            }
+            if (!alreadyExists && corpseStillThere)
+            {
+                info->respawnTime = GameTime::GetGameTime() + 1; // look again next second
+                return false;
             }
             break;
         }

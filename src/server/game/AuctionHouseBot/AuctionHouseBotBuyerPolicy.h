@@ -28,6 +28,10 @@ namespace AuctionBotBuyerPolicy
 {
     TC_GAME_API void LoadConfig();
 
+    // Never bought: items a spawned vendor sells for gold with unlimited stock (Buyer.ExcludeUnlimitedVendorItems, on by default),
+    // and the item ids listed in Buyer.ExcludeItemIDs. Only the buyer; the seller is not affected.
+    TC_GAME_API bool Excluded(uint32 itemId);
+
     // Buyer.Commodities (older name Buyer.Stacks): stackable listings (herbs, ore, cloth...) can be bought, always the whole listing.
     TC_GAME_API bool StacksEnabled();
 

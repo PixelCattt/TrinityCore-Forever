@@ -6603,7 +6603,19 @@ SpellCastResult Spell::CheckCast(bool strict, int32* param1 /*= nullptr*/, int32
                     float range = m_spellInfo->GetMaxRange(true, unitCaster, this) * 1.5f + objSize; // can't be overly strict
 
                     m_preGeneratedPath = std::make_unique<PathGenerator>(unitCaster);
-                    m_preGeneratedPath->SetPathLengthLimit(range);
+                    // The path's length is held to the range below, by its real length. A point budget of range / 4 (SetPathLengthLimit)
+                    // stood for it before, but the smoothed path steps less than 4 yd where the navmesh breaks into small polygons, as it
+                    // does along every shore: a charge of 18-23 yd that walks in 1x the straight distance ran out of points there and was
+                    // refused NOPATH (PC chargepath check 2026-11-17: Auberdine, Ratchet, Theramore, Booty Bay).
+                    // A charge takes the shortest way to its target. The slope cost (Pathfinding.SlopeCoefficient, 1.0 in the bot
+                    // configuration) and the road bonus shape walking routes; on a charge they made the path swing round banks and
+                    // slopes, so near water the caster ran along the shore and on uneven ground took a detour and missed the target
+                    // (Discord 2026-11-14, voldemargreed "bugs 5").
+                    m_preGeneratedPath->SetSlopeCoefficient(0.0f);
+                    m_preGeneratedPath->SetDisableRoadBonus(true);
+                    // A bot keeps out of water on its walks (PathGenerator::SetLiquidRouteCheck); its charge does not: the land-only search
+                    // sent a warrior bot charging a mob in the shallows round by the bank.
+                    m_preGeneratedPath->SetIgnoreLiquidRouteCheck(true);
 
                     // first try with raycast, if it fails fall back to normal path
                     bool result = m_preGeneratedPath->CalculatePath(target->GetPositionX(), target->GetPositionY(), target->GetPositionZ(), false);
@@ -6612,6 +6624,8 @@ SpellCastResult Spell::CheckCast(bool strict, int32* param1 /*= nullptr*/, int32
                     else if (!result || m_preGeneratedPath->GetPathType() & (PATHFIND_NOPATH | PATHFIND_INCOMPLETE))
                         return SPELL_FAILED_NOPATH;
                     else if (m_preGeneratedPath->IsInvalidDestinationZ(target)) // Check position z, if not in a straight line
+                        return SPELL_FAILED_NOPATH;
+                    else if (m_preGeneratedPath->GetPathLength() > range) // a detour longer than the charge reaches
                         return SPELL_FAILED_NOPATH;
 
                     m_preGeneratedPath->ShortenPathUntilDist(PositionToVector3(target->GetPosition()), objSize); // move back

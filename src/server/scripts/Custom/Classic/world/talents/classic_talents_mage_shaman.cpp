@@ -831,9 +831,10 @@ class classic_spell_mage_arcane_blast : public SpellScript
     }
 };
 
-// 400588 - Missile Barrage (70532): "Gives your Arcane Blast spell a $m1% chance, your Arcane Missile hits a ${$m1/4}% chance, and your Arcane
-// Wrath, Fireball, Frostbolt, and Frostfire Bolt spells a ${$m1/2}% chance to [give 400589]". The client proc data is a flat 50% on any
-// harmful spell. The spell_proc row sets the chance to 100 and lets the triggered missile hits proc; the chance per spell is rolled here.
+// 400588 - Missile Barrage (70707): "Gives your Arcane Blast spell a $m1% chance, and your Arcane Wrath, Fireball, Frostbolt, Frost Blast,
+// and Frostfire Bolt spells a ${$m1/2}% chance to [give 400589]". The client proc data is a flat 50% on any harmful spell. The spell_proc
+// row sets the chance to 100; the chance per spell is rolled here. The 70532 text also gave Arcane Missile hits a ${$m1/4}% chance; live
+// dropped that, so the missiles of a Missile Barrage no longer give the next one (glacier, Discord 17 Nov).
 class classic_spell_mage_missile_barrage : public AuraScript
 {
     static bool IsHalfChanceSpell(SpellInfo const* spellInfo)
@@ -846,7 +847,7 @@ class classic_spell_mage_missile_barrage : public AuraScript
             default:
                 break;
         }
-        // Fireball (word 0 0x1), Frostbolt (0x20)
+        // Fireball (word 0 0x1), Frostbolt and Frost Blast 1326053-1326055 (0x20)
         return spellInfo->SpellFamilyName == SPELLFAMILY_MAGE && (spellInfo->SpellFamilyFlags[0] & (0x1 | 0x20));
     }
 
@@ -859,8 +860,6 @@ class classic_spell_mage_missile_barrage : public AuraScript
         float const chance = float(aurEff->GetAmount());
         if (spellInfo->SpellFamilyName == SPELLFAMILY_MAGE && (spellInfo->SpellFamilyFlags[0] & 0x20000000))  // Arcane Blast
             return roll_chance(chance);
-        if (spellInfo->SpellFamilyName == SPELLFAMILY_MAGE && (spellInfo->SpellFamilyFlags[0] & 0x200000))    // Arcane Missiles hits
-            return roll_chance(chance / 4.0f);
         if (IsHalfChanceSpell(spellInfo))
             return roll_chance(chance / 2.0f);
         return false;
@@ -869,6 +868,36 @@ class classic_spell_mage_missile_barrage : public AuraScript
     void Register() override
     {
         DoCheckEffectProc += AuraCheckEffectProcFn(classic_spell_mage_missile_barrage::CheckProc, EFFECT_0, SPELL_AURA_PROC_TRIGGER_SPELL);
+    }
+};
+
+// 5143, 5144, 5145, 8416, 8417, 10211, 10212, 25345 - Arcane Missiles, with Missile Barrage 400589 up: "missiles fire every
+// ${$400588w2/10}.1 sec". The buff's effect 1 is a dummy holding the change of the missile period (-500 ms), which nothing read, so
+// the missiles came once a second over the halved channel: two or three missiles instead of five (glacier, Discord 17 Nov). The
+// buff is used up when the channel hits (spell_proc 400589, 2026_11_17_17), after its aura took the shorter period here.
+class classic_spell_mage_arcane_missiles_barrage : public AuraScript
+{
+    static constexpr uint32 SPELL_MAGE_MISSILE_BARRAGE_BUFF = 400589;
+
+    bool Validate(SpellInfo const* /*spellInfo*/) override
+    {
+        return ValidateSpellEffect({ { SPELL_MAGE_MISSILE_BARRAGE_BUFF, EFFECT_1 } });
+    }
+
+    void CalcPeriodic(AuraEffect const* /*aurEff*/, bool& isPeriodic, int32& amplitude)
+    {
+        Unit* caster = GetCaster();
+        if (!isPeriodic || !caster)
+            return;
+
+        if (AuraEffect const* barrage = caster->GetAuraEffect(SPELL_MAGE_MISSILE_BARRAGE_BUFF, EFFECT_1))
+            if (amplitude + barrage->GetAmount() > 0)
+                amplitude += barrage->GetAmount();
+    }
+
+    void Register() override
+    {
+        DoEffectCalcPeriodic += AuraEffectCalcPeriodicFn(classic_spell_mage_arcane_missiles_barrage::CalcPeriodic, EFFECT_0, SPELL_AURA_PERIODIC_TRIGGER_SPELL);
     }
 };
 
@@ -1623,6 +1652,7 @@ void AddSC_classic_talents_mage_shaman()
     RegisterSpellScript(classic_spell_mage_cone_of_cold_winters_chill);
     RegisterSpellScript(classic_spell_mage_arcane_blast);
     RegisterSpellScript(classic_spell_mage_missile_barrage);
+    RegisterSpellScript(classic_spell_mage_arcane_missiles_barrage);
 
     // Shaman
     RegisterSpellScript(classic_spell_sha_flurry);

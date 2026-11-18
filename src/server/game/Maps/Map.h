@@ -507,6 +507,10 @@ class TC_GAME_API Map : public GridRefManager<NGridType>
         BattlegroundMap const* ToBattlegroundMap() const { return IsBattlegroundOrArena() ? reinterpret_cast<BattlegroundMap const*>(this) : nullptr; }
 
         bool isInLineOfSight(PhaseShift const& phaseShift, float x1, float y1, float z1, float x2, float y2, float z2, LineOfSightChecks checks, VMAP::ModelIgnoreFlags ignoreFlags) const;
+        // The first closed door (a GAMEOBJECT_TYPE_DOOR with its collision on) the segment from `from` to `to` runs into, seen from this
+        // phase: true with `hit` set to where it meets it. The navmesh is baked without doors, so a path can cross one.
+        // Map or world thread only: the door models change in Map::Update.
+        bool FindClosedDoorOnSegment(PhaseShift const& phaseShift, G3D::Vector3 const& from, G3D::Vector3 const& to, G3D::Vector3& hit) const;
         void Balance() { _dynamicTree.balance(); }
         void RemoveGameObjectModel(GameObjectModel const& model) { _dynamicTree.remove(model); }
         void InsertGameObjectModel(GameObjectModel const& model) { _dynamicTree.insert(model); }

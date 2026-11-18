@@ -360,6 +360,7 @@ void WorldSession::HandleSetRoleOpcode(WorldPackets::Party::SetRole& packet)
         group->BroadcastPacket(roleChangedInform.Write(), false);
         group->SetLfgRoles(packet.TargetGUID, packet.Role);
         GroupFinderListings::OnGroupChanged(group);     // the group's Group Finder post in Discord shows the new role
+        sScriptMgr->OnGroupMemberRoleSet(group, GetPlayer()->GetGUID(), packet.TargetGUID, oldRole, packet.Role);
     }
     else
         SendPacket(roleChangedInform.Write());

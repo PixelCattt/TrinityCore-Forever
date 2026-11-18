@@ -156,6 +156,12 @@ namespace VMAP
                 return a position, that is modifyDist closer to the origin
             */
             bool getObjectHitPos(uint32 mapId, float x1, float y1, float z1, float x2, float y2, float z2, float& rx, float& ry, float& rz, float modifyDist);
+            /**
+                The first static model a line runs into (diagnostics): the hit position, the model's spawn id and flags (ModelFlags) and
+                where the spawn stands. False when the line is clear.
+            */
+            bool getFirstModelHit(uint32 mapId, float x1, float y1, float z1, float x2, float y2, float z2, ModelIgnoreFlags ignoreFlags,
+                                  float& rx, float& ry, float& rz, uint32& spawnId, uint8& spawnFlags, float& sx, float& sy, float& sz);
             float getHeight(uint32 mapId, float x, float y, float z, float maxSearchDist);
 
             /**

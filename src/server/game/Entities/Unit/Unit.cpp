@@ -738,7 +738,15 @@ bool Unit::IsWithinMeleeRangeAt(Position const& pos, Unit const* obj) const
 
     float dx = pos.GetPositionX() - obj->GetPositionX();
     float dy = pos.GetPositionY() - obj->GetPositionY();
+    // Height counts from body to body, not from feet to feet: while the two bodies overlap in height there is no vertical
+    // gap. Feet to feet put a player swimming level with a mob's head, or a mob standing on the sea floor under a swimmer,
+    // out of reach although they touched: auto attack never swung under water, on either side (Discord 2026-11-16, also the
+    // Wailing Caverns lizards on uneven ground).
     float dz = pos.GetPositionZ() - obj->GetPositionZ();
+    if (dz > 0.0f)
+        dz = std::max(0.0f, dz - obj->GetCollisionHeight());
+    else
+        dz = std::min(0.0f, dz + GetCollisionHeight());
     float distsq = dx*dx + dy*dy + dz*dz;
 
     float maxdist = GetMeleeRange(obj) + GetTotalAuraModifier(SPELL_AURA_MOD_AUTOATTACK_RANGE);
@@ -11481,10 +11489,12 @@ Unit* Unit::SelectNearbyTarget(Unit* exclude, float dist) const
     if (exclude)
         targets.remove(exclude);
 
-    // remove not LoS targets
+    // remove not LoS targets, and units that cannot be attacked: "not friendly" also takes in neutral units that are immune to
+    // players, not attackable, evading or not selectable, and an extra strike on one of those lands as a hit that neither hurts
+    // nor pulls it (Blade Flurry and Sweeping Strikes on a second neutral mob, voldemargreed, Discord bugs 4, 17 Nov)
     for (std::list<Unit*>::iterator tIter = targets.begin(); tIter != targets.end();)
     {
-        if (!IsWithinLOSInMap(*tIter) || (*tIter)->IsTotem() || (*tIter)->IsSpiritService() || (*tIter)->IsCritter())
+        if (!IsWithinLOSInMap(*tIter) || (*tIter)->IsTotem() || (*tIter)->IsSpiritService() || (*tIter)->IsCritter() || !IsValidAttackTarget(*tIter))
             targets.erase(tIter++);
         else
             ++tIter;

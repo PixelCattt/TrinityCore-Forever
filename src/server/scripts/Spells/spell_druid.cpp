@@ -30,6 +30,7 @@
 #include "GridNotifiersImpl.h"
 #include "MotionMaster.h"
 #include "ObjectAccessor.h"
+#include "PathGenerator.h"
 #include "Player.h"
 #include "Spell.h"
 #include "SpellAuraEffects.h"
@@ -3157,12 +3158,30 @@ class spell_dru_yseras_gift_group_heal : public SpellScript
 // 414924 - Feral Charge (Cat): "Leap behind an enemy." Its effect 0 is effect 175, which this client uses as a jump to a destination
 // (dest behind the target, Amplitude = speed multiplier, MiscValue / MiscValueB = min / max arc height in tenths, the same fields
 // as SPELL_EFFECT_JUMP_DEST); the core has no handler for 175, so the leap is done here the way Spell::EffectJumpDest does it.
+// The leap is an arc, so on its own it reached a target the druid could not walk to (on a roof, up a cliff). Live refuses those with
+// "There is no path" as it does Feral Charge (Bear) (forever-bugs #86, found by Everlake, GPL): the walking path to the target is
+// checked here with the settings and the length limit of SPELL_EFFECT_CHARGE's check in Spell::CheckCast.
 class spell_dru_classic_feral_charge_cat : public SpellScript
 {
     SpellCastResult CheckCast()
     {
-        if (GetCaster()->HasUnitState(UNIT_STATE_ROOT))
+        Unit* caster = GetCaster();
+        if (caster->HasUnitState(UNIT_STATE_ROOT))
             return SPELL_FAILED_ROOTED;
+
+        Unit* target = GetExplTargetUnit();
+        if (!target)
+            return SPELL_CAST_OK;
+
+        PathGenerator path(caster);
+        path.SetSlopeCoefficient(0.0f);
+        path.SetDisableRoadBonus(true);
+        path.SetIgnoreLiquidRouteCheck(true);
+        bool const result = path.CalculatePath(target->GetPositionX(), target->GetPositionY(), target->GetPositionZ(), false);
+        float const range = GetSpellInfo()->GetMaxRange(false, caster, GetSpell()) * 1.5f + target->GetCombatReach();
+        if (!result || (path.GetPathType() & (PATHFIND_SHORT | PATHFIND_NOPATH | PATHFIND_INCOMPLETE)) || path.IsInvalidDestinationZ(target)
+            || path.GetPathLength() > range)
+            return SPELL_FAILED_NOPATH;
         return SPELL_CAST_OK;
     }
 

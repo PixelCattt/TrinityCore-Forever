@@ -34,6 +34,7 @@
 #include "Item.h"
 #include "ItemBonusMgr.h"
 #include "Language.h"
+#include "Log.h"
 #include "MiscPackets.h"
 #include "MMapManager.h"
 #include "MotionMaster.h"
@@ -41,16 +42,21 @@
 #include "ObjectAccessor.h"
 #include "ObjectMgr.h"
 #include "PhasingHandler.h"
+#include "QuestDef.h"
 #include "Player.h"
 #include "RealmList.h"
 #include "SpellAuras.h"
 #include "SpellHistory.h"
 #include "SpellMgr.h"
+#include "SupportMgr.h"
 #include "TerrainMgr.h"
 #include "Transport.h"
 #include "Weather.h"
 #include "World.h"
 #include "WorldSession.h"
+#include "GameTime.h"
+#include <cctype>
+#include <unordered_map>
 
 #if TRINITY_COMPILER_IS_GCC
 #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
@@ -69,6 +75,7 @@ public:
         {
             { "additem",          HandleAddItemCommand,          rbac::RBAC_PERM_COMMAND_ADDITEM,          Console::No },
             { "time",             HandleTimeCommand,             rbac::RBAC_PERM_COMMAND_TIME,             Console::No },
+            { "bug",              HandleBugCommand,              rbac::RBAC_PERM_COMMAND_BUG,              Console::No },
             { "time day",         HandleTimeDayCommand,          rbac::RBAC_PERM_COMMAND_TIME,             Console::No },
             { "time night",       HandleTimeNightCommand,        rbac::RBAC_PERM_COMMAND_TIME,             Console::No },
             { "time auto",        HandleTimeAutoCommand,         rbac::RBAC_PERM_COMMAND_TIME,             Console::No },
@@ -318,11 +325,17 @@ public:
         return ApplyAura(target, spell);
     }
 
-    // ".aura self <spell>": always on the player who types it, whatever is targeted. In a macro the target no longer has to be
-    // cleared first, which stopped the auto attack swing (and an Heroic Strike waiting for it).
-    static bool HandleAuraSelfCommand(ChatHandler* handler, SpellInfo const* spell)
+    // ".aura self <spell> [<spell> ...]": always on the player who types it, whatever is targeted. In a macro the target no longer
+    // has to be cleared first, which stopped the auto attack swing (and an Heroic Strike waiting for it).
+    // Several spells in one line: during a boss fight the client lets a macro send only one chat line in a short time (and only
+    // to the group or as a whisper), so a macro of several ".aura self" lines lost all but the first.
+    static bool HandleAuraSelfCommand(ChatHandler* handler, std::vector<SpellInfo const*> const& spells)
     {
-        return ApplyAura(handler->GetSession()->GetPlayer(), spell);
+        Player* player = handler->GetSession()->GetPlayer();
+        bool applied = false;
+        for (SpellInfo const* spell : spells)
+            applied = ApplyAura(player, spell) || applied;
+        return applied;
     }
 
     static bool ApplyAura(Unit* target, SpellInfo const* spell)
@@ -1219,6 +1232,75 @@ public:
         playerTarget->RemoveExploredZones(offset, val);
 
         handler->SendSysMessage(LANG_UNEXPLORE_AREA);
+        return true;
+    }
+
+    // .bug <what is wrong>: a bug report that carries everything we otherwise have to ask for (which NPC, where, which quest).
+    // Saved as a bug ticket (gm_bug, the same store as the client's own bug form), so staff read it with .ticket bug list /
+    // .ticket bug view <id>. The note holds the player's text and a line with zone, area, map position, target and the quest
+    // log (id and state: C complete, I in progress, F failed). One report per player every 30 seconds.
+    static bool HandleBugCommand(ChatHandler* handler, Tail text)
+    {
+        Player* player = handler->GetSession()->GetPlayer();
+        bool const ru = handler->GetSession()->GetSessionDbLocaleIndex() == LOCALE_ruRU;
+        std::string_view what = text;
+        while (!what.empty() && std::isspace(static_cast<unsigned char>(what.front())))
+            what.remove_prefix(1);
+        while (!what.empty() && std::isspace(static_cast<unsigned char>(what.back())))
+            what.remove_suffix(1);
+        if (what.empty())
+        {
+            handler->SendSysMessage(ru ? "Опишите ошибку: .bug <что не так>. Ваше место, цель и журнал заданий сохранятся сами."
+                                       : "Say what is wrong: .bug <text>. Your spot, target and quest log are saved with it.");
+            handler->SetSentErrorMessage(true);
+            return false;
+        }
+
+        static std::unordered_map<ObjectGuid, time_t> lastReport;    // world thread only (chat commands)
+        time_t const now = GameTime::GetGameTime();
+        time_t& last = lastReport[player->GetGUID()];
+        if (now < last + 30)
+        {
+            handler->SendSysMessage(ru ? "Подождите немного перед следующим отчётом." : "Please wait a little before the next report.");
+            handler->SetSentErrorMessage(true);
+            return false;
+        }
+        last = now;
+
+        auto areaName = [](uint32 id) -> std::string
+        {
+            AreaTableEntry const* area = sAreaTableStore.LookupEntry(id);
+            return area ? std::string(area->AreaName[LOCALE_enUS]) : std::string("?");
+        };
+
+        std::string target = "none";
+        if (Unit* unit = player->GetSelectedUnit())
+            target = Trinity::StringFormat("{} {} \"{}\" at {:.1f} {:.1f} {:.1f}", unit->GetTypeId() == TYPEID_PLAYER ? "player" : "creature",
+                unit->GetEntry(), unit->GetName(), unit->GetPositionX(), unit->GetPositionY(), unit->GetPositionZ());
+
+        std::string quests;
+        for (uint16 slot = 0; slot < MAX_QUEST_LOG_SIZE; ++slot)
+        {
+            uint32 const questId = player->GetQuestSlotQuestId(slot);
+            if (!questId)
+                continue;
+            QuestStatus const status = player->GetQuestStatus(questId);
+            quests += Trinity::StringFormat("{}{}:{}", quests.empty() ? "" : " ", questId,
+                status == QUEST_STATUS_COMPLETE ? 'C' : status == QUEST_STATUS_FAILED ? 'F' : 'I');
+        }
+
+        BugTicket* ticket = new BugTicket(player);
+        ticket->SetPosition(player->GetMapId(), player->GetPosition());
+        ticket->SetFacing(player->GetOrientation());
+        ticket->SetNote(Trinity::StringFormat("{}\n[.bug] zone {} {} | area {} {} | map {} x {:.1f} y {:.1f} z {:.1f} | level {} race {} class {} | "
+            "target {} | quests {}", what, player->GetZoneId(), areaName(player->GetZoneId()), player->GetAreaId(), areaName(player->GetAreaId()),
+            player->GetMapId(), player->GetPositionX(), player->GetPositionY(), player->GetPositionZ(), player->GetLevel(), player->GetRace(),
+            player->GetClass(), target, quests.empty() ? "none" : quests));
+        sSupportMgr->AddTicket(ticket);
+
+        TC_LOG_INFO("misc", "Bug report #{} from {} ({}): {}", ticket->GetId(), player->GetName(), player->GetGUID().ToString(), ticket->GetNote());
+        handler->PSendSysMessage(ru ? "Спасибо, отчёт #%u сохранён (с вашим местом, целью и журналом заданий)."
+                                    : "Thanks, report #%u is saved (with your spot, target and quest log).", ticket->GetId());
         return true;
     }
 

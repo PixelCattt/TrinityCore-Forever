@@ -29,8 +29,11 @@
 #include "ChatCommand.h"
 #include "DB2Stores.h"
 #include "DisableMgr.h"
+#include "GameObject.h"
+#include "GameObjectModel.h"
 #include "GridNotifiersImpl.h"
 #include "MMapManager.h"
+#include "ObjectAccessor.h"
 #include "ObjectMgr.h"
 #include "PathGenerator.h"
 #include "PhasingHandler.h"
@@ -43,6 +46,7 @@
 
 #include <cmath>
 #include <cstdio>
+#include <cstring>
 #include <ctime>
 #include <limits>
 #include <queue>
@@ -66,6 +70,8 @@ public:
             { "loadedtiles", rbac::RBAC_PERM_COMMAND_MMAP_LOADEDTILES, false, &HandleMmapLoadedTilesCommand, "" },
             { "loc",         rbac::RBAC_PERM_COMMAND_MMAP_LOC,         false, &HandleMmapLocCommand,         "" },
             { "path",        rbac::RBAC_PERM_COMMAND_MMAP_PATH,        false, &HandleMmapPathCommand,        "" },
+            // Console-usable: the walking route and the charge route (Spell::CheckCast's filter) between two points, from a named player's map.
+            { "chargepath",  rbac::RBAC_PERM_COMMAND_MMAP_PATH,        true,  &HandleMmapChargePathCommand,  "" },
             { "stats",       rbac::RBAC_PERM_COMMAND_MMAP_STATS,       false, &HandleMmapStatsCommand,       "" },
             { "testarea",    rbac::RBAC_PERM_COMMAND_MMAP_TESTAREA,    false, &HandleMmapTestArea,           "" },
             // Auto-derives off-mesh connections from areatrigger_teleport
@@ -82,6 +88,147 @@ public:
             { "mmap", rbac::RBAC_PERM_COMMAND_MMAP, true, nullptr, "", mmapCommandTable },
         };
         return commandTable;
+    }
+
+    // .mmap chargepath <player> [radius]
+    // .mmap chargepath <player> <x> <y> <z> <targetX> <targetY> <targetZ> [maxRange]
+    // Builds two paths on the named player's map: a walking route (the configured filter, slope cost and road bonus on) and a charge
+    // route, made as Spell::CheckCast makes it for SPELL_EFFECT_CHARGE (slope cost 0, no road bonus, path length at most
+    // maxRange * 1.5 + 1.5, maxRange 25 by default for Charge). Each line gives the result, type, points, length and end, and the verdict CheckCast would
+    // give. With only a name the paths go from the player to the ground 8 ways round it at the radius (20 yd by default; under water
+    // the lake or sea bed), so a bot standing on a shore checks the charges into the water and along the bank from the console
+    // (Discord 2026-11-14, voldemargreed "bugs 5": the warrior ran along the shore or took a detour and missed). The walk line's end
+    // also shows whether a path to a point under the water reaches it (Discord 2026-11-16, gefest: bots froze over naga at a reef).
+    static bool HandleMmapChargePathCommand(ChatHandler* handler, char const* args)
+    {
+        char name[64] = {};
+        float x = 0.0f, y = 0.0f, z = 0.0f, tx = 0.0f, ty = 0.0f, tz = 0.0f, extra = 0.0f;
+        int const read = args ? std::sscanf(args, "%63s %f %f %f %f %f %f %f", name, &x, &y, &z, &tx, &ty, &tz, &extra) : 0;
+        if (read < 1 || (read > 2 && read < 7))
+        {
+            handler->PSendSysMessage("usage: .mmap chargepath <player> [radius] | <player> <x> <y> <z> <targetX> <targetY> <targetZ> [maxRange]");
+            return true;
+        }
+
+        Player* source = ObjectAccessor::FindPlayerByName(name);
+        if (!source || !source->IsInWorld())
+        {
+            handler->PSendSysMessage("chargepath: no player %s in the world.", name);
+            return true;
+        }
+        if (!MMAP::MMapManager::instance()->GetNavMesh(source->GetMapId(), source->GetInstanceId()))
+        {
+            handler->PSendSysMessage("chargepath: no navmesh loaded for map %u.", source->GetMapId());
+            return true;
+        }
+        Map* map = source->GetMap();
+        float const maxRange = read == 8 ? extra : 25.0f;
+
+        auto report = [&](float sx, float sy, float sz, float ex, float ey, float ez)
+        {
+            float const dx = ex - sx, dy = ey - sy, dz = ez - sz;
+            float const straight = std::sqrt(dx * dx + dy * dy + dz * dz);
+            bool const wet = map->IsInWater(source->GetPhaseShift(), ex, ey, ez + 0.5f);
+            handler->PSendSysMessage("chargepath map %u (%.2f, %.2f, %.2f) -> (%.2f, %.2f, %.2f)%s: straight %.2f yd", map->GetId(), sx, sy, sz,
+                ex, ey, ez, wet ? " in water" : "", straight);
+            for (bool const charge : { false, true })
+            {
+                PathGenerator path(source);
+                if (charge)
+                {
+                    path.SetSlopeCoefficient(0.0f);
+                    path.SetDisableRoadBonus(true);
+                    path.SetIgnoreLiquidRouteCheck(true);
+                }
+                bool const result = path.CalculatePath(sx, sy, sz, ex, ey, ez, false);
+                PathType const type = path.GetPathType();
+                char const* verdict = "ok";
+                if (type & PATHFIND_SHORT)
+                    verdict = "NOPATH (too long)";
+                else if (!result || (type & (PATHFIND_NOPATH | PATHFIND_INCOMPLETE)))
+                    verdict = "NOPATH";
+                float const length = path.GetPath().size() >= 2 ? path.GetPathLength() : 0.0f;
+                if (charge && !std::strcmp(verdict, "ok") && length > maxRange * 1.5f + 1.5f)
+                    verdict = "NOPATH (longer than the charge reaches)";
+                // the end shows a path to a point under water: it ends at the asked z (the last leg dives) or on the surface above it
+                G3D::Vector3 const& end = path.GetActualEndPosition();
+                // The navmesh is baked without game objects, so a path may run through a closed door or another solid object. The first
+                // leg that does (game object collision only, 1 yd over the path) is named (Discord 2026-11-17, bayshorian: bots went
+                // through the walls in the Shadowfang Keep courtyard).
+                Movement::PointsArray const& points = path.GetPath();
+                int32 blockedLeg = -1;
+                for (std::size_t i = 1; i < points.size() && blockedLeg < 0; ++i)
+                    if (!map->isInLineOfSight(source->GetPhaseShift(), points[i - 1].x, points[i - 1].y, points[i - 1].z + 1.0f, points[i].x, points[i].y,
+                        points[i].z + 1.0f, LINEOFSIGHT_CHECK_GOBJECT, VMAP::ModelIgnoreFlags::Nothing))
+                        blockedLeg = int32(i);
+                // a bot's paths keep clear of closed doors (PathGenerator::SetClosedDoorCheck): say when one shaped this path
+                char const* door = "";
+                if (path.AvoidedClosedDoor())
+                    door = (type & PATHFIND_NOPATH) ? " (only behind a closed door)" : " (around a closed door)";
+                handler->PSendSysMessage("  %s result %s type 0x%X points %u length %.2f yd (%.2fx straight) end (%.2f, %.2f, %.2f) -> %s%s%s",
+                    charge ? "charge" : "walk  ", result ? "true" : "false", uint32(type), uint32(points.size()), length,
+                    straight > 0.01f ? length / straight : 0.0f, end.x, end.y, end.z, charge ? verdict : "-", door,
+                    blockedLeg < 0 ? "" : " THROUGH A GAME OBJECT");
+                if ((type & PATHFIND_INCOMPLETE) && !path.IncompleteReason().empty())
+                    handler->PSendSysMessage("    incomplete: %s", path.IncompleteReason().c_str());
+                if (!path.DiveRefusal().empty())
+                    handler->PSendSysMessage("    no swim down to the destination: %s", path.DiveRefusal().c_str());
+                else if (wet && std::fabs(end.z - ez) > 0.5f)
+                    handler->PSendSysMessage("    no swim down to the destination: the swim test never ran (the path was not built point by point)");
+                if (blockedLeg >= 0)
+                {
+                    G3D::Vector3 const from = points[blockedLeg - 1] + G3D::Vector3(0.0f, 0.0f, 1.0f);
+                    G3D::Vector3 const to = points[blockedLeg] + G3D::Vector3(0.0f, 0.0f, 1.0f);
+                    handler->PSendSysMessage("    leg %d (%.2f, %.2f, %.2f) -> (%.2f, %.2f, %.2f) crosses a solid game object%s", blockedLeg,
+                        from.x, from.y, from.z - 1.0f, to.x, to.y, to.z - 1.0f,
+                        (type & PATHFIND_NOPATH) ? " (no path: this straight line is not walked)" : "");
+                    // name each game object whose model the leg runs into: entry, type, state, door or not, collision on or off
+                    float const legLength = (to - from).magnitude();
+                    if (legLength > 0.01f)
+                    {
+                        G3D::Ray const ray = G3D::Ray::fromOriginAndDirection(from, (to - from) / legLength);
+                        G3D::Vector3 const mid = (from + to) * 0.5f;
+                        std::list<GameObject*> nearby;
+                        Trinity::GameObjectInRangeCheck check(mid.x, mid.y, mid.z, legLength * 0.5f + 15.0f);
+                        Trinity::GameObjectListSearcher<Trinity::GameObjectInRangeCheck> searcher(source, nearby, check);
+                        Cell::VisitGridObjects(mid.x, mid.y, map, searcher, legLength * 0.5f + 15.0f);
+                        for (GameObject const* go : nearby)
+                        {
+                            if (!go->m_model)
+                                continue;
+                            float dist = legLength;
+                            if (!go->m_model->IntersectRay(ray, dist, true, source->GetPhaseShift(), VMAP::ModelIgnoreFlags::Nothing))
+                                continue;
+                            handler->PSendSysMessage("      hits %s entry %u spawn " UI64FMTD " type %u state %u%s collision %s at %.2f yd", go->GetName().c_str(),
+                                go->GetEntry(), go->GetSpawnId(), uint32(go->GetGoType()), uint32(go->GetGoState()),
+                                go->m_model->IsDoor() ? " (door)" : "", go->m_model->IsCollisionEnabled() ? "on" : "off", dist);
+                        }
+                    }
+                }
+            }
+        };
+
+        if (read >= 7)
+        {
+            report(x, y, z, tx, ty, tz);
+            return true;
+        }
+
+        float const radius = read == 2 && x > 1.0f ? x : 20.0f;
+        source->GetPosition(x, y, z);
+        for (uint32 i = 0; i < 8; ++i)
+        {
+            float const angle = float(i) * float(M_PI) / 4.0f;
+            float const ex = x + radius * std::cos(angle), ey = y + radius * std::sin(angle);
+            float const ez = map->GetHeight(source->GetPhaseShift(), ex, ey, z + 10.0f, true, 60.0f);
+            if (ez <= INVALID_HEIGHT)
+            {
+                handler->PSendSysMessage("chargepath: no ground at (%.2f, %.2f)", ex, ey);
+                continue;
+            }
+            report(x, y, z, ex, ey, ez);
+        }
+        return true;
     }
 
     static bool HandleMmapPathCommand(ChatHandler* handler, char const* args)

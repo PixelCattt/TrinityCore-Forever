@@ -978,6 +978,10 @@ class TC_GAME_API GroupScript : public ScriptObject
 
         // Called when a raid member is moved to another subgroup (map thread).
         virtual void OnSubgroupChange(Group* group, ObjectGuid guid, uint8 subgroup);
+
+        // Called when a player sets a member's party role with CMSG_SET_ROLE (the role menu), after the role is stored.
+        // Roles are LfgRoles masks (tank 0x02, healer 0x04, damage 0x08; 0 = no role).
+        virtual void OnMemberRoleSet(Group* group, ObjectGuid setter, ObjectGuid target, uint8 oldRole, uint8 newRole);
 };
 
 class TC_GAME_API AreaTriggerEntityScript : public ScriptObject
@@ -1388,6 +1392,7 @@ class TC_GAME_API ScriptMgr
         void OnGroupChangeLeader(Group* group, ObjectGuid newLeaderGuid, ObjectGuid oldLeaderGuid);
         void OnGroupDisband(Group* group);
         void OnGroupSubgroupChange(Group* group, ObjectGuid guid, uint8 subgroup);
+        void OnGroupMemberRoleSet(Group* group, ObjectGuid setter, ObjectGuid target, uint8 oldRole, uint8 newRole);
 
     public: /* UnitScript */
 

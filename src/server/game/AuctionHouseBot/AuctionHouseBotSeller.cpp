@@ -689,12 +689,23 @@ void AuctionBotSeller::SetPricesOfItem(ItemTemplate const* itemProto, SellerConf
     basePriceFloat *= priceRatio;
 
     float range = basePriceFloat * 0.04f;
+    float bidPercentage = frand(sAuctionBotConfig->GetConfig(CONFIG_AHBOT_BIDPRICE_MIN), sAuctionBotConfig->GetConfig(CONFIG_AHBOT_BIDPRICE_MAX));
+
+    // AuctionHouseBot.Vanilla.MarketPrices: priced to the copper like player listings (a piece of Linen Cloth is 24c;
+    // rounding to whole silver made a single one 1s and a stack of 3 33c a piece), never below what a vendor pays
+    if (AuctionBotVanilla::MarketUnitPrice(itemProto))
+    {
+        uint32 const vendorFloor = itemProto->GetSellPrice() * stackCount;
+        buyout = std::max<uint32>({ static_cast<uint32>(frand(basePriceFloat - range, basePriceFloat + range) + 0.5f), vendorFloor, 1 });
+        bid = std::max<uint32>({ static_cast<uint32>(bidPercentage * buyout), vendorFloor, 1 });
+        bid = std::min(bid, buyout);
+        return;
+    }
 
     buyout = (static_cast<uint32>(frand(basePriceFloat - range, basePriceFloat + range) + 0.5f) / SILVER) * SILVER;
     if (buyout == 0)
         buyout = SILVER;
 
-    float bidPercentage = frand(sAuctionBotConfig->GetConfig(CONFIG_AHBOT_BIDPRICE_MIN), sAuctionBotConfig->GetConfig(CONFIG_AHBOT_BIDPRICE_MAX));
     bid = (static_cast<uint32>(bidPercentage * buyout) / SILVER) * SILVER;
     if (bid == 0)
         bid = SILVER;

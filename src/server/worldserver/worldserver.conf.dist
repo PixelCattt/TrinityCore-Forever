@@ -4032,6 +4032,24 @@ AuctionHouseBot.Vanilla.ValueCurve.Scale = 1
 AuctionHouseBot.Vanilla.ValueCurve.FullValueItemLevel = 0
 
 #
+#    AuctionHouseBot.Vanilla.MarketPrices
+#       Description: Price bot listings (and the buyer's fair price) by the per-unit market price in the world table
+#                    auctionhousebot_market_price where an item has one, priced to the copper and never below what a
+#                    vendor pays for the item. Items without a row keep AuctionHouseBot.Vanilla.ValueCurve or the
+#                    vendor price. Read when the bot starts.
+#       Default:     0 - (Disabled)
+#                    1 - (Enabled)
+
+AuctionHouseBot.Vanilla.MarketPrices = 0
+
+#
+#    AuctionHouseBot.Vanilla.MarketPrices.Scale
+#       Description: Multiplies the market prices (1 = as stored, 1.2 = 20% more, 0.1 to 10). Never below what a vendor pays.
+#       Default:     1
+
+AuctionHouseBot.Vanilla.MarketPrices.Scale = 1
+
+#
 #    AuctionHouseBot.Alliance.Items.Amount.Ratio
 #       Description: Enable/Disable (disabled if 0) the part of AHBot that puts items up for auction on Alliance AH
 #       Default:     100 - (Enabled with 100% of items specified in AuctionHouse.Items.Amount.color section)
@@ -4535,6 +4553,26 @@ AuctionHouseBot.Buyer.Commodities = 1
 #                    0   - (Off)
 
 AuctionHouseBot.Buyer.DropFloorPerLevel = 100
+
+#
+#    AuctionHouseBot.Buyer.ExcludeUnlimitedVendorItems
+#       Description: The buyer never buys items that a vendor in the world sells for gold with unlimited
+#                    stock (arrows, thread, reagents...). The buyer pays at least the vendor price, so
+#                    players could buy them from the vendor and sell them to the buyer for profit.
+#                    Items a vendor sells in limited stock, or for tokens, can still be bought.
+#                    Only the buyer is affected, not the seller.
+#       Default:     1 - (Enabled)
+#                    0 - (Disabled)
+
+AuctionHouseBot.Buyer.ExcludeUnlimitedVendorItems = 1
+
+#
+#    AuctionHouseBot.Buyer.ExcludeItemIDs
+#       Description: Item ids the buyer never buys, separated by commas, e.g. "2512,2515,2321".
+#                    Only the buyer is affected, not the seller.
+#       Default:     "" - (None)
+
+AuctionHouseBot.Buyer.ExcludeItemIDs = ""
 
 #
 #    AuctionHouseBot.Buyer.MaxPriceMultiplier
@@ -5250,6 +5288,24 @@ Forever.VanillaAoE = 0
 #                     1 - (Enabled, old behaviour)
 
 Classic.AutoEquipNewBags = 0
+
+#    Classic.ScourgeInvasion
+#        Description: The Scourge Invasion world event (the Naxxramas opening): necropolises attack six zones in turn,
+#                     players kill minions and cultists to bring them down, battles won unlock the Argent Dawn
+#                     rewards at 50 / 100 / 150, and Pallid Horrors attack Stormwind and Undercity. GMs can also
+#                     switch it with .scourge on / off (saved, wins over this setting until .scourge default).
+#                     .reload config reads it again.
+#        Default:     0 - (Disabled)
+#                     1 - (Enabled)
+
+Classic.ScourgeInvasion = 0
+
+#    Classic.ScourgeInvasion.ShardDamageRate
+#        Description: How much the minion, cultist and Shadow of Doom deaths hurt the Necrotic Shards. Above 1 the
+#                     camps fall faster (small servers), below 1 slower.
+#        Default:     1.0
+
+Classic.ScourgeInvasion.ShardDamageRate = 1.0
 
 #    Classic.Shop.Enabled
 #        Description: In-game Store: shop points, products from world.shop_* (.shop reload), the Gold Market, character

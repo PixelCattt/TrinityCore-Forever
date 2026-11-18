@@ -4728,6 +4728,7 @@ public:
     int64 GetPackedRotation() const override { return _owner->GetPackedLocalRotation(); }
     float GetScale() const override { return _owner->GetObjectScale(); }
     void DebugVisualizeCorner(G3D::Vector3 const& corner) const override { _owner->SummonCreature(1, corner.x, corner.y, corner.z, 0, TEMPSUMMON_MANUAL_DESPAWN); }
+    bool IsDoor() const override { return _owner->GetGoType() == GAMEOBJECT_TYPE_DOOR; }
 
 private:
     GameObject* _owner;

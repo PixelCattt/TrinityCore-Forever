@@ -26,10 +26,14 @@
 #include "Memory.h"
 #include "MoveSpline.h"
 #include "ObjectAccessor.h"
+#include "Map.h"
 #include "PathGenerator.h"
+#include "PhasingHandler.h"
 #include "Player.h"
 #include "ScriptSystem.h"
 #include "Types.h"
+#include "VMapFactory.h"
+#include "VMapManager.h"
 #include <boost/container/static_vector.hpp>
 #include <algorithm>
 #include <iterator>
@@ -786,6 +790,79 @@ void MotionMaster::MoveCharge(PathGenerator const& path, float speed /*= SPEED_C
     init.Launch();
 }
 
+// Where a unit thrown `dist` yards along `relAngle` (relative to its orientation, as MovePositionToFirstCollision takes it) on an arc
+// `maxHeight` above its start comes down: the straight line up to the apex and down to the landing point, cut where it meets a wall
+// (static and dynamic geometry), and the floor under that point. The mmap raycast stops at the navmesh's edge: Magnetic Pull (28337)
+// left a bot tank on its own platform, thrown straight up, while the client's pull flies it over the slime to the other add
+// (naxx_thaddius 1118 r2: both tanks came down where they stood, Stalagg and Feugen walked across the room to each other's tank, and the
+// raid wiped). False when no floor is found under the landing point (over the void): the caller keeps the raycast.
+static bool KnockbackFlightLanding(Unit const* owner, Position& dest, float dist, float relAngle, float maxHeight)
+{
+    Map* map = owner->GetMap();
+    PhaseShift const& phaseShift = owner->GetPhaseShift();
+    float const angle = relAngle + owner->GetOrientation();
+    float const sx = dest.GetPositionX(), sy = dest.GetPositionY(), sz = dest.GetPositionZ();
+    float ex = sx + dist * std::cos(angle);
+    float ey = sy + dist * std::sin(angle);
+    if (!Trinity::IsValidMapCoord(ex, ey))
+        return false;
+    float const halfHeight = owner->GetCollisionHeight() * 0.5f;
+    uint32 const terrainMapId = PhasingHandler::GetTerrainMapId(phaseShift, map->GetId(), map->GetTerrain(), sx, sy);
+    auto const hit = [&](float x1, float y1, float z1, float& x2, float& y2, float& z2)
+    {
+        float rx = x2, ry = y2, rz = z2;
+        bool col = VMAP::VMapFactory::createOrGetVMapManager()->getObjectHitPos(terrainMapId, x1, y1, z1, x2, y2, z2, rx, ry, rz, -0.5f);
+        float dx = rx, dy = ry, dz = rz;
+        if (map->getObjectHitPos(phaseShift, x1, y1, z1, rx, ry, rz, dx, dy, dz, -0.5f))
+            col = true;
+        if (col)
+        {
+            x2 = dx;
+            y2 = dy;
+            z2 = dz;
+        }
+        return col;
+    };
+    // The flight is checked along its arc, as the client flies it: a parabola `maxHeight` above the line from the start to the landing
+    // floor, in kArcSteps straight pieces. A straight line 5 y up (0061) met the edge of Stalagg's platform at once: naxx_thaddius 1118 r3,
+    // both tanks still thrown straight up (Mctankwa at z 321.5 over its own spot) and the adds walked across to them.
+    constexpr int kArcSteps = 8;
+    float const apex = std::max(maxHeight, 0.0f);
+    float const searchFrom = sz + halfHeight + apex;
+    float const searchDist = searchFrom - sz + 50.0f;
+    float const endFloor = map->GetHeight(phaseShift, ex, ey, searchFrom, true, searchDist);
+    if (endFloor <= INVALID_HEIGHT)
+        return false;
+    float const z0 = sz + halfHeight, z1 = endFloor + halfHeight;
+    float const fx = ex, fy = ey;
+    float px = sx, py = sy, pz = z0;
+    bool met = false;
+    for (int i = 1; i <= kArcSteps && !met; ++i)
+    {
+        float const t = float(i) / float(kArcSteps);
+        float qx = sx + (fx - sx) * t, qy = sy + (fy - sy) * t, qz = z0 + (z1 - z0) * t + 4.0f * apex * t * (1.0f - t);
+        if (hit(px, py, pz, qx, qy, qz))
+        {
+            met = true;
+            ex = qx;
+            ey = qy;
+            // Back off the wall it met.
+            float const back = std::min(CONTACT_DISTANCE, std::hypot(ex - sx, ey - sy));
+            ex -= back * std::cos(angle);
+            ey -= back * std::sin(angle);
+        }
+        px = qx;
+        py = qy;
+        pz = qz;
+    }
+    // Down to the floor under the landing point.
+    float const landZ = map->GetHeight(phaseShift, ex, ey, met ? pz : z1 + 2.0f, true, searchDist);
+    if (landZ <= INVALID_HEIGHT)
+        return false;
+    dest.Relocate(ex, ey, landZ);
+    return true;
+}
+
 void MotionMaster::MoveKnockbackFrom(Position const& origin, float speedXY, float speedZ, float angle /*= M_PI*/, Movement::SpellEffectExtraData const* spellEffectExtraData /*= nullptr*/)
 {
     if (std::abs(speedXY) < 0.01f && std::abs(speedZ) < 0.01f)
@@ -811,8 +888,11 @@ void MotionMaster::MoveKnockbackFrom(Position const& origin, float speedXY, floa
 
     if (dist > 0.01f)
     {
-        // Use a mmap raycast to get a valid destination.
-        _owner->MovePositionToFirstCollision(dest, dist, o);
+        // A player reaches here only when it is a bot (Unit::KnockbackFrom: a client flies its own knockback). It is thrown through the
+        // air as a client is, over gaps and drops the navmesh does not cross; a creature keeps the mmap raycast.
+        if (!_owner->IsPlayer() || !KnockbackFlightLanding(_owner, dest, dist, o, max_height))
+            // Use a mmap raycast to get a valid destination.
+            _owner->MovePositionToFirstCollision(dest, dist, o);
         path.push_back(PositionToVector3(dest));
     }
     else

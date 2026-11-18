@@ -41,10 +41,11 @@ redistributing. Source files of the module do not carry per-file headers; this n
   [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Changed: only the records we lacked or had different were picked and
   converted to our database tables.
 - Live WoW Forever quest data (quest order, givers and turn-ins) in `sql/custom/world/2026_11_12_15_*.sql`, `2026_11_13_86_*.sql`,
-  `2026_11_13_87_*.sql` and `2026_11_14_97_*.sql`: from [Questie](https://github.com/Questie/QuestieDB) (Questie team, GPL-3.0), its Forever corrections and
+  `2026_11_13_87_*.sql`, `2026_11_14_97_*.sql`, `2026_11_16_96_*.sql` and `2026_11_18_97_*.sql`: from [Questie](https://github.com/Questie/QuestieDB) (Questie team, GPL-3.0), its Forever corrections and
   play traces. Changed: converted to our database tables, only where ours lacked it.
 - Live WoW Forever world data (quest records, object templates, vendor items, trainer levels) in
-  `sql/custom/world/2026_11_12_14_*.sql`, `2026_11_13_88_*.sql`, `2026_11_13_90_*.sql`, `2026_11_14_96_*.sql` and `2026_11_15_96_*.sql`: Data from
+  `sql/custom/world/2026_11_12_14_*.sql`, `2026_11_13_88_*.sql`, `2026_11_13_90_*.sql`, `2026_11_14_96_*.sql`, `2026_11_15_96_*.sql`, `2026_11_17_81_*.sql`,
+  `2026_11_17_96_*.sql` and `2026_11_18_96_*.sql`: Data from
   [Efficient Games](https://efficient.games) (https://github.com/JIVESCORP/eg-link-output-wowf), licensed under
   [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Changed: only the records we lacked or had different were picked and
   converted to our database tables.
@@ -52,7 +53,8 @@ redistributing. Source files of the module do not carry per-file headers; this n
   database (www.wowhead.com/forever), French pages, collected and shared by Ashendris (Mizuka). Changed: compared with our world and
   only the fields we lacked or that differ from live were written.
 - Quest givers, drops and vendor items in `sql/custom/world/2026_11_13_91_world_forever_everlake_data.sql` and
-  `2026_11_15_97_world_forever_everlake_data_1115.sql`: from Everlake's world data
+  `2026_11_15_97_world_forever_everlake_data_1115.sql`, `2026_11_16_97_world_forever_everlake_data_1116.sql` and
+  `2026_11_17_97_world_forever_everlake_data_1117.sql`: from Everlake's world data
   ([buildthehomelab/wow-everlake-world-data](https://github.com/buildthehomelab/wow-everlake-world-data), GPL-3.0), which in turn
   credits EG Link (CC BY 4.0), Polestar forever-db, QuestieDB, ForeverDB.net (GPL-3.0), NorgannonDB by zmarotrix (GPL-3.0), Icy Veins'
   WoW Forever database (db.icy-veins.com/wow-forever) and Wowhead's WoW Forever database (www.wowhead.com/forever). Changed: compared with our world and only rows we lacked were written as ours.
@@ -61,8 +63,14 @@ redistributing. Source files of the module do not carry per-file headers; this n
   pet's wild attack speed through the client's Faster / Slower Attack passives (`ClassicPetAttackSpeed.h`).
 - From the Everlake core (https://github.com/buildthehomelab/wow-trinitycore-everlake, GPL, a fork of this core), written as our
   own code: ranged weapons and wands take the ranged stat budget column (`GetRandomPropertyPoints`, ItemEnchantmentMgr.cpp).
+- From the Everlake core (https://github.com/buildthehomelab/wow-trinitycore-everlake, GPL-2.0, a fork of this core), taken as
+  given: a TACT key we don't hold is answered "not public" (`HotfixHandler.cpp`, Everlake 973f193b), and worldserver.conf.d files
+  keep their keys with no `[section]` header or with several (`ConfigMgr::LoadAdditionalFile` and its test, Everlake db11c6d9 and
+  03481268).
 - Weapon chance-on-hit rates in `sql/custom/world/2026_11_06_41_world_classic_weapon_proc_every_hit.sql` and
   `2026_11_16_80_world_forever_item_proc_ppm_measured.sql`: from [wowsims/forever](https://github.com/wowsims/forever)
   (`tools/database/overrides/weapon_procs.go`), MIT licence, copyright the wowsims contributors. Only the rates were taken.
 - Forever Combat Nameplates (`src/modules/PlayerbotV2/Addon/ForeverCombatNameplates` and the combat nameplate filter in `Player.cpp`,
   `ChatHandler.cpp`, `WorldSession.cpp` and `ViewerDependentValues.h`): by SIN, GPL-2.0 (COPYING in the add-on folder).
+- The Hallow's End link for the Southshore Stink Bomb Counter in `sql/custom/world/2026_11_16_97_*.sql` was checked against
+  [cmangos classic-db](https://github.com/cmangos/classic-db) (GPL-2.0).

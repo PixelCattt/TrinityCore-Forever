@@ -17,10 +17,14 @@
 
 #include "AuctionHouseBotVanilla.h"
 #include "Config.h"
+#include "DatabaseEnv.h"
 #include "ItemTemplate.h"
+#include "Log.h"
 #include "SharedDefines.h"
+#include "Timer.h"
 #include <algorithm>
 #include <array>
+#include <unordered_map>
 
 namespace AuctionBotVanilla
 {
@@ -38,6 +42,35 @@ namespace
     // AuctionHouseBot.Vanilla.ValueCurve.FullValueItemLevel: below this item level the curve scales down in proportion
     // (item level / this), so low-level goods are not priced like endgame ones (0 = off)
     uint32 _fullValueItemLevel = 0;
+
+    // AuctionHouseBot.Vanilla.MarketPrices: per-unit market prices from the world table auctionhousebot_market_price
+    bool _marketPrices = false;
+    float _marketScale = 1.0f;
+    std::unordered_map<uint32, uint64> _marketPrice;
+
+    void LoadMarketPrices()
+    {
+        _marketPrice.clear();
+        if (!_marketPrices)
+            return;
+
+        uint32 oldMSTime = getMSTime();
+        PreparedQueryResult result = WorldDatabase.Query(WorldDatabase.GetPreparedStatement(WORLD_SEL_AUCTIONHOUSEBOT_MARKET_PRICES));
+        if (!result)
+        {
+            TC_LOG_INFO("ahbot", "AHBot: AuctionHouseBot.Vanilla.MarketPrices is on but auctionhousebot_market_price is empty; "
+                "item prices come from the value curve or the vendor price.");
+            return;
+        }
+
+        do
+        {
+            Field* fields = result->Fetch();
+            _marketPrice[fields[0].GetUInt32()] = fields[1].GetUInt64();
+        } while (result->NextRow());
+
+        TC_LOG_INFO("ahbot", "AHBot: loaded {} item market prices in {} ms", _marketPrice.size(), GetMSTimeDiffToNow(oldMSTime));
+    }
 }
 
 void LoadConfig()
@@ -53,6 +86,9 @@ void LoadConfig()
     QualityFactor[4] = sConfigMgr->GetIntDefault("AuctionHouseBot.Vanilla.ValueCurve.Epic", 150);
     _scale = std::clamp(sConfigMgr->GetFloatDefault("AuctionHouseBot.Vanilla.ValueCurve.Scale", 1.0f), 0.1f, 10.0f);
     _fullValueItemLevel = sConfigMgr->GetIntDefault("AuctionHouseBot.Vanilla.ValueCurve.FullValueItemLevel", 0);
+    _marketPrices = sConfigMgr->GetBoolDefault("AuctionHouseBot.Vanilla.MarketPrices", false);
+    _marketScale = std::clamp(sConfigMgr->GetFloatDefault("AuctionHouseBot.Vanilla.MarketPrices.Scale", 1.0f), 0.1f, 10.0f);
+    LoadMarketPrices();
 }
 
 bool Enabled()
@@ -92,8 +128,35 @@ bool IsAllowed(ItemTemplate const* proto)
     return true;
 }
 
+uint64 MarketUnitPrice(ItemTemplate const* proto)
+{
+    if (!_marketPrices)
+        return 0;
+
+    auto itr = _marketPrice.find(proto->GetId());
+    if (itr == _marketPrice.end())
+        return 0;
+
+    // The only floor is what a vendor pays for the item (SellPrice is per item, ammo included): below it, buying from the
+    // auction house and selling to a vendor would make money. The buy price and the 4x sell price are stand-ins for items
+    // with no known price; live players list most cloth, leather, herbs and ore well below them (Linen Cloth 24c a piece,
+    // its stand-in 55c), so using them here would throw the market price away for more than half of the items.
+    return std::max<uint64>({ uint64(double(itr->second) * _marketScale), uint64(proto->GetSellPrice()), 1 });
+}
+
+void SetMarketPrices(std::unordered_map<uint32, uint64> prices, float scale)
+{
+    _marketPrices = !prices.empty();
+    _marketScale = std::clamp(scale, 0.1f, 10.0f);
+    _marketPrice = std::move(prices);
+}
+
 uint64 UnitValue(ItemTemplate const* proto)
 {
+    // a known market price wins over the curve
+    if (uint64 market = MarketUnitPrice(proto))
+        return market;
+
     if (!_valueCurve)
         return 0;
 

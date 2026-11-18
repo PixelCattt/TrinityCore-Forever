@@ -117,3 +117,12 @@ void ClassicScriptZoneEmote(uint32 broadcastTextId, WorldObject* source, Unit* t
 
     ZoneTalk(unit, broadcastTextId, CHAT_MSG_MONSTER_EMOTE, target);
 }
+
+void ClassicScriptZoneYell(uint32 broadcastTextId, WorldObject* source, Unit* target)
+{
+    Unit* unit = source ? source->ToUnit() : nullptr;
+    if (!unit || !broadcastTextId)
+        return;
+
+    ZoneTalk(unit, broadcastTextId, CHAT_MSG_MONSTER_YELL, target);
+}

@@ -758,6 +758,7 @@ enum RBACPermissions
     //
     // custom permissions 1000+
     RBAC_PERM_COMMAND_TIME                                   = 1000, // .time day / night / auto (players too)
+    RBAC_PERM_COMMAND_BUG                                    = 1001, // .bug <text>: a bug report with the player's spot (players too)
     RBAC_PERM_MAX
 };
 

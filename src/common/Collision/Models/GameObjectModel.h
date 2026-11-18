@@ -57,6 +57,8 @@ public:
     virtual int64 GetPackedRotation() const = 0;
     virtual float GetScale() const = 0;
     virtual void DebugVisualizeCorner(G3D::Vector3 const& /*corner*/) const = 0;
+    // A door (GAMEOBJECT_TYPE_DOOR): its collision is on while it is closed, and the navmesh is baked without it.
+    virtual bool IsDoor() const { return false; }
 };
 
 class TC_COMMON_API GameObjectModel /*, public Intersectable*/
@@ -82,6 +84,7 @@ public:
     void IncludeInNavMesh(bool enable) { iIncludeInNavMesh = enable; }
     bool IsIncludedInNavMesh() const { return iIncludeInNavMesh; }
     bool IsMapObject() const;
+    bool IsDoor() const { return owner && owner->IsDoor(); }
     uint8 GetNameSetId() const { return owner->GetNameSetId(); }
 
     bool IntersectRay(G3D::Ray const& ray, float& maxDist, bool stopAtFirstHit, PhaseShift const& phaseShift, VMAP::ModelIgnoreFlags ignoreFlags) const;

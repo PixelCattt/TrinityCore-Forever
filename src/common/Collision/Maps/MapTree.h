@@ -26,6 +26,7 @@
 namespace VMAP
 {
     class ModelInstance;
+    struct ModelMinimalData;
     class GroupModel;
     class VMapManager;
     enum class LoadResult : uint8;
@@ -70,6 +71,9 @@ namespace VMAP
 
             bool isInLineOfSight(G3D::Vector3 const& pos1, G3D::Vector3 const& pos2, ModelIgnoreFlags ignoreFlags) const;
             bool getObjectHitPos(G3D::Vector3 const& pos1, G3D::Vector3 const& pos2, G3D::Vector3& pResultHitPos, float pModifyDist) const;
+            // The first model a line from pos1 to pos2 runs into: where, and which spawn (nullptr and false when the line is clear).
+            bool getFirstHit(G3D::Vector3 const& pos1, G3D::Vector3 const& pos2, ModelIgnoreFlags ignoreFlags, G3D::Vector3& hitPos,
+                             ModelMinimalData const*& model) const;
             float getHeight(G3D::Vector3 const& pPos, float maxSearchDist) const;
             bool GetLocationInfo(G3D::Vector3 const& pos, StaticMapTreeLocationInfo& info) const;
 

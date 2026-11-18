@@ -117,6 +117,9 @@ uint32 AuctionBotBuyer::GetItemInformation(BuyerConfiguration& config)
         if (entry->Owner.IsEmpty() || sAuctionBotConfig->IsBotChar(entry->Owner))
             continue; // Skip auctions owned by AHBot
 
+        if (AuctionBotBuyerPolicy::Excluded(entry->Bucket->Key.ItemId))
+            continue; // unlimited vendor goods and AuctionHouseBot.Buyer.ExcludeItemIDs
+
         BuyerItemInfo& itemInfo = config.SameItemInfo[entry->Bucket->Key.ItemId];
 
         // Update item entry's count and total bid prices

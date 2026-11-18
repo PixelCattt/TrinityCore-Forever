@@ -66,6 +66,13 @@ public:
     void  SetSlopeCoefficient(float c) { _slopeCoefficient = c; }
     float GetSlopeCoefficient() const  { return _slopeCoefficient; }
 
+    // Polygons this filter refuses besides the flag test (a doorway behind a closed door, PathGenerator's door check). A short list,
+    // cleared by the path that set it.
+    void ExcludePoly(dtPolyRef ref) { _excludedPolys.push_back(ref); }
+    void ClearExcludedPolys() { _excludedPolys.clear(); }
+    bool HasExcludedPolys() const { return !_excludedPolys.empty(); }
+    bool passFilter(dtPolyRef ref, dtMeshTile const* tile, dtPoly const* poly) const override;
+
     // Override Detour's per-segment cost computation. Signature must match
     // dtQueryFilter::getCost exactly so the dynamic dispatch works.
     float getCost(float const* pa, float const* pb,
@@ -135,6 +142,7 @@ public:
 
 private:
     bool  _disableRoadBonus = false;
+    std::vector<dtPolyRef> _excludedPolys;
     float _slopeCoefficient = 1.0f;
     mutable float _maxSlopeFactorThisPath = 1.0f;  // updated by getCost(); reset by BeginPathStats()
 };

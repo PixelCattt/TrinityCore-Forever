@@ -96,12 +96,15 @@ bool ItemTemplate::CanChangeEquipStateInCombat() const
 
 uint32 ItemTemplate::GetSkill() const
 {
+    // Classic 1.60: Thrown (SkillLine 176) is a weapon skill again; retail dropped it, so a thrown weapon had no skill at all:
+    // it never missed and its skill never rose (Discord, checkitout1333 2026-11-17, an Undead rogue's Thrown stayed at 1)
+    static constexpr uint32 SkillThrown = 176;
     static constexpr uint32 ItemWeaponSkills[MAX_ITEM_SUBCLASS_WEAPON] =
     {
         SKILL_AXES,             SKILL_TWO_HANDED_AXES, SKILL_BOWS,   SKILL_GUNS,              SKILL_MACES,
         SKILL_TWO_HANDED_MACES, SKILL_POLEARMS,        SKILL_SWORDS, SKILL_TWO_HANDED_SWORDS, SKILL_WARGLAIVES,
         SKILL_STAVES,           0,                     0,            SKILL_FIST_WEAPONS,      0,
-        SKILL_DAGGERS,          0,                     0,            SKILL_CROSSBOWS,         SKILL_WANDS,
+        SKILL_DAGGERS,          SkillThrown,           0,            SKILL_CROSSBOWS,         SKILL_WANDS,
         SKILL_FISHING
     };
 

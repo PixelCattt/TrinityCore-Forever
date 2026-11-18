@@ -27,6 +27,9 @@
 #include "Map.h"
 #include "Metric.h"
 #include "PhasingHandler.h"
+#include "StringFormat.h"
+#include "VMapFactory.h"
+#include "VMapManager.h"
 #include "Player.h"
 #include "World.h"
 #include "WorldSession.h"
@@ -156,21 +159,80 @@ PathGenerator::~PathGenerator()
 }
 
 PathGenerator::LiquidRouteCheck PathGenerator::_liquidRouteCheck = nullptr;
+PathGenerator::ClosedDoorCheck PathGenerator::_closedDoorCheck = nullptr;
+
+// A source whose paths keep clear of closed doors (the ClosedDoorCheck says so): each leg of the route is tested against the
+// map's closed doors; the corridor polygon under a door is left out and the route searched again. Without a route that misses
+// every closed door, the target is unreachable for now: PATHFIND_NOPATH.
+bool PathGenerator::CalculatePath(float srcX, float srcY, float srcZ, float destX, float destY, float destZ, bool forceDest)
+{
+    _avoidedClosedDoor = false;
+    _filter.ClearExcludedPolys();
+    bool ok = CalculateLiquidAwarePath(srcX, srcY, srcZ, destX, destY, destZ, forceDest);
+    if (!ok || forceDest || (_type & (PATHFIND_NOPATH | PATHFIND_NOT_USING_PATH)) || !_closedDoorCheck || !_closedDoorCheck(_source))
+        return ok;
+
+    G3D::Vector3 hit;
+    for (uint32 detour = 0; FindClosedDoorOnPath(hit); ++detour)
+    {
+        _avoidedClosedDoor = true;
+        dtPolyRef doorPoly = INVALID_POLYREF;
+        if (detour < MAX_CLOSED_DOOR_DETOURS && _polyLength > 2)
+        {
+            float const point[VERTEX_SIZE] = { hit.y, hit.z - 1.0f, hit.x };   // back down to the path (FindClosedDoorOnPath)
+            float distance = 0.0f;
+            NavExecGuard navGuard(NavExecLock(_source->GetMapId()));
+            doorPoly = GetPathPolyByPosition(_pathPolyRefs, _polyLength, point, &distance);
+        }
+        // the door stands on the source's or the target's own polygon, or the detours ran out: no route around it
+        if (doorPoly == INVALID_POLYREF || doorPoly == _pathPolyRefs[0] || doorPoly == _pathPolyRefs[_polyLength - 1])
+        {
+            BuildShortcut();
+            _type = PATHFIND_NOPATH;
+            break;
+        }
+        _filter.ExcludePoly(doorPoly);
+        Clear();   // a fresh search: BuildPolyPath would otherwise cut the new route out of the old corridor
+        ok = CalculateLiquidAwarePath(srcX, srcY, srcZ, destX, destY, destZ, forceDest);
+        if (!ok || (_type & PATHFIND_NOPATH))
+            break;
+    }
+    _filter.ClearExcludedPolys();
+    return ok;
+}
+
+// Each leg is tested a yard above the path, the height the source walks through: the floor under the door frame is not the door.
+bool PathGenerator::FindClosedDoorOnPath(G3D::Vector3& hit) const
+{
+    Map const* map = _source->GetMap();
+    if (!map)
+        return false;
+    G3D::Vector3 const lift(0.0f, 0.0f, 1.0f);
+    for (std::size_t i = 1; i < _pathPoints.size(); ++i)
+        if (map->FindClosedDoorOnSegment(_source->GetPhaseShift(), _pathPoints[i - 1] + lift, _pathPoints[i] + lift, hit))
+            return true;
+    return false;
+}
 
 // A source that keeps out of liquid (the LiquidRouteCheck says so): when the first route touches liquid, a land-only route is
 // searched (water polygons excluded) and used when it exists and is dry; otherwise the first route is kept and IsWetRoute() says so.
-bool PathGenerator::CalculatePath(float srcX, float srcY, float srcZ, float destX, float destY, float destZ, bool forceDest)
+// Each search after the first starts from a cleared corridor: BuildPolyPath cuts a route out of the previous corridor when both
+// end polygons are on it, and that cut never asks the filter.
+bool PathGenerator::CalculateLiquidAwarePath(float srcX, float srcY, float srcZ, float destX, float destY, float destZ, bool forceDest)
 {
     _wetRoute = false;
     bool ok = CalculatePathImpl(srcX, srcY, srcZ, destX, destY, destZ, forceDest);
-    if (!ok || (_type & PATHFIND_NOPATH) || !_liquidRouteCheck || !_liquidRouteCheck(_source, _pathPoints, CrossesWaterPolys()))
+    if (!ok || (_type & PATHFIND_NOPATH) || _ignoreLiquidRouteCheck || !_liquidRouteCheck ||
+        !_liquidRouteCheck(_source, _pathPoints, CrossesWaterPolys()))
         return ok;
     _avoidWater = true;
+    Clear();
     bool const dry = CalculatePathImpl(srcX, srcY, srcZ, destX, destY, destZ, forceDest) && !(_type & PATHFIND_NOPATH)
         && !_liquidRouteCheck(_source, _pathPoints, CrossesWaterPolys());
     _avoidWater = false;
     if (dry)
         return true;
+    Clear();
     ok = CalculatePathImpl(srcX, srcY, srcZ, destX, destY, destZ, forceDest);   // restore the first route
     _wetRoute = true;
     return ok;
@@ -205,6 +267,8 @@ bool PathGenerator::CalculatePathImpl(float srcX, float srcY, float srcZ, float 
 
     _forceDestination = forceDest;
     _pathTraversesOffMesh = false;  // recomputed per path by FindSmoothPath
+    _diveRefusal.clear();
+    _incompleteReason.clear();
 
     TC_LOG_DEBUG("maps.mmaps", "++ PathGenerator::CalculatePath() for {}", _source->GetGUID().ToString());
 
@@ -465,6 +529,8 @@ void PathGenerator::BuildPolyPath(G3D::Vector3 const& startPos, G3D::Vector3 con
             }
 
             _type = PathType(PATHFIND_INCOMPLETE);
+            _incompleteReason = Trinity::StringFormat("far from the navmesh: the start {:.2f} yd, the destination {:.2f} yd from its polygon",
+                distToStartPoly, distToEndPoly);
 
             AddFarFromPolyFlags(startFarFromPoly, endFarFromPoly);
         }
@@ -725,7 +791,24 @@ void PathGenerator::BuildPolyPath(G3D::Vector3 const& startPos, G3D::Vector3 con
     if (_pathPolyRefs[_polyLength - 1] == endPoly && !(_type & PATHFIND_INCOMPLETE))
         _type = PATHFIND_NORMAL;
     else
+    {
+        if (_pathPolyRefs[_polyLength - 1] != endPoly)
+        {
+            // the polygon route stops on another polygon: name both, with their flags and heights over the destination
+            auto describe = [&](dtPolyRef ref) -> std::string
+            {
+                unsigned short flags = 0;
+                _navMesh->getPolyFlags(ref, &flags);
+                float h = 0.0f;
+                if (dtStatusSucceed(_navMeshQuery->getPolyHeight(ref, endPoint, &h)))
+                    return Trinity::StringFormat("0x{:X} flags 0x{:X} height {:.2f} over the destination", uint64(ref), uint32(flags), h);
+                return Trinity::StringFormat("0x{:X} flags 0x{:X}, not over the destination", uint64(ref), uint32(flags));
+            };
+            _incompleteReason = Trinity::StringFormat("the polygon route ({} polygons) stops on polygon {}; the destination's polygon is {}, "
+                "{:.2f} yd away", _polyLength, describe(_pathPolyRefs[_polyLength - 1]), describe(endPoly), distToEndPoly);
+        }
         _type = PATHFIND_INCOMPLETE;
+    }
 
     AddFarFromPolyFlags(startFarFromPoly, endFarFromPoly);
 
@@ -813,6 +896,8 @@ void PathGenerator::BuildPointPath(const float *startPoint, const float *endPoin
         RemoveNearCoincidentPathPoints();
         SetActualEndPosition(_pathPoints.back());
         _type = PathType(_type | PATHFIND_INCOMPLETE);
+        if (_incompleteReason.empty())
+            _incompleteReason = pointCount >= _pointPathLimit ? "the point budget ran out" : "the smooth path stopped partway along the polygons";
         return;
     }
 
@@ -827,6 +912,144 @@ void PathGenerator::BuildPointPath(const float *startPoint, const float *endPoin
 
     // first point is always our current location - we need the next one
     SetActualEndPosition(_pathPoints[pointCount-1]);
+
+    // A swimmer whose destination is under the water: the navmesh water polygons lie on the surface, so the path ended on the
+    // surface above it, up to the polygon search height away. A unit chasing a mob there arrived over it, out of melee reach in 3D,
+    // and stood still with its attack refused: grouped bots "freeze" on Attack against naga under the reef (gefest, Discord
+    // 2026-11-17, Treacherous Reef). Where the surface polygons stop short of the point over the destination (a bank, a pier), the
+    // path ended up to 4.9 yd away and was marked incomplete (PC chargepath, Theramore 2026-11-17/18). The path ends the way a
+    // swimming player goes, at most kDiveAcross from where it ended: across at that height and then straight down, or, where a
+    // model stands on the way across (a pier over the water), straight down first and then across under the water, or in one
+    // straight leg. Every leg keeps clear of models and above the ground, and a leg under the surface stays in the water. Once the
+    // destination is reached, the path is complete. DiveRefusal() names what turned each try down, and for a model on the way its spawn
+    // and where the line hit it (.mmap chargepath prints it).
+    _diveRefusal.clear();
+    if (!_forceDestination && (_type & (PATHFIND_NORMAL | PATHFIND_INCOMPLETE)) && pointCount >= 2)
+    {
+        G3D::Vector3 const& end = GetEndPosition();
+        G3D::Vector3 const last = _pathPoints[pointCount - 1];
+        Unit const* swimmer = _source->ToUnit();
+        Map* map = _source->GetMap();
+        PhaseShift const& phase = _source->GetPhaseShift();
+        constexpr float kDiveAcross = 10.0f;   // a short swim; past it the surface polygons should carry the path
+        float const across = std::sqrt((end.x - last.x) * (end.x - last.x) + (end.y - last.y) * (end.y - last.y));
+        // A leg from a to b: no model across it, never below the ground, and (underWater) in the water at every yard. A refused leg
+        // says why in `why`, a model with its spawn and the point the line hit it.
+        auto legClear = [&](G3D::Vector3 const& from, G3D::Vector3 const& to, bool underWater, std::string& why) -> bool
+        {
+            if ((to - from).magnitude() < 0.1f)
+                return true;
+            if (!map->isInLineOfSight(phase, from.x, from.y, from.z + 0.3f, to.x, to.y, to.z + 0.3f, LINEOFSIGHT_CHECK_VMAP, VMAP::ModelIgnoreFlags::Nothing))
+            {
+                float hx = 0.0f, hy = 0.0f, hz = 0.0f, sx = 0.0f, sy = 0.0f, sz = 0.0f;
+                uint32 spawnId = 0;
+                uint8 spawnFlags = 0;
+                if (VMAP::VMapFactory::createOrGetVMapManager()->getFirstModelHit(
+                        PhasingHandler::GetTerrainMapId(phase, map->GetId(), map->GetTerrain(), from.x, from.y), from.x, from.y, from.z + 0.3f,
+                        to.x, to.y, to.z + 0.3f, VMAP::ModelIgnoreFlags::Nothing, hx, hy, hz, spawnId, spawnFlags, sx, sy, sz))
+                    why = Trinity::StringFormat("a model stands on the way (spawn {} flags 0x{:X} at ({:.1f}, {:.1f}, {:.1f}), hit at ({:.2f}, {:.2f}, "
+                                                "{:.2f}), {:.2f} yd along the {:.2f} yd leg)", spawnId, uint32(spawnFlags), sx, sy, sz, hx, hy, hz, (G3D::Vector3(hx, hy, hz) - from).magnitude(), (to - from).magnitude());
+                else
+                    why = "a model stands on the way";
+                return false;
+            }
+            uint32 const steps = std::max<uint32>(1, uint32(std::ceil((to - from).magnitude())));
+            for (uint32 i = 1; i <= steps; ++i)
+            {
+                G3D::Vector3 const q = from + (to - from) * (float(i) / float(steps));
+                float const ground = map->GetGridHeight(phase, q.x, q.y);
+                if (ground > INVALID_HEIGHT && q.z < ground - 0.5f)
+                    return why = Trinity::StringFormat("the way runs into the ground at ({:.2f}, {:.2f}, {:.2f}), ground {:.2f}", q.x, q.y, q.z, ground), false;
+                if (underWater && !map->IsInWater(phase, q.x, q.y, q.z))
+                    return why = Trinity::StringFormat("the way leaves the water at ({:.2f}, {:.2f}, {:.2f})", q.x, q.y, q.z), false;
+            }
+            return true;
+        };
+        // only a destination under the water below the path's end is a dive; anything else is no business of this step
+        if (end.z < last.z - 0.5f && map->IsUnderWater(phase, end.x, end.y, end.z))
+        {
+            if (!swimmer || !swimmer->CanSwim())
+                _diveRefusal = "the source cannot swim";
+            else if (across > kDiveAcross)
+                _diveRefusal = "the path ends more than 10 yd across from the point over the destination";
+            else
+            {
+                float const groundAtLast = map->GetGridHeight(phase, last.x, last.y);
+                G3D::Vector3 const over(end.x, end.y, last.z);
+                G3D::Vector3 const under(last.x, last.y, std::max(end.z, groundAtLast > INVALID_HEIGHT ? groundAtLast + 1.0f : end.z));
+                std::string acrossWhy, downWhy, straightWhy;
+                std::vector<G3D::Vector3> legs;
+                // 1. across, then down
+                if (!legClear(last, over, false, acrossWhy))
+                    acrossWhy = "across: " + acrossWhy;
+                else if (!map->IsInWater(phase, over.x, over.y, over.z - 0.5f))
+                    acrossWhy = "the point over the destination is not in the water";
+                else if (!legClear(over, end, true, acrossWhy))
+                    acrossWhy = "down: " + acrossWhy;
+                else
+                    legs = { over, end };
+                // 2. down, then across under the water (a pier over the water)
+                if (legs.empty())
+                {
+                    if (under.z >= last.z - 0.5f)
+                        downWhy = "no room to sink where the path ends";
+                    else if (!map->IsInWater(phase, under.x, under.y, under.z))
+                        downWhy = "no water under the path's end";
+                    else if (!legClear(last, under, true, downWhy))
+                        downWhy = "down: " + downWhy;
+                    else if (!legClear(under, end, true, downWhy))
+                        downWhy = "across: " + downWhy;
+                    else
+                        legs = { under, end };
+                }
+                // 3. one straight leg
+                if (legs.empty())
+                {
+                    if (legClear(last, end, false, straightWhy))
+                        legs = { end };
+                }
+                if (legs.empty())
+                    _diveRefusal = Trinity::StringFormat("across then down: {}; down then across: {}; straight: {}", acrossWhy, downWhy, straightWhy);
+                else
+                {
+                    for (G3D::Vector3 const& v : legs)
+                        if ((v - _pathPoints[pointCount - 1]).magnitude() >= 0.1f)
+                        {
+                            _pathPoints.push_back(v);
+                            ++pointCount;
+                        }
+                    SetActualEndPosition(end);
+                    if (_type & PATHFIND_INCOMPLETE)
+                        _type = PathType((_type & ~PATHFIND_INCOMPLETE) | PATHFIND_NORMAL);
+                }
+            }
+        }
+        // A swimmer whose destination is under the water and whose route still falls short: the navmesh holds the water as its
+        // surface and its bed, not the water between, so the polygon route can stop on a surface or bed polygon that does not join
+        // the destination's (PC step N, Theramore 2026-11-18: a sea-floor point 12 yd away came back incomplete, one 20 yd away
+        // ended 16 yd short on the surface). A swimming player swims there in a straight line. The source is in the water, the
+        // whole line stays in it, clear of models and above the ground, as for a far-from-mesh swimmer above. The same holds for a
+        // complete route that bends: over those layers it can run a long way round (PC step P: 104 yd along the polygons to a point
+        // 8 yd away, past what a Charge reaches), and the clear straight swim is the shortest way there.
+        if (((_type & PATHFIND_INCOMPLETE) || pointCount > 2) && swimmer && swimmer->CanSwim() && map->IsUnderWater(phase, end.x, end.y, end.z))
+        {
+            G3D::Vector3 const& start = GetStartPosition();
+            std::string swimWhy;
+            if (!map->IsInWater(phase, start.x, start.y, start.z))
+                swimWhy = "the source is not in the water";
+            else if (legClear(start, end, true, swimWhy))
+            {
+                _pathPoints = { start, end };
+                pointCount = 2;
+                SetActualEndPosition(end);
+                _type = PathType((_type & ~PATHFIND_INCOMPLETE) | PATHFIND_NORMAL);
+                _incompleteReason.clear();
+                _diveRefusal.clear();
+            }
+            if (_type & PATHFIND_INCOMPLETE)
+                _incompleteReason += (_incompleteReason.empty() ? "" : "; ") + ("no straight swim: " + swimWhy);
+        }
+    }
 
     // force the given destination, if needed
     if (_forceDestination &&

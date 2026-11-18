@@ -200,6 +200,7 @@ void AddSC_classic_stonetalon_mountains();
 void AddSC_classic_silithus();
 void AddSC_classic_world_event_wareffort();
 void AddSC_classic_world_event_dragons_of_nightmare();
+void AddSC_classic_world_event_scourge_invasion();
 void AddSC_classic_npcs_special();
 void AddSC_classic_go_scripts();
 void AddSC_classic_spell_scripts();
@@ -409,6 +410,7 @@ void AddClassicScripts()
     AddSC_classic_silithus();
     AddSC_classic_world_event_wareffort();
     AddSC_classic_world_event_dragons_of_nightmare();
+    AddSC_classic_world_event_scourge_invasion();
     AddSC_classic_npcs_special();
     AddSC_classic_go_scripts();
     AddSC_classic_spell_scripts();

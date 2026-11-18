@@ -123,6 +123,39 @@ namespace VMAP
         return true;
     }
     //=========================================================
+
+    bool StaticMapTree::getFirstHit(Vector3 const& pos1, Vector3 const& pos2, ModelIgnoreFlags ignoreFlags, Vector3& hitPos,
+                                    ModelMinimalData const*& model) const
+    {
+        model = nullptr;
+        float maxDist = (pos2 - pos1).magnitude();
+        if (maxDist < 1e-10f || !std::isfinite(maxDist))
+            return false;
+        Vector3 const dir = (pos2 - pos1) / maxDist;
+        G3D::Ray const ray = G3D::Ray::fromOriginAndDirection(pos1, dir);
+        // Every hit shortens the distance the tree still searches, so the last entry that hits is the nearest one.
+        ModelInstance const* prims = iTreeValues.data();
+        uint32 nearest = 0;
+        bool hit = false;
+        auto callback = [&](G3D::Ray const& r, uint32 entry, float& distance, bool stopAtFirstHit)
+        {
+            bool const result = prims[entry].intersectRay(r, distance, stopAtFirstHit, ignoreFlags);
+            if (result)
+            {
+                hit = true;
+                nearest = entry;
+            }
+            return result;
+        };
+        float distance = maxDist;
+        iTree.intersectRay(ray, callback, distance, false);
+        if (!hit)
+            return false;
+        hitPos = pos1 + dir * distance;
+        model = &prims[nearest];
+        return true;
+    }
+    //=========================================================
     /**
     When moving from pos1 to pos2 check if we hit an object. Return true and the position if we hit one
     Return the hit pos or the original dest pos

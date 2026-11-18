@@ -31,4 +31,7 @@ void ClassicScriptText(uint32 broadcastTextId, WorldObject* source, Unit* target
 // VMaNGOS DoScriptText(textId, source, target, CHAT_TYPE_ZONE_EMOTE): the script overrides the text's own chat type.
 void ClassicScriptZoneEmote(uint32 broadcastTextId, WorldObject* source, Unit* target = nullptr);
 
+// VMaNGOS DoScriptText(textId, source, target, CHAT_TYPE_ZONE_YELL): a yell every player of the source's zone hears.
+void ClassicScriptZoneYell(uint32 broadcastTextId, WorldObject* source, Unit* target = nullptr);
+
 #endif

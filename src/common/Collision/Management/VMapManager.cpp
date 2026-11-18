@@ -186,6 +186,27 @@ namespace VMAP
         return true;
     }
 
+    bool VMapManager::getFirstModelHit(uint32 mapId, float x1, float y1, float z1, float x2, float y2, float z2, ModelIgnoreFlags ignoreFlags,
+                                       float& rx, float& ry, float& rz, uint32& spawnId, uint8& spawnFlags, float& sx, float& sy, float& sz)
+    {
+        if (!isLineOfSightCalcEnabled() || IsVMAPDisabledForPtr(mapId, VMAP_DISABLE_LOS))
+            return false;
+        auto instanceTree = GetMapTree(mapId);
+        if (instanceTree == iInstanceMapTrees.end())
+            return false;
+        G3D::Vector3 hit;
+        ModelMinimalData const* model = nullptr;
+        if (!instanceTree->second->getFirstHit(convertPositionToInternalRep(x1, y1, z1), convertPositionToInternalRep(x2, y2, z2), ignoreFlags, hit, model))
+            return false;
+        G3D::Vector3 const world = convertPositionToInternalRep(hit.x, hit.y, hit.z);
+        G3D::Vector3 const at = convertPositionToInternalRep(model->iPos.x, model->iPos.y, model->iPos.z);
+        rx = world.x; ry = world.y; rz = world.z;
+        spawnId = model->ID;
+        spawnFlags = model->flags;
+        sx = at.x; sy = at.y; sz = at.z;
+        return true;
+    }
+
     /**
     get the hit position and return true if we hit something
     otherwise the result pos will be the dest pos
