@@ -375,6 +375,16 @@ namespace WorldPackets
             bool IsPersonalLoot             = false;
         };
 
+        class AddAccountCosmetic final : public ClientPacket
+        {
+        public:
+            explicit AddAccountCosmetic(WorldPacket&& packet) : ClientPacket(CMSG_ADD_ACCOUNT_COSMETIC, std::move(packet)) { }
+
+            void Read() override;
+
+            ObjectGuid ItemGUID;
+        };
+
         class ReadItem final : public ClientPacket
         {
         public:

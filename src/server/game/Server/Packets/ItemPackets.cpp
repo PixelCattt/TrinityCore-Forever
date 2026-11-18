@@ -296,6 +296,11 @@ WorldPacket const* ItemPushResult::Write()
     return &_worldPacket;
 }
 
+void AddAccountCosmetic::Read()
+{
+    _worldPacket >> ItemGUID;
+}
+
 void ReadItem::Read()
 {
     _worldPacket >> PackSlot;

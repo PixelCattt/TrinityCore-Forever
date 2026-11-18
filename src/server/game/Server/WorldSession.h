@@ -445,6 +445,7 @@ namespace WorldPackets
 
     namespace Item
     {
+        class AddAccountCosmetic;
         class AutoEquipItem;
         class AutoEquipItemSlot;
         class AutoStoreBagItem;
@@ -1628,6 +1629,7 @@ class TC_GAME_API WorldSession
         void HandleBuyItemOpcode(WorldPackets::Item::BuyItem& packet);
         void HandleListInventoryOpcode(WorldPackets::NPC::Hello& packet);
         void HandleAutoStoreBagItemOpcode(WorldPackets::Item::AutoStoreBagItem& packet);
+        void HandleAddAccountCosmetic(WorldPackets::Item::AddAccountCosmetic& packet);
         void HandleReadItem(WorldPackets::Item::ReadItem& readItem);
         void HandleAutoEquipItemSlotOpcode(WorldPackets::Item::AutoEquipItemSlot& autoEquipItemSlot);
         void HandleSwapItem(WorldPackets::Item::SwapItem& swapItem);
