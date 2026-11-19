@@ -1100,6 +1100,8 @@ class TC_GAME_API WorldSession
 
         void LogoutPlayer(bool save);
         void KickPlayer(std::string_view reason);
+        // True once a kick was requested; a headless bot session has no socket to observe the close.
+        bool IsKickRequested() const { return forceExit; }
         // Returns true if all contained hyperlinks are valid
         // May kick player on false depending on world config (handler should abort)
         bool ValidateHyperlinksAndMaybeKick(std::string const& str);
