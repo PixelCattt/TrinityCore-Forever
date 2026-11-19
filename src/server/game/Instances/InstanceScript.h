@@ -285,6 +285,10 @@ class TC_GAME_API InstanceScript : public ZoneScript
 
         uint32 GetEncounterCount() const { return uint32(bosses.size()); }
 
+        // Every boss state in boss id order (index = boss id). Read only copy for code outside
+        // the instance script, such as bot modules that plan a raid or dungeon run.
+        std::vector<EncounterState> GetBossStates() const;
+
         // Sets the entrance location (WorldSafeLoc) id
         void SetEntranceLocation(uint32 worldSafeLocationId);
 
