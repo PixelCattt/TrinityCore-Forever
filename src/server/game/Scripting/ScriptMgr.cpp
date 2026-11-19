@@ -1992,6 +1992,11 @@ bool ScriptMgr::CanCreateBattleground(uint32 battlemasterListId, uint8 bracketId
     return allowed;
 }
 
+void ScriptMgr::OnAfterReload(std::string_view command)
+{
+    FOREACH_SCRIPT(WorldScript)->OnAfterReload(command);
+}
+
 // Achievement
 void ScriptMgr::OnAchievementCompleted(Player* player, AchievementEntry const* achievement)
 {
@@ -2628,6 +2633,10 @@ void WorldScript::OnShutdown()
 bool WorldScript::CanCreateBattleground(uint32 /*battlemasterListId*/, uint8 /*bracketId*/)
 {
     return true;
+}
+
+void WorldScript::OnAfterReload(std::string_view /*command*/)
+{
 }
 
 FormulaScript::FormulaScript(char const* name) noexcept

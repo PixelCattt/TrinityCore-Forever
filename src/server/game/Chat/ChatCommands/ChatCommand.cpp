@@ -257,6 +257,7 @@ namespace Trinity::Impl::ChatCommands
 {
     ChatCommandNode const* cmd = nullptr;
     ChatSubCommandMap const* map = &GetTopLevelMap();
+    std::string path; // full names of the matched commands, e.g. "reload all quest"
 
     while (!cmdStr.empty() && (cmdStr.front() == COMMAND_DELIMITER))
         cmdStr.remove_prefix(1);
@@ -297,6 +298,9 @@ namespace Trinity::Impl::ChatCommands
         /* now we matched exactly one subcommand, and it1 points to it; go down the rabbit hole */
         cmd = &it1->second;
         map = &cmd->_subCommands;
+        if (!path.empty())
+            path += COMMAND_DELIMITER;
+        path += it1->first;
 
         oldTail = newTail;
     }
@@ -308,6 +312,10 @@ namespace Trinity::Impl::ChatCommands
         { /* invocation succeeded, log this */
             if (!handler.IsConsole())
                 LogCommandUsage(*handler.GetSession(), cmd->_permission.RequiredPermission, cmdStr);
+
+            // let modules refresh what they cached after any successful .reload
+            if (StringEqualI(std::string_view(path).substr(0, path.find(COMMAND_DELIMITER)), "reload"))
+                sScriptMgr->OnAfterReload(path);
         }
         else if (!handler.HasSentErrorMessage())
         { /* invocation failed, we should show usage */
