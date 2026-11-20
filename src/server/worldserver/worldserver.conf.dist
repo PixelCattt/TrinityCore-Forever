@@ -504,6 +504,26 @@ Pathfinding.SlopeCoefficient = 0.0
 Pathfinding.PetLiquidCost = 2.5
 
 ###################################################################################################
+# Shared playerbot database
+#
+#    Playerbot.SharedDatabase
+#        Description: Name of the MySQL schema (database) that holds the shared playerbot data.
+#                     Today the server only reads the `handcrafted_road` table from it, once at
+#                     startup and again on ".reload handcrafted_road". The table is not kept in
+#                     the world database, so the road data is written once and reused with every
+#                     world database. It is read through the world database connection, so the
+#                     MySQL user from WorldDatabaseInfo needs read access to this schema.
+#                     The playerbot module's playerbot.conf sets it (the world editor's default
+#                     is wowc_playerbot). The segments are loaded whenever this is set, but they
+#                     are only applied to the navmesh when HandcraftedRoads.Enable below is 1
+#                     (and the server was built with handcrafted roads support).
+#        Example:     "wowc_playerbot"
+#        Default:     ""  - (No shared database; no handcrafted road segments are loaded, the
+#                            server logs "Loaded 0 handcrafted road segments")
+###################################################################################################
+Playerbot.SharedDatabase = ""
+
+###################################################################################################
 # Handcrafted road segments
 #
 #    HandcraftedRoads.Enable
@@ -3504,6 +3524,15 @@ Network.SkipBuildAuthKeyCheck = 0
 Network.EnterEncryptedModeDelay = 1500
 
 #
+#    Network.EnterEncryptedModeRegionGroup
+#        Description: Region group number sent in SMSG_ENTER_ENCRYPTED_MODE on a new realm connection. Classic (1.60+)
+#                     clients pick the Ed25519 public key that verifies that packet by this number, so it must match the
+#                     group whose key the client holds.
+#        Default:     0
+
+Network.EnterEncryptedModeRegionGroup = 8
+
+#
 #    Network.ConnectionsPerIp
 #        Description: Open game connections allowed from one address. A player uses two (realm and instance). Connections
 #                     from this PC (127.0.0.1) are never limited. Raise it when many players share one internet address
@@ -5085,6 +5114,16 @@ Recap.Range = 40
 Recap.Announce = 3
 #
 ###################################################################################################
+
+#    Classic.Hardcore
+#        Description: Run this realm with the Classic 1.60 Hardcore ruleset. The client switches to its Hardcore rules
+#                     (C_GameRules.IsHardcoreActive) and death is permanent: no spirit healer, corpse run or resurrection
+#                     spell brings a fallen character back, game master accounts included. Only staff using the .revive
+#                     command can. The death recap (Recap.Enable above) also needs this.
+#        Default:     0 - (Disabled)
+#                     1 - (Enabled)
+
+Classic.Hardcore = 0
 
 #    Classic.GuildFinder
 #        Description: Guild Finder in the Guild & Communities window (work in progress).
