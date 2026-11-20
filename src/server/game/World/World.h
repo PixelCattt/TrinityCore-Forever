@@ -603,6 +603,11 @@ class TC_GAME_API World
 
         static std::atomic<uint32> m_worldLoopCounter;
 
+        // True when called on the thread that runs startup and World::Update (the world thread),
+        // false on map update threads, network threads and before startup. Lets module code check
+        // that it may touch world-thread-only state, or queue the work for the next world tick.
+        static bool IsInWorldThread();
+
         WorldSession* FindSession(uint32 id) const;
         void AddSession(WorldSession* s);
         void AddInstanceSocket(std::weak_ptr<WorldSocket> sock, uint64 connectToKey);
