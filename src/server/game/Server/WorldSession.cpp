@@ -604,7 +604,7 @@ bool WorldSession::Update(uint32 diff, PacketFilter& updater)
         if (std::ranges::any_of(m_Socket, [](std::shared_ptr<WorldSocket> const& s) { return s && !s->IsOpen(); }))
         {
             expireTime -= expireTime > diff ? diff : expireTime;
-            if (expireTime < diff || forceExit || !GetPlayer())
+            if (expireTime < diff || forceExit.load(std::memory_order_relaxed) || !GetPlayer())
             {
                 for (std::shared_ptr<WorldSocket>& socket : m_Socket)
                 {
@@ -804,14 +804,14 @@ void WorldSession::KickPlayer(std::string_view reason)
     // A headless bot session has no socket to close; flag the exit directly so BotSession::Update
     // logs the bot out and the session manager reaps it (failed logins, GM kick/ban).
     if (IsBot())
-        forceExit = true;
+        forceExit.store(true, std::memory_order_relaxed);
 
     for (std::shared_ptr<WorldSocket> const& socket : m_Socket)
     {
         if (socket)
         {
             socket->CloseSocket();
-            forceExit = true;
+            forceExit.store(true, std::memory_order_relaxed);
         }
     }
 }

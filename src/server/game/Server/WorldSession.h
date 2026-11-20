@@ -1101,7 +1101,7 @@ class TC_GAME_API WorldSession
         void LogoutPlayer(bool save);
         void KickPlayer(std::string_view reason);
         // True once a kick was requested; a headless bot session has no socket to observe the close.
-        bool IsKickRequested() const { return forceExit; }
+        bool IsKickRequested() const { return forceExit.load(std::memory_order_relaxed); }
         // Returns true if all contained hyperlinks are valid
         // May kick player on false depending on world config (handler should abort)
         bool ValidateHyperlinksAndMaybeKick(std::string const& str);
@@ -2140,7 +2140,7 @@ class TC_GAME_API WorldSession
         LockedQueue<WorldPacket*> _recvQueue;
         rbac::RBACData* _RBACData;
         uint32 expireTime;
-        bool forceExit;
+        std::atomic<bool> forceExit;
         bool _motdPending = false;          // MOTD due once the client's loading screen after the login is gone
 
         std::unique_ptr<boost::circular_buffer<std::pair<int64, uint32>>> _timeSyncClockDeltaQueue; // first member: clockDelta. Second member: latency of the packet exchange that was used to compute that clockDelta.
