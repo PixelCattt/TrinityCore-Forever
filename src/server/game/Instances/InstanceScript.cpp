@@ -989,6 +989,15 @@ void InstanceScript::UpdatePhasing()
     });
 }
 
+std::vector<EncounterState> InstanceScript::GetBossStates() const
+{
+    std::vector<EncounterState> states;
+    states.reserve(bosses.size());
+    for (BossInfo const& boss : bosses)
+        states.push_back(boss.state);
+    return states;
+}
+
 char const* InstanceScript::GetBossStateName(uint8 state)
 {
     return EnumUtils::ToConstant(EncounterState(state));
