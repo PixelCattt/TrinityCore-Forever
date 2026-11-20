@@ -1,112 +1,101 @@
-# ForeverCore
+<div align="center">
+  <img src="https://trinitycore.info/tc_logo.png" alt="TrinityCore-Logo" height="250px">
 
-Built on [TrinityCore](https://github.com/TrinityCore/TrinityCore). ForeverCore is our own core now, made for the WoW Forever client, the same way other cores use TrinityCore as their base.
+  <h1>TrinityCore</h1>
+</div>
 
-### [Download latest launcher](https://github.com/Karrz1/Karrz-playerbots-wow-forever/releases/latest/download/WoWForeverLauncher.exe)
 
-Built ForeverCore yourself, or joining a friend? Put `WoWForeverLauncher.exe` in any folder, start it, pick join and
-enter the server's address. Send the same link to friends who want to join.
+## This Branch (Forever)
 
-A server for the **WoW Forever client (Classic 1.60.1, build 70938)**, based on TrinityCore. Older supported builds (70888, 70790 and the rest in `repack/client-builds.txt`) keep working.
+> **This is not an official TrinityCore Branch!** </br>
+> This is a Community run Fork. It is not made, supported or endorsed by the TrinityCore Team. </br>
+> It is up to them whether they Support this Version of WoW or if any changes made here are taken Upstream.
 
-- Blizzlike: it plays like Blizzard's realms. Fixes come from real game data or fix the server itself.
-- No custom items, quests or rates. Every option starts at Blizzard's setting.
-- Free to copy, change and share under the GPL-2.0.
+> This Branch runs TrinityCore against the **WoW Forever Client**. </br>
+> It uses a Vanilla World (From VMaNGOS) together with the Zephras Isle Content.
 
-**Want to play?** Download the Windows repack from the
-[latest release](https://github.com/Karrz1/Karrz-playerbots-wow-forever/releases/latest) (the
-`WoW-Forever-Bots-<version>.zip` file). You turn bots on or off when you start it.
 
-## Build it with us
+## Introduction
 
-ForeverCore is made by the people who play on it. Every bug report, fix and packet capture makes it better for everyone,
-so jump in:
+TrinityCore is an Open Source **MMORPG** Framework based mostly in C++.
 
-- **Found a bug?** Open an [issue](https://github.com/Karrz1/ForeverCore/issues/new/choose). Say what happens, what
-  should happen, and the ids of the quest, NPC, item or spell if you have them.
-- **Have a fix?** Send a pull request against `forever` (or `forever-bots` for the bots). One fix per pull request,
-  and say where the data comes from (sniff, Wowhead, Questie, a video). [CONTRIBUTING.md](CONTRIBUTING.md) has the
-  few rules for SQL and C++.
-- **Want to talk it over first, or need help?** Come say hi on our [Discord](https://discord.gg/eJt62dDh54).
-- **Have packet captures or WDB caches from the official Forever realms?** Share them on Discord. They are the best
-  source we have.
+The Project is derived from **MaNGOS**, the **Massive Network Game Object Server**. </br>
+It is based on the Code of that Project and has an extensive amount of Changes that </br>
+Optimize, Improve and Clean Up the Code while Improving in-game Functionality.
 
-## Branches
+If you wish to Contribute, feel free to make a [Pull Request on GitHub](https://github.com/TrinityCore/TrinityCore/pulls).
 
-- `forever`: the core (this branch).
-- `forever-bots`: the same core plus the optional player bots. Bots stay off until you turn them on.
+For further information on the TrinityCore Project, please visit our [Website](https://www.trinitycore.org).
 
-The repack is built from a tagged `forever-bots` commit.
 
-## Switches
+## Install
 
-All in `worldserver.conf`. Leave them at 0 for the normal Blizzard game, or turn on what you want for your own server.
-More on each one: [doc/OptionalServerOptions.md](doc/OptionalServerOptions.md) and the notes in `worldserver.conf.dist`.
+[Build the Core like Normal](https://trinitycore.info/en/install/Core-Installation) using the Source Code from this Repository, then:
 
-| Switch | Normal | Turned on |
-|---|---|---|
-| `Instance.IgnoreAttunement` | 0 | No attunement quest or item needed for dungeons and raids |
-| `Instance.AhnQirajGatesOpen` | 0 | The Ahn'Qiraj gates stand open |
-| `Instance.MoltenCoreSkipRunes` | 0 | Molten Core runes count as done; Majordomo and Ragnaros are up from the start |
-| `Instance.MoltenCoreRagnarosReady` | 0 | Ragnaros can be fought at once, no Majordomo talk |
-| `Instance.MoltenCoreHoundsLinked` | 0 | Core Hound packs must die together, as in 1.12 |
-| `Instance.BindOnEntry`, `Instance.PersistRaidTrash` | 0 | Raid lock when you walk in; killed trash stays dead until the reset |
-| `Classic.ForeverCreatureHealth` | 0 | Creature health from sniffed Forever creatures instead of the vanilla numbers |
-| `Classic.ForeverKillXp` | 0 | Kill XP for lower level mobs from the Forever sniff formula |
-| `Classic.Shop.Enabled` | 0 | In-game store |
-| `Forever.VanillaAoE` | 0 | Vanilla Consecration and Improved Blizzard |
-| `Classic.AdventureGuide` | 0 | The Adventure Guide is shown |
-| `Respawn.DynamicOpenWorld` | 0 | Open world respawns speed up when lots of players are around (thanks SIN) |
-| `Instance.NefarianCapAdds` | 0 | Nefarian phase 1 calls at most 42 drakonids |
+**1. Databases** </br>
+Download the latest Forever Database from the Releases Page, unpack it and put both SQL Files into the Folder you Start the World-Server from. </br>
+On the first Start, the World-Server's Auto-Setup imports them and applies all additional Updates from the SQL Folder in the Source Code Directory.
 
-These follow Forever's own changes and are on by default:
+**2. Config.** </br>
+The Forever Client needs these Settings:
 
-| Switch | Default | What it does |
-|---|---|---|
-| `Classic.Respawn.Level1to10Pct` ... `Level31to60Pct` | 50, 70, 85, 100 | Faster respawns in low level zones. All 100 = off |
-| `Classic.CreatureHealth.RaiseFromLevel`, `.RaiseAt60Pct`, `.Raids` | 20, 20, 0 | More health for higher level creatures, up to +20% at 60, not in raids |
-| `Forever.DayCycle.Speed` | 1 | Day and night speed, 1 to 24. Players can use `.time day`, `.time night` and `.time auto` for themselves |
-
-All `Rate.*` settings are 1, and the auction house bot is off.
-
-## Build
-
-You need a C++20 compiler, CMake, MySQL 8, Boost and OpenSSL (versions: TrinityCore's
-[install guide](https://trinitycore.info/install)).
-
+`worldserver.conf`
 ```
-git clone -b forever https://github.com/Karrz1/TrinityCore.git ForeverCore
-cmake -S ForeverCore -B build -DSERVERS=1 -DSCRIPTS=static -DTOOLS=1
-cmake --build build --config RelWithDebInfo
+RealmID = 70
+Expansion = 0
+Network.SkipBuildAuthKeyCheck = 1
+Network.EnterEncryptedModeRegionGroup = 8
 ```
 
-Then follow [doc/ForeverSetup.md](doc/ForeverSetup.md): the database release, the config lines the client needs, map
-extraction, the login certificate, and how to let other people play. For a Linux server see
-[doc/LinuxServerSetup.md](doc/LinuxServerSetup.md).
-
-## Bots
-
-The bots are a module in `src/modules/PlayerbotV2`, on the `forever-bots` branch:
-
+`bnetserver.conf`
 ```
-git clone -b forever-bots https://github.com/Karrz1/TrinityCore.git ForeverCore-bots
-cmake -S ForeverCore-bots -B build -DSERVERS=1 -DSCRIPTS=static -DBUILD_PLAYERBOT_V2=1
-cmake --build build --config RelWithDebInfo --target worldserver
+Realm.CfgContentSetID = 137
+
+CertificatesFile = "./<Your Certificate File>.pem"
+PrivateKeyFile = "./<Your Private Key File>.pem"
+
+LoginREST.ExternalAddress = trinity.actual.battle.net
+LoginREST.LocalAddress = trinity.actual.battle.net
 ```
 
-Turn them on in `playerbot.conf` (`Playerbot.Enable`, `Playerbot.World.Enable`). World PvP bots and the bot chat
-program are off by default. Database setup for the bots: `src/modules/PlayerbotV2/INSTALL.md` on that branch.
-Other modules go in `src/modules/` too, see [src/modules/README.md](src/modules/README.md).
+**3. Login.** </br>
+The Game Connects to `trinity.actual.battle.net` over TLS, so on the Client PC needs to have:
 
-## Thanks
+**1.** A Hosts File Entry for `127.0.0.1 trinity.actual.battle.net` </br>
+**2.** A Certificate for `trinity.actual.battle.net` Signed by a Root CA the Client PC Trusts. </br>
+**3.** WoW Started through the [Forever Launcher](https://github.com/PixelCattt/Forever-Launcher), which adjusts the Server the Game Connects to when Logging In.
 
-- [TrinityCore](https://github.com/TrinityCore/TrinityCore) and everyone in [AUTHORS](AUTHORS).
-- advocaite, who started the `forever` branch.
-- [VMaNGOS](https://github.com/vmangos/core) for the vanilla world, [CMaNGOS classic-db](https://github.com/cmangos/classic-db)
-  and [Questie](https://github.com/Questie/Questie) for quest, spawn and drop data.
-- The AnoCore project, for Forever quest data and spawns.
-- SIN, for the dynamic open world respawns.
-- Everyone who sent fixes, bug reports and packet captures.
 
-Not made or supported by the TrinityCore team or by Blizzard Entertainment, so please don't ask them about it. No game
-files are included: you need your own client. GPL-2.0, see [COPYING](COPYING).
+## Requirements
+
+Software Requirements for Windows, Linux and MacOS are available in the [Wiki](https://trinitycore.info/en/install/requirements).
+
+
+## Reporting Issues
+
+Issues can be reported via [GitHub Issues](https://github.com/PixelCattt/TrinityCore-Forever/issues).
+
+Please take the Time to review existing Issues before submitting your own to prevent Duplicates.
+
+For more Information on how to properly report an Issue, please read the [Issue Guide](https://community.trinitycore.org/topic/37-the-trinitycore-issuetracker-and-you/). </br>
+Invalid or Incorrect/Poorly formed Reports will be Deleted.
+
+
+## Submitting Fixes
+
+Fixes are submitted via [GitHub Pull Requests](https://github.com/PixelCattt/TrinityCore-Forever/pulls).
+
+Please take the Time to review existing PRs before submitting your own to prevent Duplicates.
+
+For more Information on how to properly submit a Pull Request, please read [how to maintain a remote Fork](https://community.trinitycore.org/topic/9002-howto-maintain-a-remote-fork-for-pull-requests-tortoisegit/). </br>
+Invalid or Incorrect/Poorly formed PRs will be Deleted.
+
+
+## Authors & Contributors
+
+[List of Authors & Contributors](AUTHORS)
+
+
+## Copyright
+
+[GPL 2.0](COPYING)
