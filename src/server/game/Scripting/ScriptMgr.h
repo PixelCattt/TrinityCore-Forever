@@ -23,6 +23,7 @@
 #include "Tuples.h"
 #include <boost/preprocessor/punctuation/remove_parens.hpp>
 #include <memory>
+#include <string_view>
 #include <vector>
 
 class AccountMgr;
@@ -287,6 +288,11 @@ class TC_GAME_API WorldScript : public ScriptObject
 
         // Called before a battleground queue opens a new (non arena) instance; return false to hold it for now.
         virtual bool CanCreateBattleground(uint32 battlemasterListId, uint8 bracketId);
+
+        // Called after a .reload command (in game, console or remote) finished without error, with the
+        // full command path, e.g. "reload config", "reload creature_template", "reload all quest".
+        // Lets modules refresh what they cached from the reloaded config or tables.
+        virtual void OnAfterReload(std::string_view command);
 };
 
 class TC_GAME_API FormulaScript : public ScriptObject
@@ -1201,6 +1207,7 @@ class TC_GAME_API ScriptMgr
         void OnStartup();
         void OnShutdown();
         bool CanCreateBattleground(uint32 battlemasterListId, uint8 bracketId);
+        void OnAfterReload(std::string_view command);
 
     public: /* FormulaScript */
 
