@@ -26,6 +26,7 @@ EndScriptData */
 #include "AccountMgr.h"
 #include "Chat.h"
 #include "ChatCommand.h"
+#include "CombatLogWatch.h"
 #include "DatabaseEnv.h"
 #include "Language.h"
 #include "ObjectAccessor.h"
@@ -50,6 +51,7 @@ public:
             { "ingame",     HandleGMListIngameCommand,  rbac::RBAC_PERM_COMMAND_GM_INGAME,      Console::Yes },
             { "list",       HandleGMListFullCommand,    rbac::RBAC_PERM_COMMAND_GM_LIST,        Console::Yes },
             { "visible",    HandleGMVisibleCommand,     rbac::RBAC_PERM_COMMAND_GM_VISIBLE,     Console::No },
+            { "combatlog",  HandleGMCombatLogCommand,   rbac::RBAC_PERM_COMMAND_GM_COMBATLOG,   Console::No },
             { "on",         HandleGMOnCommand,          rbac::RBAC_PERM_COMMAND_GM,             Console::No },
             { "off",        HandleGMOffCommand,         rbac::RBAC_PERM_COMMAND_GM,             Console::No },
         };
@@ -187,6 +189,46 @@ public:
         }
         else
             handler->PSendSysMessage(LANG_GMLIST_EMPTY);
+        return true;
+    }
+
+    // .gm combatlog [group|off]: receive the combat log around the selected unit (or around every member of its
+    // group) from any distance, e.g. to watch a dungeon run from outside the party. Off until a GM starts it.
+    static bool HandleGMCombatLogCommand(ChatHandler* handler, Optional<std::string_view> mode)
+    {
+        Player* gm = handler->GetSession()->GetPlayer();
+
+        if (mode && StringEqualI(*mode, "off"))
+        {
+            if (CombatLogWatch::Stop(gm->GetGUID()))
+                handler->SendSysMessage("Combat log watch stopped.");
+            else
+                handler->SendSysMessage("You have no combat log watch.");
+            return true;
+        }
+
+        bool const wholeGroup = mode && StringEqualI(*mode, "group");
+        if (mode && !wholeGroup)
+            return false;
+
+        Unit* target = handler->getSelectedUnit();
+        if (!target || target == gm)
+        {
+            handler->SendSysMessage(LANG_SELECT_CHAR_OR_CREATURE);
+            handler->SetSentErrorMessage(true);
+            return false;
+        }
+
+        if (wholeGroup && (!target->ToPlayer() || !target->ToPlayer()->GetGroup()))
+        {
+            handler->SendSysMessage("The selected unit is not a player in a group.");
+            handler->SetSentErrorMessage(true);
+            return false;
+        }
+
+        CombatLogWatch::Start(gm, target, wholeGroup);
+        handler->PSendSysMessage("Combat log watch on %s%s from any distance. Stop it with .gm combatlog off.",
+            target->GetName().c_str(), wholeGroup ? " and their group" : "");
         return true;
     }
 

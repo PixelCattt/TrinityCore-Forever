@@ -30,6 +30,8 @@
 
 // Touch of Weakness / Shadowguard: the proc trigger aura names a dummy spell, so a hit on the priest did nothing. The rank's own
 // damage spell is cast at the attacker instead (it carries the shadow damage and, for Touch of Weakness, the attack power debuff).
+// Touch of Weakness strikes "the next melee attack" once and is used up (the client row has no charges, so it struck every hit;
+// tooltip; wowsims/forever, MIT, sim/priest/touch_of_weakness.go ends it on the strike).
 class classic_spell_pri_touch_of_weakness : public AuraScript
 {
     bool Validate(SpellInfo const* spellInfo) override
@@ -44,7 +46,10 @@ class classic_spell_pri_touch_of_weakness : public AuraScript
         Unit* attacker = eventInfo.GetActor();
         uint32 const damage = ClassicPriestSpells::Find(ClassicPriestSpells::TouchOfWeakness, GetId());
         if (attacker && damage)
+        {
             GetTarget()->CastSpell(attacker, damage, aurEff);
+            Remove();
+        }
     }
 
     void Register() override

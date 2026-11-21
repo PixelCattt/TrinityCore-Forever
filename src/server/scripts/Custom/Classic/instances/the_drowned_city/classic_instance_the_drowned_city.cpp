@@ -21,11 +21,19 @@
 //
 // No sniff of this dungeon exists. The spells are the ones the 70862 client ships for these bosses (Monstrous Slam,
 // Harpoon, Embrine, Waterbolt Volley, Bloodbolt, Blood Rite, Freeze Water, Waterbolt, Drench, Deluge, Transform, Poison
-// Bolt Volley, Fear, Tail Lash); what each boss does comes from the public dungeon guides. Timers and damage values are
+// Bolt Volley, Fear, Fatal Bite); what each boss does comes from the public dungeon guides. Timers and damage values are
 // INFERRED (picked for a level 35-40 group), so a sniff of the fights should replace them.
 //
-// Primeval Elemental waits hidden in the flooded quarter and wakes when Deathless Marrow dies (INFERRED from the guides,
-// which fight it right after Marrow). Min'loth does not die at zero health the first time: she turns into the serpent
+// 19 Nov: every boss spell id checked against the live casts (EG Link combat logs, builds 70205-70959, all players merged:
+// casts per pull, no timestamps). Spells live never casts are gone (Enrage 1284435, Tail Lash 1287872, the wrong Embrine,
+// Cleave, Freeze Water and Fear ids), the live ones we lacked are in (Undying Oath, Rotted Strike, Poisoned Blood, Fatal
+// Bite), and each repeat timer is set so a fight of the boss's live health (about 300 damage a second from a level 38 group,
+// INFERRED) casts each spell about as often per pull as live does.
+//
+// The live combat logs (EG Link, Efficient Games, CC BY 4.0, builds 70938 and 70959) put the Primeval Elemental in the pool of
+// the flooded quarter, 490 y from Deathless Marrow, and show it killed in one run of three: an optional boss, awake from the
+// start, not one that waits for Marrow. They also show Deathless Watchers, Guardians and Sorcerers fighting in every run and
+// never dying: the dead Marrow's Blood Rite raises, despawned with her. Min'loth does not die at zero health the first time: she turns into the serpent
 // (Transform 1283295, creature 260274's model) with full health, and the serpent has to be killed.
 
 #include "ScriptMgr.h"
@@ -66,6 +74,7 @@ enum ClassicDrownedCityCreatures : uint32
     NPC_TDC_PRIMEVAL = 263886,
     NPC_TDC_MIN_LOTH = 260243,
     NPC_TDC_BRINESCALE_PRIESTESS = 260096,
+    NPC_TDC_DEATHLESS_WATCHER = 260205,     // Marrow's raised dead (the live logs: they fight, they never die)
     NPC_TDC_DEATHLESS_GUARDIAN = 260213,
     NPC_TDC_DEATHLESS_SORCERER = 260214
 };
@@ -74,21 +83,23 @@ enum ClassicDrownedCitySpells : uint32
 {
     // all present in the 70862 client
     SPELL_TDC_MONSTROUS_SLAM = 1282504,     // damage + stun around the caster (radius index 18)
-    SPELL_TDC_ENRAGE = 1284435,
+    SPELL_TDC_UNDYING_OATH = 1282511,       // Zul'Alai, once a pull on live (cast where the guides put his enrage)
+    SPELL_TDC_ROTTED_STRIKE = 1282519,      // Zul'Alai, instant, about one a pull on live
     SPELL_TDC_HARPOON = 1282615,            // pulls the target to the caster (triggers 1282659 -> 1282753)
-    SPELL_TDC_CLEAVE = 1283413,
-    SPELL_TDC_EMBRINE = 1282843,            // the bubble: stun on one target
+    SPELL_TDC_CLEAVE = 15284,               // Var'Taka's live Cleave (1283413 is not what live casts)
+    SPELL_TDC_EMBRINE = 1282842,            // the bubble on one target: live casts 1282842 (EG Link logs, 12x); 1282843 is not what live casts
     SPELL_TDC_WATERBOLT_VOLLEY = 1282860,
     SPELL_TDC_BLOODBOLT = 1283034,
     SPELL_TDC_BLOOD_RITE = 1283033,         // the look of the ritual while the dead rise
-    SPELL_TDC_FREEZE_WATER = 1290983,       // frost damage + root around the caster
+    SPELL_TDC_FREEZE_WATER = 1290980,       // frost damage + root around the caster; live casts 1290980 once a pull, never 1290983
+    SPELL_TDC_POISONED_BLOOD = 1283027,     // Deathless Marrow, instant, about four a pull on live
+    SPELL_TDC_FATAL_BITE = 1283327,         // Min'loth the serpent, on the tank, about one in two pulls on live
     SPELL_TDC_WATERBOLT = 1290978,
     SPELL_TDC_DRENCH = 1283250,
     SPELL_TDC_DELUGE = 1283233,             // live periodic aura; its trigger is server-side, so the pulses are ours
     SPELL_TDC_TRANSFORM = 1283295,          // turns Min'loth into the serpent (creature 260274's model)
     SPELL_TDC_POISON_BOLT_VOLLEY = 1283313,
-    SPELL_TDC_FEAR = 1283934,
-    SPELL_TDC_TAIL_LASH = 1287872
+    SPELL_TDC_FEAR = 1313471                // the id live casts (1283934 is not)
 };
 
 constexpr ClassicDungeonBossEntry ClassicDrownedCityBossEntries[] =
@@ -101,16 +112,11 @@ constexpr ClassicDungeonBossEntry ClassicDrownedCityBossEntries[] =
     { CTDC_ENC_MIN_LOTH, NPC_TDC_MIN_LOTH }
 };
 
-// INFERRED damage values for a level 35-40 group (no live numbers)
-constexpr int32 TdcSlamDamage = 500;
-constexpr int32 TdcVolleyDamage = 350;
-constexpr int32 TdcBloodboltDamage = 300;
-constexpr int32 TdcFreezeWaterDamage = 160;     // the guides quote about 160 a tick
-constexpr int32 TdcWaterboltDamage = 280;
-constexpr int32 TdcDrenchDamage = 420;
-constexpr int32 TdcDelugePulseDamage = 150;
-constexpr int32 TdcPoisonVolleyDamage = 220;
-constexpr int32 TdcTailLashDamage = 300;
+// The bosses' spells are all new to Forever: their base points are a share (percent) of the expected creature spell damage at
+// the caster's level (SpellEffectInfo::UsesClassicFlatBasePoints), so they are cast with the client's own values. The flat
+// numbers this file used to put in effect 0 (300 to 500) were read as percents too and hit 10 to 20 times too hard.
+// Deluge's pulses are ours (its trigger is server-side on live): Drench at a third of its client 40 percent (INFERRED).
+constexpr int32 TdcDelugePulsePct = 13;
 
 std::vector<Player*> TdcPlayersNear(Creature* me, float range)
 {
@@ -124,12 +130,10 @@ std::vector<Player*> TdcPlayersNear(Creature* me, float range)
     return out;
 }
 
-// a client spell cast with our own value in effect 0
-void TdcCast(Creature* me, Unit* target, uint32 spellId, int32 value)
+// a client spell cast with its own values
+void TdcCast(Creature* me, Unit* target, uint32 spellId)
 {
-    CastSpellExtraArgs args(TRIGGERED_FULL_MASK);
-    args.AddSpellBP0(value);
-    me->CastSpell(target, spellId, args);
+    me->CastSpell(target, spellId, CastSpellExtraArgs(TRIGGERED_FULL_MASK));
 }
 
 void TdcAddJoins(Creature* me, Creature* add)
@@ -175,17 +179,11 @@ public:
         }
 
         ClassicDungeonEncounterTracker _encounterTracker{ *this, ClassicDrownedCityBossEntries };
-        ObjectGuid _primeval;
 
         void OnCreatureCreate(Creature* creature) override
         {
             InstanceScript::OnCreatureCreate(creature);
             _encounterTracker.OnCreatureCreate(creature);
-            if (creature->GetEntry() == NPC_TDC_PRIMEVAL)
-            {
-                _primeval = creature->GetGUID();
-                UpdatePrimeval();
-            }
         }
 
         void OnCreatureRemove(Creature* creature) override
@@ -203,28 +201,6 @@ public:
         {
             _encounterTracker.Update(diff);
         }
-
-        bool SetBossState(uint32 id, EncounterState state) override
-        {
-            if (!InstanceScript::SetBossState(id, state))
-                return false;
-            if (id == CTDC_ENC_DEATHLESS && state == DONE)
-                UpdatePrimeval();
-            return true;
-        }
-
-        // hidden and out of reach until Deathless Marrow is dead
-        void UpdatePrimeval()
-        {
-            Creature* primeval = instance->GetCreature(_primeval);
-            if (!primeval || !primeval->IsAlive())
-                return;
-            bool const awake = GetBossState(CTDC_ENC_DEATHLESS) == DONE;
-            primeval->SetVisible(awake);
-            primeval->SetUninteractible(!awake);
-            primeval->SetImmuneToPC(!awake);
-            primeval->SetReactState(awake ? REACT_AGGRESSIVE : REACT_PASSIVE);
-        }
     };
 
     InstanceScript* GetInstanceScript(InstanceMap* map) const override
@@ -240,7 +216,7 @@ struct classic_boss_tdc_zul_alai : public ScriptedAI
 {
     classic_boss_tdc_zul_alai(Creature* creature) : ScriptedAI(creature) { }
 
-    enum : uint32 { EV_SLAM = 1 };
+    enum : uint32 { EV_SLAM = 1, EV_ROTTED_STRIKE };
 
     void Reset() override
     {
@@ -250,7 +226,8 @@ struct classic_boss_tdc_zul_alai : public ScriptedAI
 
     void JustEngagedWith(Unit* /*who*/) override
     {
-        _events.ScheduleEvent(EV_SLAM, 9s);             // INFERRED timers
+        _events.ScheduleEvent(EV_SLAM, 12s);            // INFERRED timers: live casts Slam once a pull, Rotted Strike 0.75
+        _events.ScheduleEvent(EV_ROTTED_STRIKE, 20s);
     }
 
     void DamageTaken(Unit* /*attacker*/, uint32& damage, DamageEffectType /*type*/, SpellInfo const* /*spellInfo*/) override
@@ -258,7 +235,7 @@ struct classic_boss_tdc_zul_alai : public ScriptedAI
         if (!_enraged && me->HealthBelowPctDamaged(35, damage))
         {
             _enraged = true;
-            DoCastSelf(SPELL_TDC_ENRAGE, CastSpellExtraArgs(TRIGGERED_FULL_MASK));
+            DoCastSelf(SPELL_TDC_UNDYING_OATH, CastSpellExtraArgs(TRIGGERED_FULL_MASK));
         }
     }
 
@@ -272,10 +249,11 @@ struct classic_boss_tdc_zul_alai : public ScriptedAI
 
         while (uint32 ev = _events.ExecuteEvent())
         {
-            if (ev == EV_SLAM)
+            switch (ev)
             {
-                TdcCast(me, me, SPELL_TDC_MONSTROUS_SLAM, TdcSlamDamage);
-                _events.Repeat(14s, 18s);
+                case EV_SLAM: TdcCast(me, me, SPELL_TDC_MONSTROUS_SLAM); _events.Repeat(35s, 40s); break;
+                case EV_ROTTED_STRIKE: DoCastVictim(SPELL_TDC_ROTTED_STRIKE, CastSpellExtraArgs(TRIGGERED_FULL_MASK)); _events.Repeat(40s, 50s); break;
+                default: break;
             }
         }
     }
@@ -341,7 +319,7 @@ struct classic_boss_tdc_dreadrise : public ScriptedAI
 
     void JustEngagedWith(Unit* /*who*/) override
     {
-        _events.ScheduleEvent(EV_VOLLEY, 8s);           // INFERRED timers
+        _events.ScheduleEvent(EV_VOLLEY, 10s);          // INFERRED timers: live 2.25 volleys and 1.5 Embrines a pull
         _events.ScheduleEvent(EV_EMBRINE, 15s);
     }
 
@@ -357,7 +335,7 @@ struct classic_boss_tdc_dreadrise : public ScriptedAI
         {
             switch (ev)
             {
-                case EV_VOLLEY: TdcCast(me, me, SPELL_TDC_WATERBOLT_VOLLEY, TdcVolleyDamage); _events.Repeat(12s, 15s); break;
+                case EV_VOLLEY: TdcCast(me, me, SPELL_TDC_WATERBOLT_VOLLEY); _events.Repeat(18s, 22s); break;
                 case EV_EMBRINE:
                     if (Unit* target = SelectTarget(SelectTargetMethod::Random, 1, 0.0f, true))
                         DoCast(target, SPELL_TDC_EMBRINE, CastSpellExtraArgs(TRIGGERED_FULL_MASK));
@@ -372,14 +350,15 @@ private:
     EventMap _events;
 };
 
-// Deathless Marrow (south flooded quarter, the Deathless Guardians encounter): Bloodbolt on everyone, and the Blood Rite
-// raises Deathless Guardians and Sorcerers from the water.
+// Deathless Marrow (the Deathless Guardians encounter, with a Watcher, a Guardian and a Sorcerer standing at her side):
+// Bloodbolt on everyone, and the Blood Rite raises Deathless Watchers, Guardians and Sorcerers, who go when she dies. The live
+// logs count about ten raised in a fight.
 struct classic_boss_tdc_deathless_marrow : public ScriptedAI
 {
     classic_boss_tdc_deathless_marrow(Creature* creature) : ScriptedAI(creature), _summons(creature) { }
 
-    enum : uint32 { EV_BLOODBOLT = 1, EV_RITE };
-    static constexpr uint32 MaxRaised = 6;          // INFERRED cap
+    enum : uint32 { EV_BLOODBOLT = 1, EV_RITE, EV_POISONED_BLOOD };
+    static constexpr uint32 MaxRaised = 9;          // INFERRED cap (three rites)
 
     void Reset() override
     {
@@ -390,8 +369,9 @@ struct classic_boss_tdc_deathless_marrow : public ScriptedAI
 
     void JustEngagedWith(Unit* /*who*/) override
     {
-        _events.ScheduleEvent(EV_BLOODBOLT, 7s);        // INFERRED timers
+        _events.ScheduleEvent(EV_BLOODBOLT, 8s);        // INFERRED timers: live 5.5 Bloodbolts and 3.75 Poisoned Bloods a pull
         _events.ScheduleEvent(EV_RITE, 15s);
+        _events.ScheduleEvent(EV_POISONED_BLOOD, 12s);
     }
 
     void JustSummoned(Creature* summon) override { _summons.Summon(summon); }
@@ -409,12 +389,17 @@ struct classic_boss_tdc_deathless_marrow : public ScriptedAI
         {
             switch (ev)
             {
-                case EV_BLOODBOLT: TdcCast(me, me, SPELL_TDC_BLOODBOLT, TdcBloodboltDamage); _events.Repeat(10s, 13s); break;
+                case EV_BLOODBOLT: TdcCast(me, me, SPELL_TDC_BLOODBOLT); _events.Repeat(18s, 24s); break;
+                case EV_POISONED_BLOOD:
+                    if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0, 40.0f, true))
+                        TdcCast(me, target, SPELL_TDC_POISONED_BLOOD);
+                    _events.Repeat(28s, 34s);
+                    break;
                 case EV_RITE:
                     if (_raised < MaxRaised)
                     {
                         DoCastSelf(SPELL_TDC_BLOOD_RITE, CastSpellExtraArgs(TRIGGERED_FULL_MASK));
-                        for (uint32 entry : { NPC_TDC_DEATHLESS_GUARDIAN, NPC_TDC_DEATHLESS_SORCERER })
+                        for (uint32 entry : { NPC_TDC_DEATHLESS_WATCHER, NPC_TDC_DEATHLESS_GUARDIAN, NPC_TDC_DEATHLESS_SORCERER })
                         {
                             Position pos = me->GetRandomNearPosition(8.0f);
                             TdcAddJoins(me, me->SummonCreature(entry, pos, TEMPSUMMON_CORPSE_TIMED_DESPAWN, 10s));
@@ -434,25 +419,20 @@ private:
     uint32 _raised = 0;
 };
 
-// Primeval Elemental (wakes when Marrow dies): Freeze Water around it (frost damage and a root, a tick a second for six
+// Primeval Elemental (the pool of the flooded quarter, optional): Freeze Water around it (frost damage and a root, a tick a second for six
 // seconds) and Waterbolt on a random player.
 struct classic_boss_tdc_primeval_elemental : public ScriptedAI
 {
     classic_boss_tdc_primeval_elemental(Creature* creature) : ScriptedAI(creature) { }
 
-    enum : uint32 { EV_WATERBOLT = 1, EV_FREEZE, EV_FREEZE_TICK };
-    static constexpr uint32 FreezeTicks = 6;
+    enum : uint32 { EV_WATERBOLT = 1, EV_FREEZE };
 
-    void Reset() override
-    {
-        _events.Reset();
-        _ticks = 0;
-    }
+    void Reset() override { _events.Reset(); }
 
     void JustEngagedWith(Unit* /*who*/) override
     {
-        _events.ScheduleEvent(EV_WATERBOLT, 4s);        // INFERRED timers
-        _events.ScheduleEvent(EV_FREEZE, 12s);
+        _events.ScheduleEvent(EV_WATERBOLT, 4s);        // INFERRED timers: live 5.67 Waterbolts and one Freeze Water a pull
+        _events.ScheduleEvent(EV_FREEZE, 18s);
     }
 
     void UpdateAI(uint32 diff) override
@@ -469,23 +449,13 @@ struct classic_boss_tdc_primeval_elemental : public ScriptedAI
             {
                 case EV_WATERBOLT:
                     if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0, 40.0f, true))
-                        TdcCast(me, target, SPELL_TDC_WATERBOLT, TdcWaterboltDamage);
+                        TdcCast(me, target, SPELL_TDC_WATERBOLT);
                     _events.Repeat(6s, 8s);
                     break;
                 case EV_FREEZE:
-                    _ticks = 0;
-                    _events.ScheduleEvent(EV_FREEZE_TICK, 0s);
-                    _events.Repeat(22s, 26s);
+                    DoCastSelf(SPELL_TDC_FREEZE_WATER, CastSpellExtraArgs(TRIGGERED_FULL_MASK));
+                    _events.Repeat(40s, 45s);
                     break;
-                case EV_FREEZE_TICK:
-                {
-                    CastSpellExtraArgs args(TRIGGERED_FULL_MASK);
-                    args.AddSpellMod(SPELLVALUE_BASE_POINT2, TdcFreezeWaterDamage);
-                    me->CastSpell(me, SPELL_TDC_FREEZE_WATER, args);
-                    if (++_ticks < FreezeTicks)
-                        _events.Repeat(1s);
-                    break;
-                }
                 default: break;
             }
         }
@@ -493,17 +463,16 @@ struct classic_boss_tdc_primeval_elemental : public ScriptedAI
 
 private:
     EventMap _events;
-    uint32 _ticks = 0;
 };
 
 // Min'loth the Serpent (last boss, the west courtyard). Naga form: Drench on a random player and Deluge (four waves of
-// water on everyone near). At zero health she turns into the serpent with full health: Poison Bolt Volley, Tail Lash
+// water on everyone near). At zero health she turns into the serpent with full health: Poison Bolt Volley, Fatal Bite
 // and Fear.
 struct classic_boss_tdc_min_loth : public ScriptedAI
 {
     classic_boss_tdc_min_loth(Creature* creature) : ScriptedAI(creature) { }
 
-    enum : uint32 { EV_DRENCH = 1, EV_DELUGE, EV_DELUGE_PULSE, EV_POISON_VOLLEY, EV_TAIL_LASH, EV_FEAR };
+    enum : uint32 { EV_DRENCH = 1, EV_DELUGE, EV_DELUGE_PULSE, EV_POISON_VOLLEY, EV_FATAL_BITE, EV_FEAR };
     static constexpr uint32 DelugePulses = 4;
     static constexpr float DelugeRange = 30.0f;
 
@@ -518,8 +487,8 @@ struct classic_boss_tdc_min_loth : public ScriptedAI
 
     void JustEngagedWith(Unit* /*who*/) override
     {
-        _events.ScheduleEvent(EV_DRENCH, 5s);           // INFERRED timers
-        _events.ScheduleEvent(EV_DELUGE, 18s);
+        _events.ScheduleEvent(EV_DRENCH, 8s);           // INFERRED timers: live a pull has 1.5 Drench, 0.75 Deluge, 1.5 Poison Bolt
+        _events.ScheduleEvent(EV_DELUGE, 20s);          // Volley, 1.25 Fear, 0.5 Fatal Bite
     }
 
     void DamageTaken(Unit* /*attacker*/, uint32& damage, DamageEffectType /*type*/, SpellInfo const* /*spellInfo*/) override
@@ -535,8 +504,8 @@ struct classic_boss_tdc_min_loth : public ScriptedAI
         DoCastSelf(SPELL_TDC_TRANSFORM, CastSpellExtraArgs(TRIGGERED_FULL_MASK));
         me->SetFullHealth();
         _events.ScheduleEvent(EV_POISON_VOLLEY, 6s);
-        _events.ScheduleEvent(EV_TAIL_LASH, 10s);
-        _events.ScheduleEvent(EV_FEAR, 15s);
+        _events.ScheduleEvent(EV_FEAR, 12s);
+        _events.ScheduleEvent(EV_FATAL_BITE, 18s);
     }
 
     void JustDied(Unit* /*killer*/) override
@@ -558,29 +527,33 @@ struct classic_boss_tdc_min_loth : public ScriptedAI
             {
                 case EV_DRENCH:
                     if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0, 40.0f, true))
-                        TdcCast(me, target, SPELL_TDC_DRENCH, TdcDrenchDamage);
-                    _events.Repeat(9s, 12s);
+                        TdcCast(me, target, SPELL_TDC_DRENCH);
+                    _events.Repeat(20s, 25s);
                     break;
                 case EV_DELUGE:
                     DoCastSelf(SPELL_TDC_DELUGE, CastSpellExtraArgs(TRIGGERED_FULL_MASK));
                     _pulses = 0;
                     _events.ScheduleEvent(EV_DELUGE_PULSE, 1s);
-                    _events.Repeat(25s, 30s);
+                    _events.Repeat(40s, 45s);
                     break;
                 case EV_DELUGE_PULSE:
                     for (Player* player : TdcPlayersNear(me, DelugeRange))
-                        TdcCast(me, player, SPELL_TDC_DRENCH, TdcDelugePulseDamage);
+                    {
+                        CastSpellExtraArgs args(TRIGGERED_FULL_MASK);
+                        args.AddSpellBP0(TdcDelugePulsePct);
+                        me->CastSpell(player, SPELL_TDC_DRENCH, args);
+                    }
                     if (++_pulses < DelugePulses)
                         _events.Repeat(2s);
                     else
                         me->RemoveAurasDueToSpell(SPELL_TDC_DELUGE);
                     break;
-                case EV_POISON_VOLLEY: TdcCast(me, me, SPELL_TDC_POISON_BOLT_VOLLEY, TdcPoisonVolleyDamage); _events.Repeat(10s, 13s); break;
-                case EV_TAIL_LASH: TdcCast(me, me, SPELL_TDC_TAIL_LASH, TdcTailLashDamage); _events.Repeat(12s, 15s); break;
+                case EV_POISON_VOLLEY: TdcCast(me, me, SPELL_TDC_POISON_BOLT_VOLLEY); _events.Repeat(20s, 25s); break;
+                case EV_FATAL_BITE: DoCastVictim(SPELL_TDC_FATAL_BITE, CastSpellExtraArgs(TRIGGERED_FULL_MASK)); _events.Repeat(40s, 50s); break;
                 case EV_FEAR:
                     if (Unit* target = SelectTarget(SelectTargetMethod::Random, 1, 20.0f, true))
                         DoCast(target, SPELL_TDC_FEAR, CastSpellExtraArgs(TRIGGERED_FULL_MASK));
-                    _events.Repeat(20s, 25s);
+                    _events.Repeat(25s, 30s);
                     break;
                 default: break;
             }

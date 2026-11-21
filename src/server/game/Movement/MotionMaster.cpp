@@ -796,7 +796,7 @@ void MotionMaster::MoveCharge(PathGenerator const& path, float speed /*= SPEED_C
 // left a bot tank on its own platform, thrown straight up, while the client's pull flies it over the slime to the other add
 // (naxx_thaddius 1118 r2: both tanks came down where they stood, Stalagg and Feugen walked across the room to each other's tank, and the
 // raid wiped). False when no floor is found under the landing point (over the void): the caller keeps the raycast.
-static bool KnockbackFlightLanding(Unit const* owner, Position& dest, float dist, float relAngle, float maxHeight)
+static bool KnockbackFlightLanding(Unit const* owner, Position& dest, float dist, float relAngle, float maxHeight, Position* metAt = nullptr)
 {
     Map* map = owner->GetMap();
     PhaseShift const& phaseShift = owner->GetPhaseShift();
@@ -844,6 +844,8 @@ static bool KnockbackFlightLanding(Unit const* owner, Position& dest, float dist
         if (hit(px, py, pz, qx, qy, qz))
         {
             met = true;
+            if (metAt)
+                metAt->Relocate(qx, qy, qz);
             ex = qx;
             ey = qy;
             // Back off the wall it met.
@@ -890,9 +892,21 @@ void MotionMaster::MoveKnockbackFrom(Position const& origin, float speedXY, floa
     {
         // A player reaches here only when it is a bot (Unit::KnockbackFrom: a client flies its own knockback). It is thrown through the
         // air as a client is, over gaps and drops the navmesh does not cross; a creature keeps the mmap raycast.
-        if (!_owner->IsPlayer() || !KnockbackFlightLanding(_owner, dest, dist, o, max_height))
+        Position const start = dest;
+        Position metAt(0.0f, 0.0f, 0.0f);
+        bool const flown = _owner->IsPlayer() && KnockbackFlightLanding(_owner, dest, dist, o, max_height, &metAt);
+        if (!flown)
             // Use a mmap raycast to get a valid destination.
             _owner->MovePositionToFirstCollision(dest, dist, o);
+        // Where each bot throw lands, and what cut it short (naxx_thaddius 1118 r5b: after Magnetic Pull the tanks came down on the floor
+        // between the platforms, 30-90 y short of the other add, and nothing said where the flight ended or why).
+        if (_owner->IsPlayer())
+            TC_LOG_INFO("playerbot.v2.knockback", "[knockback] {} from {:.1f},{:.1f},{:.1f} toward {:.1f},{:.1f},{:.1f}: {:.1f} y, apex {:.1f}; {} at {:.1f},{:.1f},{:.1f}{}",
+                        _owner->GetName(), start.GetPositionX(), start.GetPositionY(), start.GetPositionZ(), origin.GetPositionX(),
+                        origin.GetPositionY(), origin.GetPositionZ(), dist, max_height, flown ? "lands" : "no floor, navmesh raycast", dest.GetPositionX(),
+                        dest.GetPositionY(), dest.GetPositionZ(),
+                        metAt.GetPositionX() != 0.0f ? Trinity::StringFormat(", the arc met geometry at {:.1f},{:.1f},{:.1f}", metAt.GetPositionX(),
+                                                                              metAt.GetPositionY(), metAt.GetPositionZ()) : std::string());
         path.push_back(PositionToVector3(dest));
     }
     else

@@ -384,14 +384,15 @@ void ThreatManager::EvaluateSuppressed(bool canExpire)
 
 void ThreatManager::AddThreat(Unit* target, float amount, SpellInfo const* spell, bool ignoreModifiers, bool ignoreRedirects)
 {
-    // step 1: we can shortcut if the spell has one of the NO_THREAT attrs set - nothing will happen
-    if (spell)
-    {
-        if (spell->HasAttribute(SPELL_ATTR1_NO_THREAT))
-            return;
-        if (!_owner->IsEngaged() && spell->HasAttribute(SPELL_ATTR2_NO_INITIAL_THREAT))
-            return;
-    }
+    // step 1: we can shortcut if the spell has the NO_THREAT attr set - nothing will happen
+    // SPELL_ATTR2_NO_INITIAL_THREAT is not checked here: it only keeps the hit itself from starting combat (Spell.cpp, HasInitialAggro), and
+    // the damage the spell then deals puts the target in combat as any damage does (VMaNGOS: "only checked on hit"; Starshards aggroes when
+    // its damage lands). Checked here, a mob not yet in combat took the damage of such a spell and never fought back: the Sweeping Strikes
+    // and Blade Flurry extra hit (12723) on a second boar regenerated (TestPlayer, 2026-11-20). The client data sets it on about 50 damage
+    // spells, among them the Flamestrike, Hellfire and Starshards ranks.
+    // Threat that is not damage still respects it: HandleThreatSpells returns for a spell without initial aggro.
+    if (spell && spell->HasAttribute(SPELL_ATTR1_NO_THREAT))
+        return;
 
     // if we cannot actually have a threat list, we instead just set combat state and avoid creating threat refs altogether
     if (!CanHaveThreatList())

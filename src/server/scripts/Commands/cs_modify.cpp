@@ -70,6 +70,7 @@ public:
             { "gender",       rbac::RBAC_PERM_COMMAND_MODIFY_GENDER,       false, &HandleModifyGenderCommand,        "" },
             { "honor",        rbac::RBAC_PERM_COMMAND_MODIFY_HONOR,        false, &HandleModifyHonorCommand,         "" },
             { "hp",           rbac::RBAC_PERM_COMMAND_MODIFY_HP,           false, &HandleModifyHPCommand,            "" },
+            { "currenthp",    rbac::RBAC_PERM_COMMAND_MODIFY_HP,           false, &HandleModifyCurrentHPCommand,     "" },
             { "mana",         rbac::RBAC_PERM_COMMAND_MODIFY_MANA,         false, &HandleModifyManaCommand,          "" },
             { "money",        rbac::RBAC_PERM_COMMAND_MODIFY_MONEY,        false, &HandleModifyMoneyCommand,         "" },
             { "mount",        rbac::RBAC_PERM_COMMAND_MODIFY_MOUNT,        false, &HandleModifyMountCommand,         "" },
@@ -146,6 +147,39 @@ public:
             return true;
         }
         return false;
+    }
+
+    // Set only the current health of the selected unit (player or creature); its maximum stays as it is.
+    // For test setups that need a hurt unit with its normal maximum (.modify hp sets both).
+    static bool HandleModifyCurrentHPCommand(ChatHandler* handler, uint32 hp)
+    {
+        Unit* target = handler->getSelectedUnit();
+        if (!target)
+        {
+            handler->SendSysMessage(LANG_SELECT_CHAR_OR_CREATURE);
+            handler->SetSentErrorMessage(true);
+            return false;
+        }
+
+        if (Player* player = target->ToPlayer())
+            if (handler->HasLowerSecurity(player, ObjectGuid::Empty))
+                return false;
+
+        if (!target->IsAlive() || hp < 1 || hp > target->GetMaxHealth())
+        {
+            handler->SendSysMessage(LANG_BAD_VALUE);
+            handler->SetSentErrorMessage(true);
+            return false;
+        }
+
+        uint32 const maxHealth = uint32(target->GetMaxHealth());
+        if (target->IsPlayer())
+            NotifyModification(handler, target, LANG_YOU_CHANGE_HP, LANG_YOURS_HP_CHANGED, int32(hp), int32(maxHealth));
+        else
+            handler->PSendSysMessage(LANG_YOU_CHANGE_HP, target->GetName().c_str(), int32(hp), int32(maxHealth));
+
+        target->SetHealth(hp);
+        return true;
     }
 
     //Edit Player Mana

@@ -93,6 +93,18 @@ namespace BattlenetPresence
     TC_GAME_API void OnLogin(WorldSession* session);            // character in world: own presence, and tell online friends
     TC_GAME_API void OnLogout(WorldSession* session);           // tell online friends we went offline
     TC_GAME_API void OnCharacterChanged(Player const* player);  // zone or level: tell online friends
+
+    enum class BattleTagResult
+    {
+        Ok,
+        NoAccount,          // a game account without a Battle.net account
+        InvalidName,        // not 2-12 letters and digits starting with a letter
+        NoFreeNumber        // the name is full, or the tag was taken meanwhile
+    };
+
+    // .battletag: the player picks the name, the server draws the number ("Name#1234")
+    TC_GAME_API std::string GetBattleTag(WorldSession const* session);
+    TC_GAME_API BattleTagResult SetBattleTag(WorldSession* session, std::string const& name, std::string& tag);
 }
 
 #endif // TRINITYCORE_FRIENDS_SERVICE_H

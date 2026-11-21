@@ -1038,6 +1038,7 @@ enum PlayerLoginQueryIndex
     PLAYER_LOGIN_QUERY_LOAD_DATA_FLAGS,
     PLAYER_LOGIN_QUERY_LOAD_BANK_TAB_SETTINGS,
     PLAYER_LOGIN_QUERY_LOAD_DAY_CYCLE,
+    PLAYER_LOGIN_QUERY_LOAD_ACCOUNT_LEGACY_ACHIEVEMENTS,
     MAX_PLAYER_LOGIN_QUERY
 };
 
@@ -2973,6 +2974,10 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         uint32 GetAchievementPoints() const;
         std::vector<uint32> GetCompletedAchievementIds() const;
         bool HasAchieved(uint32 achievementId) const;
+        // HasAchieved, or a Legacy Points challenge another character of the account did (Classic 1.60: Legacy Points are per account)
+        bool HasAchievedOnAccount(uint32 achievementId) const;
+        struct AccountLegacyAchievement { ObjectGuid Owner; time_t Date = 0; };   // the first character of the account that did it
+        std::unordered_map<uint32, AccountLegacyAchievement> const& GetAccountLegacyAchievements() const { return m_accountLegacyAchievements; }
         void ResetAchievements();
         void FailCriteria(CriteriaFailEvent condition, int32 failAsset);
         void UpdateCriteria(CriteriaType type, uint64 miscValue1 = 0, uint64 miscValue2 = 0, uint64 miscValue3 = 0, WorldObject* ref = nullptr);
@@ -3296,6 +3301,9 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         void _LoadPlayerData(PreparedQueryResult elementsResult, PreparedQueryResult flagsResult);
         void _LoadCharacterBankTabSettings(PreparedQueryResult result);
         void _LoadDayCycle(PreparedQueryResult result);
+        void _LoadAccountLegacyAchievements(PreparedQueryResult result);
+        // the Legacy Points challenges the account's characters have done, as read at login
+        std::unordered_map<uint32, AccountLegacyAchievement> m_accountLegacyAchievements;
 
         /*********************************************************/
         /***                   SAVE SYSTEM                     ***/
@@ -3399,6 +3407,7 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         int32 m_spellPenetrationItemMod;
         std::array<int32, 140 - 83> m_classicItemMods = { };   // ItemModType 83 .. 139 (ITEM_MOD_CLASSIC_*), from equipped items
         int32 m_classicBlockValueBonus = 0;                    // ITEM_MOD_BLOCK_VALUE of equipped items
+        float m_classicItemArmor = 0.0f;                        // armor of equipped items (base and ITEM_MOD_EXTRA_ARMOR), part of UNIT_MOD_ARMOR TOTAL_VALUE
         int32 m_classicSpellHealingDone = 0;                   // ITEM_MOD_SPELL_HEALING_DONE of equipped items and enchantments
         int32 m_classicSpellDamageDone = 0;                    // ITEM_MOD_SPELL_DAMAGE_DONE of equipped items and enchantments
         mutable TimePoint _classicFreeHelpfulSpellsUntil;            // Legacy perk The Quick and the Dead: free helpful spells after resurrection

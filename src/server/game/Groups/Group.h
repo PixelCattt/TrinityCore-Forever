@@ -342,6 +342,9 @@ class TC_GAME_API Group
         uint32 GetMembersCount() const { return uint32(m_memberSlots.size()); }
         uint32 GetInviteeCount() const { return m_invitees.size(); }
         GroupFlags GetGroupFlags() const { return m_groupFlags; }
+        // The leader turned this group into a raid by hand (CMSG_CONVERT_RAID), not code adding members to a full party.
+        bool IsRaidChosenByLeader() const { return m_raidChosenByLeader; }
+        void SetRaidChosenByLeader(bool chosen) { m_raidChosenByLeader = chosen; }
 
         uint8 GetMemberGroup(ObjectGuid guid) const;
 
@@ -458,6 +461,7 @@ class TC_GAME_API Group
         ObjectGuid          m_guid;
         uint32              m_dbStoreId;                    // Represents the ID used in database (Can be reused by other groups if group was disbanded)
         bool                m_isLeaderOffline;
+        bool                m_raidChosenByLeader = false;
         TimeTracker         m_leaderOfflineTimer;
 
         // Ready Check

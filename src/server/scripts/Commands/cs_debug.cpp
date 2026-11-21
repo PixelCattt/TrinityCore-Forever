@@ -862,7 +862,7 @@ public:
         bool successful = sBattlegroundMgr->ToggleArenaTesting(battlemasterListId);
         if (!successful)
         {
-            handler->PSendSysMessage("BattlemasterListId %u does not exist or is not an arena.", battlemasterListId);
+            handler->PSendSysMessage("BattlemasterListId %u does not exist, is not an arena, has no start points (All Arenas, 6, only picks another arena: use that arena's id), or its map files are missing on this server (see the startup log).", battlemasterListId);
             handler->SetSentErrorMessage(true);
             return true;
         }

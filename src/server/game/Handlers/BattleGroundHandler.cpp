@@ -128,6 +128,14 @@ void WorldSession::JoinBattlegroundQueue(BattlegroundQueueTypeId bgQueueTypeId)
         return;
     }
 
+    // its map files are missing on this server (the startup log names them), so no match of it is ever made
+    if (!sBattlegroundMgr->HasMapDataToPlay(bgTemplate))
+    {
+        TC_LOG_ERROR("bg.battleground", "Battleground: join of type {} by {} refused: its game data files are missing on this server", uint32(bgTypeId), _player->GetName());
+        ChatHandler(this).SendSysMessage("This battleground cannot be played: its game data files are missing on this server.");
+        return;
+    }
+
     GroupJoinBattlegroundResult err = ERR_BATTLEGROUND_NONE;
 
     Group const* grp = _player->GetGroup();
@@ -683,6 +691,18 @@ void WorldSession::HandleBattlemasterJoinArena(WorldPackets::Battleground::Battl
     if (!bracketEntry)
         return;
 
+    // No arena of this queue has its map files on this server (the startup log names them): the party would wait for a match that is never
+    // made, and an arena without its map files ends as soon as its gates open.
+    if (!sBattlegroundMgr->HasMapDataToPlay(bgTemplate))
+    {
+        TC_LOG_ERROR("bg.battleground", "Battleground: arena join by {} refused: no arena of this queue has its game data files on this server", _player->GetName());
+        WorldPackets::Battleground::BattlefieldStatusFailed battlefieldStatus;
+        BattlegroundMgr::BuildBattlegroundStatusFailed(&battlefieldStatus, bgQueueTypeId, _player, 0, ERR_BATTLEGROUND_JOIN_FAILED);
+        SendPacket(battlefieldStatus.Write());
+        ChatHandler(this).SendSysMessage("This arena cannot be played: its game data files are missing on this server. Start the server through the launcher, which copies them.");
+        return;
+    }
+
     Group* grp = _player->GetGroup();
 
     // The queue takes the party as one team and does not count it, so a player alone queued for 2v2 got a 1 vs 2 match.
@@ -726,6 +746,19 @@ void WorldSession::HandleBattlemasterJoinArena(WorldPackets::Battleground::Battl
     GroupJoinBattlegroundResult err = ERR_BATTLEGROUND_NONE;
     if (!sBattlegroundMgr->isArenaTesting())
         err = grp->CanJoinBattlegroundQueue(bgTemplate, bgQueueTypeId, arenatype, arenatype, true, packet.TeamSizeIndex, errorGuid);
+    else
+    {
+        // Arena testing skips the party checks, but never the one that keeps a player out of a queue he is already in: a second
+        // join made a second queue entry, the player's entry pointed at the new one, and the invite went to the old one, so every
+        // Enter on the invite was refused as "not invited" and the other side won alone (TestPlayer, ".debug arena 1169", 2026-11-19).
+        for (GroupReference const& itr : grp->GetMembers())
+            if (Player* member = itr.GetSource(); member && member->InBattlegroundQueueForBattlegroundQueueType(bgQueueTypeId))
+            {
+                err = ERR_BATTLEGROUND_JOIN_FAILED;
+                errorGuid = member->GetGUID();
+                break;
+            }
+    }
 
     if (!err)
     {

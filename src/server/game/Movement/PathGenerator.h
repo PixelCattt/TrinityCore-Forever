@@ -24,8 +24,10 @@
 #include "MoveSplineInitArgs.h"
 #include "dtQueryFilterTC.h"
 #include <G3D/Vector3.h>
+#include <vector>
 
 class WorldObject;
+struct ClosedDoorShape;
 
 // Unlocks the nav lock the calling thread still holds after a caught hardware fault skipped its destructor (MapUpdater). No-op otherwise.
 TC_GAME_API void ReleaseNavLockAfterFault();
@@ -88,16 +90,29 @@ class TC_GAME_API PathGenerator
         // `waterPolys`: the corridor runs over navmesh water polygons past its first one (the liquid probes miss some of them).
         using LiquidRouteCheck = bool(*)(WorldObject const* source, Movement::PointsArray const& path, bool waterPolys);
         static void SetLiquidRouteCheck(LiquidRouteCheck check) { _liquidRouteCheck = check; }
+        // Optional adjustment (set by a module): moves the points of a finished route whose corridor runs over navmesh water
+        // polygons, for a source whose body does not belong on those polygons (a bot swims under the surface they lie on). The
+        // first point is the source's own place and stays where it is; a moved last point becomes the route's actual end.
+        // Called on the thread that calculates the path.
+        using WaterRouteAdjust = void(*)(WorldObject const* source, Movement::PointsArray& path);
+        static void SetWaterRouteAdjust(WaterRouteAdjust adjust) { _waterRouteAdjust = adjust; }
         // This path goes straight at its target whatever the source's liquid preference (a charge): no land-only search.
         void SetIgnoreLiquidRouteCheck(bool ignore) { _ignoreLiquidRouteCheck = ignore; }
 
-        // Optional check (set by a module): returns true when `source`'s paths must not run through a closed door. The navmesh
-        // is baked without game objects, so its corridors cross doors whatever their state. For such a source CalculatePath
-        // looks for a closed door on each leg of the route and searches again with the door's polygon left out, up to
+        // Optional check (set by a module): which closed doors `source`'s paths must not run through. The navmesh is baked
+        // without game objects, so its corridors cross doors whatever their state. For such a source CalculatePath looks for a
+        // closed door on each leg of the route and searches again with the door's polygon left out, up to
         // MAX_CLOSED_DOOR_DETOURS times; when the target lies only behind a closed door the result is PATHFIND_NOPATH.
-        // It reads the map's game object models, so it must return false on any thread other than the source map's update
-        // thread or the world thread while the maps are still.
-        using ClosedDoorCheck = bool(*)(WorldObject const* source);
+        // Live reads the map's game object models, so only on the source map's update thread or the world thread while the maps
+        // are still; anywhere else Published tests the doors the map last published (Map::GetPublishedClosedDoors), leaving out
+        // those planned through (ClosedDoorShape::PlanThrough).
+        enum class ClosedDoorTest : uint8
+        {
+            None,
+            Live,
+            Published
+        };
+        using ClosedDoorCheck = ClosedDoorTest(*)(WorldObject const* source);
         static void SetClosedDoorCheck(ClosedDoorCheck check) { _closedDoorCheck = check; }
         // The last CalculatePath left out at least one closed door, or found the target only behind one (then PATHFIND_NOPATH).
         bool AvoidedClosedDoor() const { return _avoidedClosedDoor; }
@@ -175,8 +190,10 @@ class TC_GAME_API PathGenerator
         bool _avoidedClosedDoor = false;
         bool CalculatePathImpl(float srcX, float srcY, float srcZ, float destX, float destY, float destZ, bool forceDest);
         bool CalculateLiquidAwarePath(float srcX, float srcY, float srcZ, float destX, float destY, float destZ, bool forceDest);
-        bool FindClosedDoorOnPath(G3D::Vector3& hit) const;
+        bool FindClosedDoorOnPath(G3D::Vector3& hit, std::vector<ClosedDoorShape> const* publishedDoors) const;
+        bool FinishPath(bool ok);
         static LiquidRouteCheck _liquidRouteCheck;
+        static WaterRouteAdjust _waterRouteAdjust;
         static ClosedDoorCheck _closedDoorCheck;
         static constexpr uint32 MAX_CLOSED_DOOR_DETOURS = 6;
 

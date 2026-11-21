@@ -3336,6 +3336,79 @@ void SpellMgr::LoadSpellInfoCustomAttributes()
             }
         }
 
+        // Classic 1.60 (WoW Forever): a spell resists all or nothing when its row is magic, on the magic hit table, deals damage and, beside
+        // the damage, applies an aura other than a dummy to an enemy, interrupts, or carries a dummy, script, energize or area trigger effect
+        // on any target. Its hit roll resists it in full (WorldObject::MagicSpellHitResult), and a hit or tick that lands takes no partial
+        // resist and no Spell Piercing bonus (Unit::CalcSpellResistedDamage). Frostbolt, Ice Lance, Immolate, Shadow Word: Death, Arcane
+        // Wrath, Earth Shock, Flamestrike's cast, Mind Flay, Hurricane and Insect Swarm are binary; Flame Shock (a dummy aura on the target),
+        // Arcane Missiles and the plain nukes are not (wowsims/forever, MIT, sim/core/spelldata/spell.go IsBinary, docs/evidence EV-0142:
+        // 0 partial resists on 2,158 held-out casters' binary hits against hundreds expected, full resists at the target's share). This
+        // replaces TrinityCore's rule above (any non-damage effect with a value, with Frostbolt and Haunt excepted) for every spell that
+        // deals damage; a spell that deals none (Polymorph, Fear) keeps it.
+        {
+            bool dealsDamage = false;
+            bool besideDamage = false;
+            for (SpellEffectInfo const& spellEffectInfo : spellInfoMutable->GetEffects())
+            {
+                bool const appliesAura = spellEffectInfo.IsEffect(SPELL_EFFECT_APPLY_AURA) || spellEffectInfo.IsEffect(SPELL_EFFECT_APPLY_AREA_AURA_PARTY)
+                    || spellEffectInfo.IsEffect(SPELL_EFFECT_APPLY_AREA_AURA_RAID) || spellEffectInfo.IsEffect(SPELL_EFFECT_APPLY_AREA_AURA_ENEMY);
+                switch (spellEffectInfo.Effect)
+                {
+                    case SPELL_EFFECT_SCHOOL_DAMAGE:
+                    case SPELL_EFFECT_WEAPON_DAMAGE:
+                    case SPELL_EFFECT_WEAPON_PERCENT_DAMAGE:
+                    case SPELL_EFFECT_NORMALIZED_WEAPON_DMG:
+                    case SPELL_EFFECT_WEAPON_DAMAGE_NOSCHOOL:
+                    case SPELL_EFFECT_HEALTH_LEECH:
+                    case SPELL_EFFECT_POWER_BURN:
+                        dealsDamage = true;
+                        continue;
+                    case SPELL_EFFECT_INTERRUPT_CAST:
+                    case SPELL_EFFECT_DUMMY:
+                    case SPELL_EFFECT_SCRIPT_EFFECT:
+                    case SPELL_EFFECT_ENERGIZE:
+                    case SPELL_EFFECT_CREATE_AREATRIGGER:
+                        besideDamage = true;
+                        continue;
+                    default:
+                        break;
+                }
+
+                if (!appliesAura)
+                    continue;
+
+                switch (spellEffectInfo.ApplyAuraName)
+                {
+                    case SPELL_AURA_PERIODIC_DAMAGE:
+                    case SPELL_AURA_PERIODIC_LEECH:
+                    case SPELL_AURA_PERIODIC_DAMAGE_PERCENT:
+                    case SPELL_AURA_DAMAGE_SHIELD:
+                    case SPELL_AURA_PROC_TRIGGER_DAMAGE:
+                    case SPELL_AURA_PERIODIC_MANA_LEECH:
+                    case SPELL_AURA_POWER_BURN:
+                        dealsDamage = true;
+                        break;
+                    case SPELL_AURA_DUMMY:
+                    case SPELL_AURA_PERIODIC_DUMMY:
+                        break;
+                    default:
+                        if (spellEffectInfo.TargetA.GetCheckType() == TARGET_CHECK_ENEMY || spellEffectInfo.TargetB.GetCheckType() == TARGET_CHECK_ENEMY)
+                            besideDamage = true;
+                        break;
+                }
+            }
+
+            if (dealsDamage)
+            {
+                bool const magicRow = !(spellInfoMutable->SchoolMask & SPELL_SCHOOL_MASK_NORMAL) && (spellInfoMutable->SchoolMask & SPELL_SCHOOL_MASK_MAGIC)
+                    && spellInfoMutable->DmgClass == SPELL_DAMAGE_CLASS_MAGIC;
+                if (magicRow && besideDamage)
+                    spellInfoMutable->AttributesCu |= SPELL_ATTR0_CU_BINARY_SPELL;
+                else
+                    spellInfoMutable->AttributesCu &= ~SPELL_ATTR0_CU_BINARY_SPELL;
+            }
+        }
+
         // Remove normal school mask to properly calculate damage
         if ((spellInfoMutable->SchoolMask & SPELL_SCHOOL_MASK_NORMAL) && (spellInfoMutable->SchoolMask & SPELL_SCHOOL_MASK_MAGIC))
         {
@@ -3733,6 +3806,79 @@ ClassicSpellValue::Value const* SpellMgr::GetClassicSpellValue(uint32 spellId, u
     return Trinity::Containers::MapGetValuePtr(mClassicSpellValues, (uint64(spellId) << 8) | effectIndex);
 }
 
+uint32 SpellMgr::GetClassicValueSpellId(uint32 spellId) const
+{
+    if (uint32 const* legacy = Trinity::Containers::MapGetValuePtr(mClassicCreatureSpellTwins, spellId))
+        return *legacy;
+    return spellId;
+}
+
+// Classic 1.60: the spells new to Forever (ids from ClassicSpellValue::FirstScaledSpellId) carry their base points as a percentage of the
+// expected stat, but some are plain copies of a legacy spell: same name, same attributes, every effect the same type, aura, base points, period
+// and misc value. Those carry the legacy spell's flat numbers, and take its values as the legacy spell does (classic_spell_value, the flat or
+// scaled rule of SpellEffectInfo::UsesClassicFlatBasePoints). The Shaper's Terrace's Conflagration 1310512 is vanilla Conflagration 16805 to the
+// byte, down to the 16806 it triggers: its 300 a second, read as 300 % of the creature spell damage, burnt a level 59 player for 7539 a second.
+// A spell that differs in anything (Blackmaw's Shadow Bolt 1283362 has another cast time, range and attributes than 13440) is Forever's own.
+void SpellMgr::LoadClassicCreatureSpellTwins()
+{
+    uint32 oldMSTime = getMSTime();
+
+    mClassicCreatureSpellTwins.clear();
+
+    auto sameAttributes = [](SpellInfo const& a, SpellInfo const& b)
+    {
+        return a.Attributes == b.Attributes && a.AttributesEx == b.AttributesEx && a.AttributesEx2 == b.AttributesEx2 &&
+            a.AttributesEx3 == b.AttributesEx3 && a.AttributesEx4 == b.AttributesEx4 && a.AttributesEx5 == b.AttributesEx5 &&
+            a.AttributesEx6 == b.AttributesEx6 && a.AttributesEx7 == b.AttributesEx7 && a.AttributesEx8 == b.AttributesEx8 &&
+            a.AttributesEx9 == b.AttributesEx9 && a.AttributesEx10 == b.AttributesEx10 && a.AttributesEx11 == b.AttributesEx11 &&
+            a.AttributesEx12 == b.AttributesEx12 && a.AttributesEx13 == b.AttributesEx13 && a.AttributesEx14 == b.AttributesEx14 &&
+            a.AttributesEx15 == b.AttributesEx15 && a.AttributesEx16 == b.AttributesEx16;
+    };
+    auto sameEffects = [](SpellInfo const& a, SpellInfo const& b)
+    {
+        if (a.GetEffects().size() != b.GetEffects().size())
+            return false;
+        for (std::size_t i = 0; i < a.GetEffects().size(); ++i)
+        {
+            SpellEffectInfo const& ea = a.GetEffects()[i];
+            SpellEffectInfo const& eb = b.GetEffects()[i];
+            if (ea.Effect != eb.Effect || ea.ApplyAuraName != eb.ApplyAuraName || ea.BasePoints != eb.BasePoints ||
+                ea.ApplyAuraPeriod != eb.ApplyAuraPeriod || ea.MiscValue != eb.MiscValue)
+                return false;
+        }
+        return true;
+    };
+    auto hasValue = [](SpellInfo const& spellInfo)
+    {
+        for (SpellEffectInfo const& effect : spellInfo.GetEffects())
+            if (effect.BasePoints != 0.0f)
+                return true;
+        return false;
+    };
+
+    std::unordered_map<std::string_view, std::vector<SpellInfo const*>> legacyByName;
+    for (SpellInfo const& spellInfo : mSpellInfoMap)
+        if (spellInfo.Difficulty == DIFFICULTY_NONE && ClassicSpellValue::AppliesToSpell(spellInfo.Id) && spellInfo.SpellName && hasValue(spellInfo))
+            legacyByName[(*spellInfo.SpellName)[LOCALE_enUS]].push_back(&spellInfo);
+
+    for (SpellInfo const& spellInfo : mSpellInfoMap)
+    {
+        if (spellInfo.Difficulty != DIFFICULTY_NONE || ClassicSpellValue::AppliesToSpell(spellInfo.Id) || !spellInfo.SpellName || !hasValue(spellInfo))
+            continue;
+        std::vector<SpellInfo const*> const* legacy = Trinity::Containers::MapGetValuePtr(legacyByName, std::string_view((*spellInfo.SpellName)[LOCALE_enUS]));
+        if (!legacy)
+            continue;
+        uint32 twin = 0;
+        for (SpellInfo const* candidate : *legacy)
+            if ((!twin || candidate->Id < twin) && sameAttributes(spellInfo, *candidate) && sameEffects(spellInfo, *candidate))
+                twin = candidate->Id;
+        if (twin)
+            mClassicCreatureSpellTwins[spellInfo.Id] = twin;
+    }
+
+    TC_LOG_INFO("server.loading", ">> Loaded {} Forever copies of legacy spells in {} ms", mClassicCreatureSpellTwins.size(), GetMSTimeDiffToNow(oldMSTime));
+}
+
 // Classic 1.60: vanilla mana cost of the legacy spells (table classic_spell_cost, VMaNGOS spell_template manaCost / manaCostPercentage)
 void SpellMgr::LoadClassicSpellCosts()
 {
@@ -3881,6 +4027,128 @@ SpellMgr::ClassicCrateBundle const* SpellMgr::GetClassicCrateBundle(uint32 spell
     return itr != bundles->end() ? &*itr : nullptr;
 }
 
+// Classic 1.60 (WoW Forever): item effects stronger against one kind of enemy (ClassicVersusBonus.h). spell_versus_bonus names the spell the factor
+// scales, the effect that holds the factor and the enemies; creature_versus_group puts creatures in the groups no creature field holds (Trolls,
+// Plants, Naga...), written by tools/classic_versus_groups from creature_template's names, types and families.
+void SpellMgr::LoadClassicVersusBonus()
+{
+    uint32 oldMSTime = getMSTime();
+
+    mClassicVersusBonus.clear();
+    mClassicVersusCreatureGroups.clear();
+
+    //                                                   0         1     2             3              4       5              6
+    if (QueryResult result = WorldDatabase.Query("SELECT spell_id, kind, source_spell, source_effect, factor, versus_groups, versus_types FROM spell_versus_bonus"))
+    {
+        do
+        {
+            Field* fields = result->Fetch();
+            uint32 const spellId = fields[0].GetUInt32();
+            uint8 const kind = fields[1].GetUInt8();
+            uint32 const sourceSpellId = fields[2].GetUInt32();
+            uint8 const sourceEffect = fields[3].GetUInt8();
+            float const overrideFactor = fields[4].GetFloat();
+            uint32 const groups = fields[5].GetUInt32();
+            uint32 const types = fields[6].GetUInt32();
+
+            if (!GetSpellInfo(spellId, DIFFICULTY_NONE))
+            {
+                TC_LOG_ERROR("sql.sql", "Table `spell_versus_bonus`: spell {} does not exist, row skipped.", spellId);
+                continue;
+            }
+            if (kind >= uint8(ClassicVersusBonus::Kind::Max))
+            {
+                TC_LOG_ERROR("sql.sql", "Table `spell_versus_bonus`: spell {} has unknown kind {}, row skipped.", spellId, kind);
+                continue;
+            }
+            if ((groups & ~uint32(ClassicVersusBonus::GROUP_ALL)) || (!groups && !types))
+            {
+                TC_LOG_ERROR("sql.sql", "Table `spell_versus_bonus`: spell {} kind {} has groups {:#x} and creature types {:#x}, row skipped.", spellId, kind, groups, types);
+                continue;
+            }
+
+            SpellInfo const* source = GetSpellInfo(sourceSpellId, DIFFICULTY_NONE);
+            if (!source)
+            {
+                TC_LOG_ERROR("sql.sql", "Table `spell_versus_bonus`: spell {} kind {} reads its factor from spell {}, which does not exist, row skipped.", spellId, kind, sourceSpellId);
+                continue;
+            }
+            float basePoints = 0.0f;
+            if (sourceEffect < source->GetEffects().size())
+                basePoints = source->GetEffect(SpellEffIndex(sourceEffect)).BasePoints;
+            else if (overrideFactor <= 0.0f)
+            {
+                TC_LOG_ERROR("sql.sql", "Table `spell_versus_bonus`: spell {} kind {} reads its factor from effect {} of spell {}, which has no such effect, row skipped.",
+                    spellId, kind, sourceEffect, sourceSpellId);
+                continue;
+            }
+
+            float const factor = ClassicVersusBonus::Factor(overrideFactor, basePoints);
+            if (factor <= 1.0f)
+            {
+                TC_LOG_ERROR("sql.sql", "Table `spell_versus_bonus`: spell {} kind {} has factor {} (effect {} of spell {} reads {}), row skipped.",
+                    spellId, kind, overrideFactor, sourceEffect, sourceSpellId, basePoints);
+                continue;
+            }
+
+            mClassicVersusBonus[(uint64(spellId) << 8) | kind] = { sourceSpellId, sourceEffect, factor, groups, types };
+        } while (result->NextRow());
+    }
+
+    //                                                   0      1
+    if (QueryResult result = WorldDatabase.Query("SELECT entry, `groups` FROM creature_versus_group"))
+    {
+        do
+        {
+            Field* fields = result->Fetch();
+            uint32 const entry = fields[0].GetUInt32();
+            uint32 const groups = fields[1].GetUInt32();
+            if (!sObjectMgr->GetCreatureTemplate(entry))
+            {
+                TC_LOG_ERROR("sql.sql", "Table `creature_versus_group`: creature {} does not exist, row skipped.", entry);
+                continue;
+            }
+            if (!groups || (groups & ~uint32(ClassicVersusBonus::GROUP_ALL)))
+            {
+                TC_LOG_ERROR("sql.sql", "Table `creature_versus_group`: creature {} has groups {:#x}, row skipped.", entry, groups);
+                continue;
+            }
+            mClassicVersusCreatureGroups[entry] = groups;
+        } while (result->NextRow());
+    }
+
+    TC_LOG_INFO("server.loading", ">> Loaded {} classic versus bonuses and {} creatures in versus groups in {} ms", mClassicVersusBonus.size(),
+        mClassicVersusCreatureGroups.size(), GetMSTimeDiffToNow(oldMSTime));
+}
+
+SpellMgr::ClassicVersusBonusEntry const* SpellMgr::GetClassicVersusBonus(uint32 spellId, ClassicVersusBonus::Kind kind) const
+{
+    return Trinity::Containers::MapGetValuePtr(mClassicVersusBonus, (uint64(spellId) << 8) | uint8(kind));
+}
+
+uint32 SpellMgr::GetClassicVersusGroups(Unit const* target) const
+{
+    if (!target)
+        return 0;
+    if (Player const* player = target->ToPlayer())
+        return ClassicVersusBonus::GroupsOfRace(player->GetRace());
+    if (uint32 const* groups = Trinity::Containers::MapGetValuePtr(mClassicVersusCreatureGroups, target->GetEntry()))
+        return *groups;
+    return 0;
+}
+
+float SpellMgr::GetClassicVersusFactor(uint32 spellId, ClassicVersusBonus::Kind kind, Unit const* target) const
+{
+    if (!target)
+        return 1.0f;
+    ClassicVersusBonusEntry const* bonus = GetClassicVersusBonus(spellId, kind);
+    if (!bonus)
+        return 1.0f;
+    if (!ClassicVersusBonus::Matches(bonus->Groups, bonus->CreatureTypes, GetClassicVersusGroups(target), target->GetCreatureTypeMask()))
+        return 1.0f;
+    return bonus->Factor;
+}
+
 void SpellMgr::LoadSpellInfoCorrections()
 {
     uint32 oldMSTime = getMSTime();
@@ -4006,8 +4274,9 @@ void SpellMgr::LoadSpellInfoCorrections()
         });
     });
 
-    // Warchief's Blessing: health, 15% haste to all spells and attacks (live's copy: melee and ranged haste plus cast speed), mana per 5 sec
-    ApplySpellFix({ 16609 }, [](SpellInfo* spellInfo)
+    // Warchief's Blessing: health, 15% haste to all spells and attacks (live's copy: melee and ranged haste plus cast speed), mana per 5 sec.
+    // Might of Stormwind 460939, the Alliance's buff for Rend's head, is the same three dummy auras in the client data.
+    ApplySpellFix({ 16609, 460939 }, [](SpellInfo* spellInfo)
     {
         ApplySpellEffectFix(spellInfo, EFFECT_0, [](SpellEffectInfo* spellEffectInfo)
         {
@@ -4033,9 +4302,11 @@ void SpellMgr::LoadSpellInfoCorrections()
         });
     });
 
-    // Classic 1.60 warrior Deep Wounds: the bleed tick (412613) never misses, never crits and ignores armor
+    // Classic 1.60 warrior Deep Wounds: the bleed tick (412613) never misses, never crits and ignores armor; WoW Forever: the warrior's
+    // damage bonuses (Death Wish, Enrage) do not scale it either (wowsims/forever, MIT, docs/evidence EV-0139)
     ApplySpellFix({ 412613 }, [](SpellInfo* spellInfo)
     {
+        spellInfo->AttributesEx3 |= SPELL_ATTR3_IGNORE_CASTER_MODIFIERS;
         spellInfo->AttributesEx2 |= SPELL_ATTR2_CANT_CRIT;
         spellInfo->AttributesEx3 |= SPELL_ATTR3_ALWAYS_HIT;
         spellInfo->AttributesCu |= SPELL_ATTR0_CU_IGNORE_ARMOR;

@@ -1298,8 +1298,16 @@ void AuctionHouseObject::BuildListBuckets(WorldPackets::AuctionHouse::AuctionLis
             if (bucketData->RequiredLevel && player->GetLevel() < bucketData->RequiredLevel)
                 continue;
 
-            if (player->CanUseItem(sObjectMgr->GetItemTemplate(bucket.first.ItemId), true) != EQUIP_ERR_OK)
+            ItemTemplate const* itemTemplate = sObjectMgr->GetItemTemplate(bucket.first.ItemId);
+            if (player->CanUseItem(itemTemplate, true) != EQUIP_ERR_OK)
                 continue;
+
+            // Classic 1.60: CanUseItem(ItemTemplate const*) leaves out the weapon and armor proficiency that equipping checks
+            // (CanUseItem(Item*)), so "usable only" listed staves to a paladin (Discord bug-report 2026-11-20, Sagiroth)
+            if (itemTemplate && (itemTemplate->GetClass() == ITEM_CLASS_WEAPON || itemTemplate->GetClass() == ITEM_CLASS_ARMOR))
+                if (uint32 proficiency = itemTemplate->GetSkill())
+                    if (!player->GetSkillValue(proficiency))
+                        continue;
 
             // cannot learn caged pets whose level exceeds highest level of currently owned pet
             if (bucketData->MinBattlePetLevel && bucketData->MinBattlePetLevel > maxKnownPetLevel)
@@ -1679,6 +1687,7 @@ bool AuctionHouseObject::BuyCommodity(CharacterDatabaseTransaction trans, Player
         else if (*uniqueSeller != auction->Owner)
             uniqueSeller = ObjectGuid::Empty;
 
+        uint32 const countBeforePurchase = auction->GetTotalItemCount();
         uint32 boughtFromAuction = 0;
         std::size_t removedItems = 0;
         for (Item* auctionItem : auction->Items)
@@ -1713,6 +1722,15 @@ bool AuctionHouseObject::BuyCommodity(CharacterDatabaseTransaction trans, Player
             boughtFromAuction += auctionItem->GetCount();
             remainingQuantity -= auctionItem->GetCount();
             ++removedItems;
+
+            // A purchase that ends exactly on a stack's end is complete: going on split the next stack for 0 items, which cannot be made,
+            // so buying for example 20 Linen Cloth out of stacks of 20 failed ("Item is no longer available"; Discord 2026-11-20) while
+            // buying everything worked. The price check above stops at the same stack.
+            if (!remainingQuantity)
+            {
+                auctionItr = bucketItr->second.Auctions.end();
+                break;
+            }
         }
 
         removedItemsFromAuction.push_back(removedItems);
@@ -1731,8 +1749,20 @@ bool AuctionHouseObject::BuyCommodity(CharacterDatabaseTransaction trans, Player
         }
 
         uint64 auctionHouseCut = CalculateAuctionHouseCut(auction->BuyoutOrUnitPrice * boughtFromAuction);
-        uint64 depositPart = AuctionHouseMgr::GetCommodityAuctionDeposit(items[0].Items[0]->GetTemplate(), std::chrono::duration_cast<Minutes>(auction->EndTime - auction->StartTime),
-            boughtFromAuction, _auctionHouse->DepositRate);
+        // The deposit given back is the bought items' share of what is left of the listing's deposit. Working it out again from the
+        // vendor price gave back at least 1 copper per purchase and used the listed time with Rate.Auction.Time applied, so many small
+        // purchases gave back more than was paid. The listing also kept its whole deposit, so buying the rest of it by its auction id
+        // (the whole-listing buyout) gave the whole deposit back a second time.
+        uint64 const depositPart = boughtFromAuction >= countBeforePurchase ? auction->Deposit
+            : auction->Deposit * boughtFromAuction / countBeforePurchase;
+        auction->Deposit -= depositPart;
+        if (boughtFromAuction < countBeforePurchase)
+        {
+            CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_UPD_AUCTION_DEPOSIT);
+            stmt->setUInt64(0, auction->Deposit);
+            stmt->setUInt32(1, auction->Id);
+            trans->Append(stmt);
+        }
         uint64 profit = auction->BuyoutOrUnitPrice * boughtFromAuction + depositPart - auctionHouseCut;
 
         if (Player* owner = ObjectAccessor::FindConnectedPlayer(auction->Owner))
@@ -1855,9 +1885,6 @@ void AuctionHouseObject::SendAuctionWon(AuctionPosting const* auction, Player* b
     // receiver exist
     if ((bidder || bidderAccId) && !sAuctionBotConfig->IsBotChar(auction->Bidder))
     {
-        MailDraft mail(AuctionHouseMgr::BuildItemAuctionMailSubject(AuctionMailType::Won, auction),
-            AuctionHouseMgr::BuildAuctionWonMailBody(auction->Owner, auction->BidAmount, auction->BuyoutOrUnitPrice));
-
         // set owner to bidder (to prevent delete item with sender char deleting)
         // owner in `data` will set at mail receive and item extracting
         for (Item* item : auction->Items)
@@ -1866,8 +1893,6 @@ void AuctionHouseObject::SendAuctionWon(AuctionPosting const* auction, Player* b
             stmt->setUInt64(0, auction->Bidder.GetCounter());
             stmt->setUInt64(1, item->GetGUID().GetCounter());
             trans->Append(stmt);
-
-            mail.AddItem(item);
         }
 
         if (bidder)
@@ -1880,7 +1905,20 @@ void AuctionHouseObject::SendAuctionWon(AuctionPosting const* auction, Player* b
             bidder->UpdateCriteria(CriteriaType::AuctionsWon, 1);
         }
 
-        mail.SendMailTo(trans, MailReceiver(bidder, auction->Bidder), this, MAIL_CHECK_MASK_COPIED | MAIL_CHECK_MASK_AUCTION_WON | MAIL_CHECK_MASK_AUCTION);
+        // A mail holds at most MAX_MAIL_ITEMS items. A stackable listing posted from more stacks than that and bought whole by its
+        // auction id put them all in one mail, past the client's limit. Send them in several mails, as an expired or cancelled
+        // listing does.
+        auto itemItr = auction->Items.begin();
+        while (itemItr != auction->Items.end())
+        {
+            MailDraft mail(AuctionHouseMgr::BuildItemAuctionMailSubject(AuctionMailType::Won, auction),
+                AuctionHouseMgr::BuildAuctionWonMailBody(auction->Owner, auction->BidAmount, auction->BuyoutOrUnitPrice));
+
+            for (std::size_t i = 0; i < MAX_MAIL_ITEMS && itemItr != auction->Items.end(); ++i, ++itemItr)
+                mail.AddItem(*itemItr);
+
+            mail.SendMailTo(trans, MailReceiver(bidder, auction->Bidder), this, MAIL_CHECK_MASK_COPIED | MAIL_CHECK_MASK_AUCTION_WON | MAIL_CHECK_MASK_AUCTION);
+        }
     }
     else
     {

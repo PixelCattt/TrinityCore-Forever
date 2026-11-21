@@ -265,6 +265,9 @@ public:
 
     uint32 GetPeriodicTickCount() const;
 
+    // Classic 1.60: true when the effect handler rolls the whole amount (a spell-school hit or heal) instead of the base points
+    bool ClassicRollsWholeAmount() const;
+
     static constexpr SpellEffectValue MinValue = -2000000000.0;
     static constexpr SpellEffectValue MaxValue = 2000000000.0;
 

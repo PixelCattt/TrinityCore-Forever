@@ -277,6 +277,13 @@ void WorldSession::HandleSendMail(WorldPackets::Mail::SendMail& sendMail)
                 return;
             }
 
+            // the same item listed twice would be taken out of the bags twice and put in the mail twice (a copy)
+            if (std::find(items.begin(), items.end(), item) != items.end())
+            {
+                player->SendMailResult(0, MAIL_SEND, MAIL_ERR_MAIL_ATTACHMENT_INVALID);
+                return;
+            }
+
             items.push_back(item);
         }
 

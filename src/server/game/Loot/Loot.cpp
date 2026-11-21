@@ -528,6 +528,15 @@ bool LootRoll::PlayerVote(Player* player, RollVote vote)
     if (voterItr == m_rollVoteMap.end() || voterItr->second.Vote != RollVote::NotEmitedYet)
         return false;
 
+    // A vote this roll does not offer is refused, as the client's roll buttons are: Need on a greed-only item, or Disenchant when
+    // nobody in the group can disenchant it. A sent Disenchant vote that won on an item without disenchant loot read an empty
+    // disenchant loot id in Finish.
+    uint32 const voteFlag = vote == RollVote::Need ? ROLL_FLAG_TYPE_NEED
+                          : vote == RollVote::Greed ? ROLL_FLAG_TYPE_GREED
+                          : vote == RollVote::Disenchant ? ROLL_FLAG_TYPE_DISENCHANT : 0;
+    if (voteFlag && !(m_voteMask & voteFlag))
+        return false;
+
     voterItr->second.Vote = vote;
 
     if (vote != RollVote::Pass && vote != RollVote::NotValid)
@@ -720,8 +729,13 @@ void LootRoll::Finish(RollVoteMap::const_iterator winnerItr)
                             if (disenchantLoot->type == LootItemType::Item)
                                 player->SendItemRetrievalMail(disenchantLoot->itemid, disenchantLoot->count, disenchantLoot->context);
                 }
-                else
-                    m_loot->NotifyItemRemoved(m_lootItem->LootListId, m_map);
+
+                // The item became its disenchant loot, so it is gone from the corpse. Left in the loot list, the slot showed as the
+                // winner's own and the winner could take the item as well as the materials.
+                m_lootItem->count = 0;
+                m_lootItem->is_looted = true;
+                --m_loot->unlootedCount;
+                m_loot->NotifyItemRemoved(m_lootItem->LootListId, m_map);
             }
             else
                 player->StoreLootItem(m_loot->GetOwnerGUID(), m_lootItem->LootListId, m_loot);

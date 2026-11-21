@@ -1028,6 +1028,78 @@ void DeathRecap::OnRemoveFromWorld(Player* player)
     }
 }
 
+std::vector<std::string> DeathRecap::GetLastDeathLines(ObjectGuid const& victim, size_t maxLines)
+{
+    std::shared_ptr<Recap const> recap;
+    {
+        std::lock_guard lock(Lock);
+        for (auto const& [id, data] : Recaps)
+            if (data->Victim == victim && (!recap || id > recap->Id))
+                recap = data;
+    }
+
+    std::vector<std::string> lines;
+    if (!recap || !maxLines)
+        return lines;
+
+    auto nameOf = [&recap](ObjectGuid const& guid) -> std::string
+    {
+        auto itr = recap->Infos.find(guid);
+        return itr != recap->Infos.end() ? itr->second.Name : guid.ToString();
+    };
+    auto offsetOf = [&recap](uint32 time)
+    {
+        return (int64(time) - int64(recap->DeathTime)) / 1000.0;
+    };
+
+    lines.push_back(Trinity::StringFormat("Recap #{} of {}: map {} instance {}, {} frames, {} events, offsets in seconds from the death.",
+        recap->Id, recap->VictimName, recap->MapId, recap->InstanceId, recap->Frames.size(), recap->Events.size()));
+
+    // the victim's position and health per frame, evenly sampled, ending with the frame of the death
+    size_t const frameCount = recap->Frames.size();
+    size_t const frameLines = std::min(frameCount, (maxLines - 1) / 2);
+    for (size_t i = 0; i < frameLines; ++i)
+    {
+        size_t const index = frameLines > 1 ? i * (frameCount - 1) / (frameLines - 1) : frameCount - 1;
+        Frame const& frame = recap->Frames[index];
+        UnitSample const* sample = nullptr;
+        for (UnitSample const& unit : frame.Units)
+            if (unit.Guid == recap->Victim)
+                sample = &unit;
+        if (!sample)
+            continue;
+
+        uint64 const percent = sample->MaxHealth ? sample->Health * 100 / sample->MaxHealth : 0;
+        lines.push_back(Trinity::StringFormat("{:+7.1f}s  pos {:.1f} {:.1f} {:.1f}  hp {}/{} ({}%)",
+            offsetOf(frame.Time), sample->X, sample->Y, sample->Z, sample->Health, sample->MaxHealth, percent));
+    }
+
+    // the last casts before the death (the events are chronological)
+    std::vector<Event const*> casts;
+    for (Event const& event : recap->Events)
+        if (event.Type == EventType::SpellStart)
+            casts.push_back(&event);
+
+    size_t const castLines = maxLines - lines.size();
+    if (castLines)
+    {
+        if (casts.empty())
+            lines.push_back("  no casts recorded");
+        else
+            for (size_t i = casts.size() > castLines ? casts.size() - castLines : 0; i < casts.size() && lines.size() < maxLines; ++i)
+            {
+                Event const& event = *casts[i];
+                std::string spell = Trinity::StringFormat("spell #{}", event.SpellId);
+                if (SpellInfo const* spellInfo = sSpellMgr->GetSpellInfo(event.SpellId, DIFFICULTY_NONE))
+                    spell = (*spellInfo->SpellName)[DEFAULT_LOCALE];
+                lines.push_back(Trinity::StringFormat("{:+7.1f}s  {} casts {} on {}", offsetOf(event.Time),
+                    nameOf(event.Caster), spell, nameOf(event.Target)));
+            }
+    }
+
+    return lines;
+}
+
 bool DeathRecap::BuildMirrorImage(ObjectGuid const& actor, WorldPackets::Spells::MirrorImageComponentedData& data)
 {
     std::lock_guard lock(Lock);

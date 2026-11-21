@@ -53,6 +53,10 @@ namespace DeathRecap
     TC_GAME_API void RecordSpellDamage(SpellNonMeleeDamage const* log);
     TC_GAME_API void OnPlayerDeath(Player* player);
 
+    // inspection (.deathrecap): the last recorded death of a player as plain text lines (offsets from the death,
+    // positions, health, casts), at most maxLines lines; empty if no death of that player is still recorded
+    TC_GAME_API std::vector<std::string> GetLastDeathLines(ObjectGuid const& victim, size_t maxLines);
+
     // replay
     TC_GAME_API std::string Watch(Player* viewer, uint32 recapId);   // empty on success, otherwise the reason
     TC_GAME_API void Stop(Player* viewer, char const* reason);

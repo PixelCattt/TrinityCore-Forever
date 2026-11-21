@@ -18,12 +18,14 @@
 #include "RandomMovementGenerator.h"
 #include "Creature.h"
 #include "CreatureAI.h"
+#include "Log.h"
 #include "MoveSpline.h"
 #include "MoveSplineInit.h"
 #include "MovementDefines.h"
 #include "PathGenerator.h"
 #include "Player.h"
 #include "Random.h"
+#include "StringFormat.h"
 
 template<class T>
 RandomMovementGenerator<T>::RandomMovementGenerator(float distance, Optional<Milliseconds> duration, Optional<float> speed,
@@ -142,6 +144,16 @@ void RandomMovementGenerator<T>::SetRandomLocation(T* owner)
         // the path is too short for the spline system to be accepted. Let's try again soon.
         _timer.Reset(500);
         return;
+    }
+
+    if (sLog->ShouldLog("movement.random", LOG_LEVEL_DEBUG))
+    {
+        std::string points;
+        for (G3D::Vector3 const& point : _path->GetPath())
+            points += Trinity::StringFormat(" ({:.2f} {:.2f} {:.2f})", point.x, point.y, point.z);
+        TC_LOG_DEBUG("movement.random", "RandomMovementGenerator: {} at {:.2f} {:.2f} {:.2f} target {:.2f} {:.2f} {:.2f} path type {} points{}",
+            owner->GetGUID(), owner->GetPositionX(), owner->GetPositionY(), owner->GetPositionZ(),
+            position.GetPositionX(), position.GetPositionY(), position.GetPositionZ(), uint32(_path->GetPathType()), points);
     }
 
     this->RemoveFlag(MOVEMENTGENERATOR_FLAG_TRANSITORY | MOVEMENTGENERATOR_FLAG_TIMED_PAUSED);

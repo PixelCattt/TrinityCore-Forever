@@ -1327,6 +1327,7 @@ class TC_GAME_API ObjectMgr
         void LoadItemTemplates();
         void LoadItemTemplateAddon();
         void LoadClassicItemDurability();
+        void LoadClassicItemDamage();
         void LoadItemScriptNames();
         void LoadQuestTemplateLocale();
         void LoadQuestObjectivesLocale();

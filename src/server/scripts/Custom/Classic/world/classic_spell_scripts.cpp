@@ -42,6 +42,7 @@
 #include "QuestDef.h"
 #include "RestMgr.h"
 #include "Random.h"
+#include "Spell.h"
 #include "SpellAuraEffects.h"
 #include "SpellHistory.h"
 #include "SpellInfo.h"
@@ -66,6 +67,13 @@ struct ClassicGroundAreaDamage
 {
     uint32 TickDamage;
     float Coefficient;      // spell power per tick
+    // how a tick resists (WoW Forever, wowsims/forever, MIT, docs/evidence EV-0142): Blizzard's, Rain of Fire's and Volley's ticks like a
+    // direct hit, Spell Piercing included (Blizzard's ticks 543 of 2,123 with a piercing bonus against 554 at the caster's rate);
+    // Flamestrike's ground ticks at a tenth of the share with no piercing (57 of 235 with a partial, 0.09 of the target's share; 0 of 4,177
+    // with a piercing bonus); Hurricane's live tick spells deal the damage and slow the target, so they are binary: a tick resists whole
+    // at the target's share and one that lands takes no partial resist (0 partials on 30,053 landed ticks, 64 of 131 full resists against
+    // 68.8 at the share)
+    ClassicResistRoll Resist = ClassicResistRoll::Spell;
 };
 
 static std::unordered_map<uint32, ClassicGroundAreaDamage> const ClassicGroundAreaDamages =
@@ -74,14 +82,16 @@ static std::unordered_map<uint32, ClassicGroundAreaDamage> const ClassicGroundAr
     { 10,    {  25, 0.0417f } }, { 6141,  {  44, 0.0417f } }, { 8427,  {  65, 0.0417f } },
     { 10185, {  90, 0.0417f } }, { 10186, { 117, 0.0417f } }, { 10187, { 149, 0.0417f } },
     // Flamestrike burning ground (fire, 2 s, 8 s; the direct hit is effect 0): ~12% spell power over 4 ticks
-    { 2120,  {  12, 0.0305f } }, { 2121,  {  22, 0.0305f } }, { 8422,  {  35, 0.0305f } },
-    { 8423,  {  49, 0.0305f } }, { 10215, {  66, 0.0305f } }, { 10216, {  85, 0.0305f } },
+    { 2120,  {  12, 0.0305f, ClassicResistRoll::TenthShare } }, { 2121,  {  22, 0.0305f, ClassicResistRoll::TenthShare } },
+    { 8422,  {  35, 0.0305f, ClassicResistRoll::TenthShare } }, { 8423,  {  49, 0.0305f, ClassicResistRoll::TenthShare } },
+    { 10215, {  66, 0.0305f, ClassicResistRoll::TenthShare } }, { 10216, {  85, 0.0305f, ClassicResistRoll::TenthShare } },
     // Rain of Fire (fire, 2 s, 8 s channel): 33% spell power over 4 ticks
     { 5740,  {  42, 0.0833f } }, { 6219,  {  96, 0.0833f } }, { 11677, { 155, 0.0833f } }, { 11678, { 226, 0.0833f } },
     // Volley (arcane, 1 s, 6 s channel): no spell power
     { 1510,  {  50, 0.0f } }, { 14294, {  65, 0.0f } }, { 14295, {  80, 0.0f } },
     // Hurricane (nature, 1 s, 10 s channel): base points + die of the three ranks (classic_spell_value), 10.7% spell power per tick
-    { 16914, {  70, 0.107f } }, { 17401, { 100, 0.107f } }, { 17402, { 134, 0.107f } },
+    { 16914, {  70, 0.107f, ClassicResistRoll::Binary } }, { 17401, { 100, 0.107f, ClassicResistRoll::Binary } },
+    { 17402, { 134, 0.107f, ClassicResistRoll::Binary } },
 };
 
 class classic_spell_ground_area_damage : public AuraScript
@@ -110,6 +120,14 @@ class classic_spell_ground_area_damage : public AuraScript
             if (!target || !target->IsAlive() || !caster->IsValidAttackTarget(target, spellInfo))
                 continue;
 
+            // a binary tick resists whole at the target's average resist
+            if (values.Resist == ClassicResistRoll::Binary
+                && roll_chance(100.0f * Unit::CalculateAverageResistReduction(caster, spellInfo->GetSchoolMask(), target, spellInfo)))
+            {
+                caster->SendSpellMiss(target, spellInfo->Id, SPELL_MISS_RESIST);
+                continue;
+            }
+
             int32 damage = values.TickDamage;
             if (values.Coefficient > 0.0f)
                 damage += int32(caster->SpellBaseDamageBonusDone(spellInfo->GetSchoolMask()) * values.Coefficient);
@@ -126,7 +144,7 @@ class classic_spell_ground_area_damage : public AuraScript
 
             SpellNonMeleeDamage damageInfo(caster, target, spellInfo, GetAura()->GetSpellVisual(), spellInfo->GetSchoolMask(), GetAura()->GetCastId());
             damageInfo.periodicLog = true;
-            caster->CalculateSpellDamageTaken(&damageInfo, damage, spellInfo);
+            caster->CalculateSpellDamageTaken(&damageInfo, damage, spellInfo, BASE_ATTACK, false, false, nullptr, values.Resist);
             Unit::DealDamageMods(damageInfo.attacker, damageInfo.target, damageInfo.damage, &damageInfo.absorb);
             caster->SendSpellNonMeleeDamageLog(&damageInfo);
             caster->DealSpellDamage(&damageInfo, true);
@@ -299,14 +317,22 @@ public:
         Item* weapon = player->GetWeaponForAttack(BASE_ATTACK, true);
         float const speed = (weapon ? weapon->GetTemplate()->GetDelay() : BASE_ATTACK_TIME) / 1000.0f;
 
+        bool const twoHanded = weapon && weapon->GetTemplate()->GetInventoryType() == INVTYPE_2HWEAPON;
         float damage;
-        if (weapon && weapon->GetTemplate()->GetInventoryType() == INVTYPE_2HWEAPON)
+        if (twoHanded)
             damage = 1.2f * points * 1.2f * 1.03f * speed / 100.0f + 1.0f;
         else
             damage = 0.85f * std::ceil(points * 1.2f * 1.03f * speed / 100.0f) - 1.0f;
         damage += 0.03f * (player->GetWeaponDamageRange(BASE_ATTACK, MINDAMAGE) + player->GetWeaponDamageRange(BASE_ATTACK, MAXDAMAGE)) / 2.0f;
 
-        // spell power is added by the damage spell itself (its bonus coefficient)
+        // WoW Forever: a hit takes 0.1 of the paladin's Holy spell power with a one-hander and 0.12 with a two-hander, the tooltip's
+        // coefficients, though the damage rows state 0 (their classic_spell_value coefficient is 0, sql 2026_11_19_54); Judgement of the
+        // Crusader at the same coefficient (wowsims/forever, MIT, docs/rulings R-0009, docs/evidence EV-0060 and EV-0143). The top rank
+        // had no spell power at all.
+        float const coefficient = twoHanded ? 0.12f : 0.1f;
+        damage += coefficient * float(std::max(0, player->SpellBaseDamageBonusDone(SPELL_SCHOOL_MASK_HOLY))
+            + target->GetTotalAuraModifierByMiscMask(SPELL_AURA_MOD_DAMAGE_TAKEN, SPELL_SCHOOL_MASK_HOLY));
+
         player->CastSpell(target, damageSpell, args.AddSpellMod(SPELLVALUE_BASE_POINT0, std::max(int32(damage) + 1, 1)));
     }
 
@@ -429,6 +455,10 @@ class classic_spell_pal_judgement_of_command : public SpellScript
 // self-targeted heal / mana, which went to the enemy (Discord, dumpins 2026-11-17).
 class classic_spell_pal_judgement_intermediate : public SpellScript
 {
+    // Redemption Armor 2-piece 28775: "Increases the amount healed by your Judgement of Light by $s1." A dummy whose class mask names no spell
+    // the heal is filed under (the heals have no class mask), so it never applied; the heal is cast with the bonus added.
+    static constexpr uint32 SPELL_REDEMPTION_JUDGEMENT_OF_LIGHT = 28775;
+
     static uint32 GetRankSpell(bool light, uint32 debuffId)
     {
         if (light)
@@ -470,9 +500,15 @@ class classic_spell_pal_judgement_intermediate : public SpellScript
             if (!rankSpell)
                 continue;
 
-            attacker->CastSpell(attacker, rankSpell, CastSpellExtraArgs(TRIGGERED_FULL_MASK)
-                .SetOriginalCaster(aurApp->GetBase()->GetCasterGUID())
-                .SetTriggeringSpell(GetSpell()));
+            CastSpellExtraArgs args(TRIGGERED_FULL_MASK);
+            args.SetOriginalCaster(aurApp->GetBase()->GetCasterGUID()).SetTriggeringSpell(GetSpell());
+            if (light)
+                if (Unit* paladin = aurApp->GetBase()->GetCaster())
+                    if (AuraEffect const* redemption = paladin->GetAuraEffect(SPELL_REDEMPTION_JUDGEMENT_OF_LIGHT, EFFECT_0))
+                        args.AddSpellBP0(sSpellMgr->AssertSpellInfo(rankSpell, DIFFICULTY_NONE)->GetEffect(EFFECT_0).CalcValue(attacker)
+                            + redemption->GetAmount());
+
+            attacker->CastSpell(attacker, rankSpell, args);
             break;
         }
     }
@@ -1499,8 +1535,21 @@ class classic_spell_pal_unsealed_wrath : public AuraScript
 
 // Judgement of Fury (20183 20411-20414 1311650 1311655): "Unleashing this Seal's energy causes Holy damage to an enemy and taunts the
 // target to attack you for 4 sec." Effect 1 (dummy) is the taunt, effect 2 (dummy) the extra threat.
+// The taunt is 9970901 (serverside, SPELL_AURA_MOD_TAUNT for 4 sec): matching the threat alone left a mob on its current target, because
+// the victim only changes past the 110%/130% threshold. The taunt aura fixates the mob on the paladin like Taunt and Growl, and the
+// matched threat keeps it there afterwards. Taunt immune bosses ignore it.
+enum ClassicPaladinJudgementOfFury
+{
+    SPELL_PAL_JUDGEMENT_OF_FURY_TAUNT = 9970901
+};
+
 class classic_spell_pal_judgement_of_fury : public SpellScript
 {
+    bool Validate(SpellInfo const* /*spellInfo*/) override
+    {
+        return ValidateSpellInfo({ SPELL_PAL_JUDGEMENT_OF_FURY_TAUNT });
+    }
+
     void HandleTaunt(SpellEffIndex /*effIndex*/)
     {
         Creature* target = Object::ToCreature(GetHitUnit());
@@ -1509,8 +1558,9 @@ class classic_spell_pal_judgement_of_fury : public SpellScript
             return;
 
         target->GetThreatManager().MatchUnitThreatToHighestThreat(paladin);
-        if (target->IsAIEnabled())
-            target->AI()->AttackStart(paladin);
+        paladin->CastSpell(target, SPELL_PAL_JUDGEMENT_OF_FURY_TAUNT, CastSpellExtraArgs(TRIGGERED_FULL_MASK)
+            .SetTriggeringSpell(GetSpell())
+            .AddSpellMod(SPELLVALUE_DURATION, 4 * IN_MILLISECONDS));
     }
 
     // effect 2 has no implicit target, so it runs once in hit mode against the judged unit
@@ -1576,16 +1626,57 @@ class classic_spell_pal_consecration : public AuraScript
     Position _center;
 };
 
+// 1280345-1280349 - Consecration tick (Forever): "the first 4 enemies" take effect 1, the bigger hit with the spell power; every
+// enemy in it takes effect 0. The client data has no target cap on effect 1, so every enemy took both hits. Forever.VanillaAoE = 1
+// keeps vanilla (effect 1 is the vanilla tick on every enemy, effect 0 is 0).
+class classic_spell_pal_consecration_tick : public SpellScript
+{
+    static constexpr uint32 FULL_HIT_TARGETS = 4;
+
+    void HandleFullHit(SpellEffIndex effIndex)
+    {
+        if (sWorld->getBoolConfig(CONFIG_FOREVER_VANILLA_AOE))
+            return;
+
+        if (_fullHits < FULL_HIT_TARGETS)
+            ++_fullHits;
+        else
+            PreventHitDefaultEffect(effIndex);
+    }
+
+    void Register() override
+    {
+        OnEffectHitTarget += SpellEffectFn(classic_spell_pal_consecration_tick::HandleFullHit, EFFECT_1, SPELL_EFFECT_ANY);
+    }
+
+    uint32 _fullHits = 0;
+};
+
 // 15286 - Vampiric Embrace (vanilla, VMaNGOS UnitAuraProcHandler): a debuff on the enemy. Shadow damage the priest deals to it
 // heals the priest's party (15290, the priest included) for 20% of the damage. The retail script treated it as a self buff and
 // made the debuffed enemy cast the heal.
+// WoW Forever: Spirit Tap 15270 "Gives you a $m1% chance ... after killing a non-trivial target or when an enemy afflicted by your Vampiric
+// Embrace dies": the second part has no proc flag, so when the debuffed enemy dies, a priest with the talent gets 15271 without a roll,
+// whoever made the kill (tooltip; wowsims/forever, MIT, sim/priest/talents_shadow.go; no log reading).
 class classic_spell_pri_vampiric_embrace : public AuraScript
 {
     static constexpr uint32 SPELL_VAMPIRIC_EMBRACE_HEAL = 15290;
+    static constexpr uint32 SPELL_SPIRIT_TAP = 15270;
+    static constexpr uint32 SPELL_SPIRIT_TAP_BUFF = 15271;
 
     bool Validate(SpellInfo const* /*spellInfo*/) override
     {
-        return ValidateSpellInfo({ SPELL_VAMPIRIC_EMBRACE_HEAL });
+        return ValidateSpellInfo({ SPELL_VAMPIRIC_EMBRACE_HEAL, SPELL_SPIRIT_TAP_BUFF });
+    }
+
+    void HandleRemove(AuraEffect const* /*aurEff*/, AuraEffectHandleModes /*mode*/)
+    {
+        if (GetTargetApplication()->GetRemoveMode() != AURA_REMOVE_BY_DEATH || GetTarget()->IsCritter())
+            return;
+
+        Unit* priest = GetCaster();
+        if (priest && priest->IsAlive() && priest->HasAura(SPELL_SPIRIT_TAP))
+            priest->CastSpell(priest, SPELL_SPIRIT_TAP_BUFF, CastSpellExtraArgs(TRIGGERED_FULL_MASK));
     }
 
     bool CheckProc(ProcEventInfo& eventInfo)
@@ -1609,6 +1700,397 @@ class classic_spell_pri_vampiric_embrace : public AuraScript
     {
         DoCheckProc += AuraCheckProcFn(classic_spell_pri_vampiric_embrace::CheckProc);
         OnEffectProc += AuraEffectProcFn(classic_spell_pri_vampiric_embrace::HandleProc, EFFECT_0, SPELL_AURA_DUMMY);
+        AfterEffectRemove += AuraEffectRemoveFn(classic_spell_pri_vampiric_embrace::HandleRemove, EFFECT_0, SPELL_AURA_DUMMY, AURA_EFFECT_HANDLE_REAL);
+    }
+};
+
+// WoW Forever: Moonshadow Stave 22458, "Harmful spell casts have a chance to deal 91 Arcane or Shadow damage". The aura 1300435 is a dummy
+// with no spell to fire, so it did nothing. It rolls once for each enemy a harmful spell lands on (a damage-free debuff or Hurricane's
+// cast included); damage over time ticks, misses, helpful casts, melee and spells fired as a proc (Hurricane's waves) never roll it, and
+// its 10 ms cooldown lets one cast proc it once. Aura::CalcProcChance prices the row's 1.5 a minute on the cast time. Each proc fires
+// Shadow 1300437 or Arcane 1300438, one in two each, at the target (165 Shadow, 194 Arcane of 359; wowsims/forever, MIT, docs/evidence
+// EV-0115).
+// WoW Forever dungeon set procs that roll on spell casts (Crusader's Wrath 450625, The Furious Storm 450626, Nature's Bounty 450608,
+// Vestments of the Devout 450576): only a cast that costs mana rolls, on the global cooldown or off it (Judgement, Holy Shield, seals,
+// Counterspell); a free one rolls nothing (Swift Judgement 0 of 65, Water Shield 0 of 75, Evocation 0 of 91). White swings roll as their
+// rows say (wowsims/forever, MIT, docs/evidence EV-0144). PROC_ATTR_REQ_POWER_COST would refuse the swings too.
+class classic_spell_item_set_proc_mana_cast : public AuraScript
+{
+protected:
+    bool CheckProc(ProcEventInfo& eventInfo)
+    {
+        Spell const* procSpell = eventInfo.GetProcSpell();
+        if (!procSpell)
+            return true;
+        return std::ranges::any_of(procSpell->GetPowerCost(), [](SpellPowerCost const& cost) { return cost.Power == POWER_MANA && cost.Amount > 0; });
+    }
+
+public:
+    void Register() override
+    {
+        DoCheckProc += AuraCheckProcFn(classic_spell_item_set_proc_mana_cast::CheckProc);
+    }
+};
+
+// 450608 - Nature's Bounty (Wildheart Raiment 5-piece, Feralheart Raiment reissue 4-piece): a dummy that fired nothing. A spell cast
+// that costs mana restores mana (27782), 1 a minute on the cast time (64 of 2,827 casts, measured); a landed white swing gives 27784
+// and a melee hit taken 10 rage (27783), whose rates are unmeasured and take the same row (wowsims/forever, MIT, EV-0144,
+// sim/common/forever/items_sets.go).
+class classic_spell_item_natures_bounty : public classic_spell_item_set_proc_mana_cast
+{
+    static constexpr uint32 SPELL_NATURES_BOUNTY_MANA = 27782;
+    static constexpr uint32 SPELL_NATURES_BOUNTY_RAGE = 27783;
+    static constexpr uint32 SPELL_NATURES_BOUNTY_ENERGY = 27784;
+
+    bool Validate(SpellInfo const* /*spellInfo*/) override
+    {
+        return ValidateSpellInfo({ SPELL_NATURES_BOUNTY_MANA, SPELL_NATURES_BOUNTY_RAGE, SPELL_NATURES_BOUNTY_ENERGY });
+    }
+
+    void HandleProc(AuraEffect const* aurEff, ProcEventInfo& eventInfo)
+    {
+        PreventDefaultAction();
+        Unit* druid = GetTarget();
+        uint32 spellId = SPELL_NATURES_BOUNTY_MANA;
+        if (eventInfo.GetTypeMask() & PROC_FLAG_DEAL_MELEE_SWING)
+            spellId = SPELL_NATURES_BOUNTY_ENERGY;
+        else if (eventInfo.GetTypeMask() & (PROC_FLAG_TAKE_MELEE_SWING | PROC_FLAG_TAKE_MELEE_ABILITY))
+            spellId = SPELL_NATURES_BOUNTY_RAGE;
+        druid->CastSpell(druid, spellId, CastSpellExtraArgs(aurEff));
+    }
+
+    void Register() override
+    {
+        classic_spell_item_set_proc_mana_cast::Register();
+        OnEffectProc += AuraEffectProcFn(classic_spell_item_natures_bounty::HandleProc, EFFECT_0, SPELL_AURA_DUMMY);
+    }
+};
+
+// 24574 - Brittle Armor (Zandalarian Hero Badge 19948 on use): "Increases your armor by 2000 and defense skill by 30 for 20 sec. Every time
+// you take melee or ranged damage, this bonus is reduced by 200 armor and 3 defense." The on-use row puts on the hit listener (24590, whose
+// script spell_item_brittle_armor takes a stack off) and triggers 29284, which the client does not have, so the 10-stack buff 24575 never
+// went on and the badge gave nothing. The cast now applies it at its 10 stacks (wowsims/forever, MIT, tools/database/overrides/
+// hand_triggers.go, tooltip).
+class classic_spell_item_zandalarian_hero_badge : public SpellScript
+{
+    static constexpr uint32 SPELL_BRITTLE_ARMOR_BUFF = 24575;
+
+    bool Validate(SpellInfo const* /*spellInfo*/) override
+    {
+        return ValidateSpellInfo({ SPELL_BRITTLE_ARMOR_BUFF });
+    }
+
+    void HandleAfterCast()
+    {
+        Unit* caster = GetCaster();
+        caster->CastSpell(caster, SPELL_BRITTLE_ARMOR_BUFF, CastSpellExtraArgs(TRIGGERED_FULL_MASK));
+        if (Aura* buff = caster->GetAura(SPELL_BRITTLE_ARMOR_BUFF, caster->GetGUID()))
+            buff->SetStackAmount(uint8(buff->GetSpellInfo()->StackAmount ? buff->GetSpellInfo()->StackAmount : 10));
+    }
+
+    void Register() override
+    {
+        AfterCast += SpellCastFn(classic_spell_item_zandalarian_hero_badge::HandleAfterCast);
+    }
+};
+
+// 28849 - Totem of Flowing Water 23005: "Regain up to $28850s1 mana each time you cast Lesser Healing Wave." The aura is a dummy that fired
+// nothing, and its class mask names bit 5 of the shaman family, under which no spell is filed; Lesser Healing Wave is bit 7 (spell_proc row,
+// sql 2026_11_19_57). Each cast restores 28850's mana (wowsims/forever, MIT, tools/database/overrides/spell_overrides.go, tooltip).
+class classic_spell_item_totem_of_flowing_water : public AuraScript
+{
+    static constexpr uint32 SPELL_FLOWING_WATER_MANA = 28850;
+
+    bool Validate(SpellInfo const* /*spellInfo*/) override
+    {
+        return ValidateSpellInfo({ SPELL_FLOWING_WATER_MANA });
+    }
+
+    void HandleProc(AuraEffect const* aurEff, ProcEventInfo& /*eventInfo*/)
+    {
+        PreventDefaultAction();
+        GetTarget()->CastSpell(GetTarget(), SPELL_FLOWING_WATER_MANA, CastSpellExtraArgs(aurEff));
+    }
+
+    void Register() override
+    {
+        OnEffectProc += AuraEffectProcFn(classic_spell_item_totem_of_flowing_water::HandleProc, EFFECT_0, SPELL_AURA_DUMMY);
+    }
+};
+
+// 17350 - Argent Defender: "Has a chance when struck in combat", about twice as likely when an Undead strikes (its second effect, a dummy
+// of 2). The spell_proc row prices 1 a minute on the attacker's swing interval, the Undead rate; any other attacker passes half the time,
+// 0.5 a minute, both behind the client's 20 s cooldown (wowsims/forever, MIT, docs/evidence EV-0126).
+class classic_spell_item_argent_defender : public AuraScript
+{
+    bool CheckProc(ProcEventInfo& eventInfo)
+    {
+        Unit* attacker = eventInfo.GetActor();
+        if (attacker && attacker->GetCreatureType() == CREATURE_TYPE_UNDEAD)
+            return true;
+        return roll_chance(50);
+    }
+
+    void Register() override
+    {
+        DoCheckProc += AuraCheckProcFn(classic_spell_item_argent_defender::CheckProc);
+    }
+};
+
+// 10373, 16549, 18107, 18206, 1300185 - Fatal Wound / Wound (Pendulum of Doom 9425, Blackhand Doomsaw 12583, Gut Ripper 2164, Diabolic Skiver
+// 9475, Deathblow 10628): "Deals $s2% increased damage to targets below $s3% health." Both are dummies that nothing read, so the bonus never
+// landed. A hit on a target below the third effect's health percent deals the second effect's percent more (wowsims/forever, MIT,
+// sim/common/forever/items_weapons.go, EV-0136).
+class classic_spell_item_fatal_wound : public SpellScript
+{
+    bool Validate(SpellInfo const* spellInfo) override
+    {
+        return ValidateSpellEffect({ { spellInfo->Id, EFFECT_2 } });
+    }
+
+    void CalcDamage(SpellEffectInfo const& /*spellEffectInfo*/, Unit* victim, int32& /*damage*/, int32& /*flatMod*/, float& pctMod)
+    {
+        if (!victim)
+            return;
+
+        int32 const healthPct = GetEffectInfo(EFFECT_2).CalcValueAsInt(GetCaster());
+        if (healthPct > 0 && victim->HealthBelowPct(float(healthPct)))
+            AddPct(pctMod, GetEffectInfo(EFFECT_1).CalcValueAsInt(GetCaster()));
+    }
+
+    void Register() override
+    {
+        SpellScript::CalcDamage += SpellCalcDamageFn(classic_spell_item_fatal_wound::CalcDamage);
+    }
+};
+
+// Weapon procs that "deal $s2 times as much damage" to one kind of enemy, the multiplier being a second effect, a dummy, that nothing read:
+// Drain Life 16414 and Corpse Eater 1299869 (health leech) and Smite 1299631 against Undead, Lightning Bolt 1292851 against Mechanical,
+// Holy Cleaver 1293787 against Undead and boars ("Swine"), Blazewind Blast 1282503 against wolves. Blazewind Blast's tooltip also names
+// Worgen, who are humanoids with no family to tell them apart, so only wolves get it (wowsims/forever, MIT, tools/database/overrides/
+// spell_overrides.go, VersusBonuses).
+class classic_spell_item_versus_bonus : public SpellScript
+{
+    static bool IsFamily(Unit const* victim, CreatureFamily family)
+    {
+        Creature const* creature = victim->ToCreature();
+        return creature && creature->GetCreatureTemplate()->family == family;
+    }
+
+    static bool HasBonusAgainst(uint32 spellId, Unit const* victim)
+    {
+        switch (spellId)
+        {
+            case 16414:   // Drain Life
+            case 1299869: // Corpse Eater
+            case 1299631: // Smite
+                return victim->GetCreatureType() == CREATURE_TYPE_UNDEAD;
+            case 1292851: // Lightning Bolt
+                return victim->GetCreatureType() == CREATURE_TYPE_MECHANICAL;
+            case 1293787: // Holy Cleaver
+                return victim->GetCreatureType() == CREATURE_TYPE_UNDEAD || IsFamily(victim, CREATURE_FAMILY_BOAR);
+            case 1282503: // Blazewind Blast
+                return IsFamily(victim, CREATURE_FAMILY_WOLF);
+            default:
+                return false;
+        }
+    }
+
+    bool Validate(SpellInfo const* spellInfo) override
+    {
+        return ValidateSpellEffect({ { spellInfo->Id, EFFECT_1 } });
+    }
+
+    void CalcDamage(SpellEffectInfo const& /*spellEffectInfo*/, Unit* victim, int32& /*damage*/, int32& /*flatMod*/, float& pctMod)
+    {
+        if (!victim || !HasBonusAgainst(GetSpellInfo()->Id, victim))
+            return;
+
+        float const multiplier = float(GetEffectInfo(EFFECT_1).CalcValue(GetCaster()));
+        if (multiplier > 1.0f)
+            pctMod *= multiplier;
+    }
+
+    void Register() override
+    {
+        SpellScript::CalcDamage += SpellCalcDamageFn(classic_spell_item_versus_bonus::CalcDamage);
+    }
+};
+
+// 1320269 - Toofbreak (Toofbreaker 286430): "Deals $s2 times as much damage if the target is facing you." The multiplier is a dummy nothing
+// read (wowsims/forever, MIT, sim/common/shared/shared_utils.go).
+class classic_spell_item_toofbreak : public SpellScript
+{
+    bool Validate(SpellInfo const* spellInfo) override
+    {
+        return ValidateSpellEffect({ { spellInfo->Id, EFFECT_1 } });
+    }
+
+    void CalcDamage(SpellEffectInfo const& /*spellEffectInfo*/, Unit* victim, int32& /*damage*/, int32& /*flatMod*/, float& pctMod)
+    {
+        if (!victim || !victim->isInFront(GetCaster()))
+            return;
+
+        float const multiplier = float(GetEffectInfo(EFFECT_1).CalcValue(GetCaster()));
+        if (multiplier > 1.0f)
+            pctMod *= multiplier;
+    }
+
+    void Register() override
+    {
+        SpellScript::CalcDamage += SpellCalcDamageFn(classic_spell_item_toofbreak::CalcDamage);
+    }
+};
+
+// 14118 - Rend (Dragonkin): "Deals $s2 times as much damage to Dragonkin." 1300787 - Rend (Barman Shanker 12791): "Deals $s2 times as much
+// damage if applied while behind the target." Each bleed's second effect is a dummy aura with the multiplier that nothing read. Where the
+// rogue stood is taken when the bleed goes on (and again when it is put on afresh), as the tooltip says; the Dragonkin check is per tick
+// (wowsims/forever, MIT, sim/common/forever/items_weapons.go, EV-0146).
+class classic_spell_item_rend_bonus : public AuraScript
+{
+    static constexpr uint32 SPELL_REND_DRAGONKIN = 14118;
+    static constexpr uint32 SPELL_REND_FROM_BEHIND = 1300787;
+
+    bool Validate(SpellInfo const* spellInfo) override
+    {
+        return ValidateSpellEffect({ { spellInfo->Id, EFFECT_1 } });
+    }
+
+    void CalcAmount(AuraEffect const* /*aurEff*/, SpellEffectValue& /*amount*/, bool& /*canBeRecalculated*/)
+    {
+        Unit* caster = GetCaster();
+        Unit* owner = GetUnitOwner();
+        _fromBehind = caster && owner && !owner->isInFront(caster);
+    }
+
+    void CalcDamage(AuraEffect const* /*aurEff*/, Unit* victim, int32& /*damage*/, int32& /*flatMod*/, float& pctMod)
+    {
+        if (!victim)
+            return;
+
+        bool bonus = false;
+        switch (GetId())
+        {
+            case SPELL_REND_DRAGONKIN:
+                bonus = victim->GetCreatureType() == CREATURE_TYPE_DRAGONKIN;
+                break;
+            case SPELL_REND_FROM_BEHIND:
+                bonus = _fromBehind;
+                break;
+            default:
+                break;
+        }
+        if (!bonus)
+            return;
+
+        float const multiplier = float(GetEffectInfo(EFFECT_1).CalcValue(GetCaster()));
+        if (multiplier > 1.0f)
+            pctMod *= multiplier;
+    }
+
+    void Register() override
+    {
+        DoEffectCalcAmount += AuraEffectCalcAmountFn(classic_spell_item_rend_bonus::CalcAmount, EFFECT_0, SPELL_AURA_PERIODIC_DAMAGE);
+        DoEffectCalcDamageAndHealing += AuraEffectCalcDamageFn(classic_spell_item_rend_bonus::CalcDamage, EFFECT_0, SPELL_AURA_PERIODIC_DAMAGE);
+    }
+
+    bool _fromBehind = false;
+};
+
+// 1293881 - Pendulum of Doom (Pendulum of Doom 9425, equip): "Each swing alternates your attack speed between $1293885s1% faster and
+// $1293886s1% slower." The equip aura is a melee haste aura of 0 that procs on each swing, and the two buffs only show the state (a dummy
+// with the percent, and the removal of the other buff); nothing turned a swing into the next state, so the axe swung at its plain speed.
+// Each swing now puts on the other buff and sets the haste to it: +100% after a slow swing, -50% after a fast one, which comes out at the
+// plain speed over two swings (0.5 and 1.5 of the weapon's time). The 10 s periodic dummy puts the axe back to its plain speed once the
+// wearer is out of combat, so a fight never opens on the slow swing.
+class classic_spell_item_pendulum_of_doom : public AuraScript
+{
+    static constexpr uint32 SPELL_PENDULUM_FAST = 1293885;
+    static constexpr uint32 SPELL_PENDULUM_SLOW = 1293886;
+
+    bool Validate(SpellInfo const* /*spellInfo*/) override
+    {
+        return ValidateSpellEffect({ { SPELL_PENDULUM_FAST, EFFECT_0 }, { SPELL_PENDULUM_SLOW, EFFECT_0 } });
+    }
+
+    static int32 StateHaste(uint32 spellId)
+    {
+        int32 const pct = sSpellMgr->AssertSpellInfo(spellId, DIFFICULTY_NONE)->GetEffect(EFFECT_0).CalcValueAsInt();
+        return spellId == SPELL_PENDULUM_SLOW ? -pct : pct;
+    }
+
+    void SetState(uint32 spellId)
+    {
+        Unit* wielder = GetTarget();
+        if (spellId)
+            wielder->CastSpell(wielder, spellId, CastSpellExtraArgs(TRIGGERED_FULL_MASK).SetTriggeringAura(GetEffect(EFFECT_0)));
+        else
+        {
+            wielder->RemoveAurasDueToSpell(SPELL_PENDULUM_FAST, wielder->GetGUID());
+            wielder->RemoveAurasDueToSpell(SPELL_PENDULUM_SLOW, wielder->GetGUID());
+        }
+
+        if (AuraEffect* haste = GetEffect(EFFECT_0))
+            haste->ChangeAmount(spellId ? StateHaste(spellId) : 0);
+    }
+
+    void HandleProc(AuraEffect const* /*aurEff*/, ProcEventInfo& /*eventInfo*/)
+    {
+        PreventDefaultAction();
+        Unit* wielder = GetTarget();
+        SetState(wielder->HasAura(SPELL_PENDULUM_FAST, wielder->GetGUID()) ? SPELL_PENDULUM_SLOW : SPELL_PENDULUM_FAST);
+    }
+
+    void HandlePeriodic(AuraEffect const* /*aurEff*/)
+    {
+        AuraEffect const* haste = GetEffect(EFFECT_0);
+        if (haste && haste->GetAmountAsInt() != 0 && !GetTarget()->IsInCombat())
+            SetState(0);
+    }
+
+    void HandleRemove(AuraEffect const* /*aurEff*/, AuraEffectHandleModes /*mode*/)
+    {
+        GetTarget()->RemoveAurasDueToSpell(SPELL_PENDULUM_FAST, GetTarget()->GetGUID());
+        GetTarget()->RemoveAurasDueToSpell(SPELL_PENDULUM_SLOW, GetTarget()->GetGUID());
+    }
+
+    void Register() override
+    {
+        OnEffectProc += AuraEffectProcFn(classic_spell_item_pendulum_of_doom::HandleProc, EFFECT_0, SPELL_AURA_MOD_MELEE_HASTE_3);
+        OnEffectPeriodic += AuraEffectPeriodicFn(classic_spell_item_pendulum_of_doom::HandlePeriodic, EFFECT_1, SPELL_AURA_PERIODIC_DUMMY);
+        AfterEffectRemove += AuraEffectRemoveFn(classic_spell_item_pendulum_of_doom::HandleRemove, EFFECT_0, SPELL_AURA_MOD_MELEE_HASTE_3,
+            AURA_EFFECT_HANDLE_REAL);
+    }
+};
+
+class classic_spell_item_moonshadow_stave : public AuraScript
+{
+    static constexpr uint32 SPELL_MOONSHADOW_SHADOW = 1300437;
+    static constexpr uint32 SPELL_MOONSHADOW_ARCANE = 1300438;
+
+    bool Validate(SpellInfo const* /*spellInfo*/) override
+    {
+        return ValidateSpellInfo({ SPELL_MOONSHADOW_SHADOW, SPELL_MOONSHADOW_ARCANE });
+    }
+
+    bool CheckProc(ProcEventInfo& eventInfo)
+    {
+        Spell const* procSpell = eventInfo.GetProcSpell();
+        Unit* target = eventInfo.GetActionTarget();
+        return procSpell && !procSpell->IsTriggered() && target && target != eventInfo.GetActor();
+    }
+
+    void HandleProc(AuraEffect const* aurEff, ProcEventInfo& eventInfo)
+    {
+        PreventDefaultAction();
+        eventInfo.GetActor()->CastSpell(eventInfo.GetActionTarget(), urand(0, 1) ? SPELL_MOONSHADOW_SHADOW : SPELL_MOONSHADOW_ARCANE,
+            CastSpellExtraArgs(aurEff));
+    }
+
+    void Register() override
+    {
+        DoCheckProc += AuraCheckProcFn(classic_spell_item_moonshadow_stave::CheckProc);
+        OnEffectProc += AuraEffectProcFn(classic_spell_item_moonshadow_stave::HandleProc, EFFECT_0, SPELL_AURA_DUMMY);
     }
 };
 
@@ -1656,6 +2138,46 @@ public:
         uint32 value = uint32(damage);
         Apply(attacker, value);
         damage = int32(value);
+    }
+};
+
+// 1216997 - Unflinching Morale (Grand Marshal's and High Warlord's weapons, equip): "Reduces all damage taken from players and their pets by
+// $s2%. This effect cannot be combined from multiple sources." The aura is a dummy of 5 (the client has no second effect; the tooltip's
+// $s2 reads the first) and nothing read it, so the rank 14 weapons gave no damage cut. Damage from a player, or from a pet, guardian or
+// totem a player owns, is cut by the aura's amount before armor and resistances; two of the weapons give one cut.
+class classic_unit_unflinching_morale : public UnitScript
+{
+public:
+    classic_unit_unflinching_morale() : UnitScript("classic_unit_unflinching_morale") { }
+
+    static constexpr uint32 SPELL_UNFLINCHING_MORALE = 1216997;
+
+    template <typename T>
+    static void Apply(Unit const* target, Unit const* attacker, T& damage)
+    {
+        if (!target || !attacker || !damage || !attacker->GetCharmerOrOwnerPlayerOrPlayerItself())
+            return;
+
+        AuraEffect const* morale = target->GetAuraEffect(SPELL_UNFLINCHING_MORALE, EFFECT_0);
+        if (!morale || morale->GetAmountAsInt() <= 0)
+            return;
+
+        damage = T(CalculatePct(damage, 100 - std::min(morale->GetAmountAsInt(), 100)));
+    }
+
+    void ModifyMeleeDamage(Unit* target, Unit* attacker, uint32& damage) override
+    {
+        Apply(target, attacker, damage);
+    }
+
+    void ModifySpellDamageTaken(Unit* target, Unit* attacker, int32& damage, SpellInfo const* /*spellInfo*/) override
+    {
+        Apply(target, attacker, damage);
+    }
+
+    void ModifyPeriodicDamageAurasTick(Unit* target, Unit* attacker, uint32& damage) override
+    {
+        Apply(target, attacker, damage);
     }
 };
 
@@ -2171,6 +2693,32 @@ class classic_spell_shadow_storm_min_range : public SpellScript
     }
 };
 
+// 19983 - Cleave (Sapphiron, Vaelastrasz and other classic NPCs): ChainTargets 10, a melee spell. The core chains it jump by jump, 5 y a
+// jump, out to 50 y from the target (Spell::SearchChainTargets), so it ran through a whole raid. In vanilla a melee chain only takes those
+// within its melee range (range index 2, 5 y) of the target it lands on (VMaNGOS, Spell::SetTargetMap for TARGET_UNIT_ENEMY: the search
+// range is the spell's own range for a melee spell, the jumps only for the others). naxx_sapphiron r29 (1118): 16 of 39 died to his
+// Cleave, healers among them 34-48 y from him.
+class classic_spell_cleave_melee_reach : public SpellScript
+{
+    static constexpr float MELEE_CHAIN_REACH = 5.0f;
+
+    void FilterTargets(std::list<WorldObject*>& targets)
+    {
+        Unit* first = GetExplTargetUnit();
+        if (!first)
+            return;
+        targets.remove_if([first](WorldObject* target)
+        {
+            return first->GetDistance(target) > MELEE_CHAIN_REACH;
+        });
+    }
+
+    void Register() override
+    {
+        OnObjectAreaTargetSelect += SpellObjectAreaTargetSelectFn(classic_spell_cleave_melee_reach::FilterTargets, EFFECT_0, TARGET_UNIT_TARGET_ENEMY);
+    }
+};
+
 // 1258773 - Testing the Wells (Forever quest 92742, Westfall): the Well Testing Kit 254545 casts a dummy on a "nearby entry" target that
 // nothing in the data names, so every use failed with an invalid target and the two water samples could never be had (Discord
 // 2026-11-09). The target is the caster now (SpellMgr::LoadSpellInfoCorrections); next to a well the kit gives that well's sample.
@@ -2345,8 +2893,21 @@ void AddSC_classic_spell_scripts()
     RegisterSpellScript(classic_spell_tauren_cultivation);
     RegisterSpellScript(classic_spell_tauren_cultivate_herb);
     new classic_unit_tigers_fury();
+    new classic_unit_unflinching_morale();
     RegisterSpellScript(classic_spell_pri_vampiric_embrace);
+    RegisterSpellScript(classic_spell_item_moonshadow_stave);
+    RegisterSpellScript(classic_spell_item_argent_defender);
+    RegisterSpellScript(classic_spell_item_fatal_wound);
+    RegisterSpellScript(classic_spell_item_versus_bonus);
+    RegisterSpellScript(classic_spell_item_toofbreak);
+    RegisterSpellScript(classic_spell_item_rend_bonus);
+    RegisterSpellScript(classic_spell_item_pendulum_of_doom);
+    RegisterSpellScript(classic_spell_item_zandalarian_hero_badge);
+    RegisterSpellScript(classic_spell_item_totem_of_flowing_water);
+    RegisterSpellScript(classic_spell_item_set_proc_mana_cast);
+    RegisterSpellScript(classic_spell_item_natures_bounty);
     RegisterSpellScript(classic_spell_pal_consecration);
+    RegisterSpellScript(classic_spell_pal_consecration_tick);
     RegisterSpellScript(classic_spell_pal_seal_of_fury);
     RegisterSpellScript(classic_spell_pal_seal_of_fury_damage);
     RegisterSpellScript(classic_spell_pal_unsealed_wrath);
@@ -2390,5 +2951,6 @@ void AddSC_classic_spell_scripts()
     RegisterSpellScript(classic_spell_mage_decipher);
     new classic_player_scroll_deciphering();
     RegisterSpellScript(classic_spell_shadow_storm_min_range);
+    RegisterSpellScript(classic_spell_cleave_melee_reach);
     RegisterSpellScript(classic_spell_quest_testing_the_wells);
 }

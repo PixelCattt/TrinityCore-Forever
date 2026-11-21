@@ -571,7 +571,8 @@ void FillOwnedCurrenciesMap(WorldPackets::Traits::TraitConfig const& traitConfig
                             if (currencySource->QuestID && !player.IsQuestRewarded(currencySource->QuestID))
                                 continue;
 
-                            if (currencySource->AchievementID && !player.HasAchieved(currencySource->AchievementID))
+                            // Classic 1.60: a Legacy Points challenge counts when any character of the account did it
+                            if (currencySource->AchievementID && !player.HasAchievedOnAccount(currencySource->AchievementID))
                                 continue;
 
                             if (currencySource->PlayerLevel && player.GetLevel() < currencySource->PlayerLevel)
@@ -598,6 +599,12 @@ void FillOwnedCurrenciesMap(WorldPackets::Traits::TraitConfig const& traitConfig
                                     amount = std::min(amount, currency->SourcedMax);
                             }
                         }
+
+                        // SourcedMax is the most a trait-sourced currency gives, whatever was earned: the account earns more Legacy
+                        // Points (4225) than can be spent, and the client's own count of the points stops at it too
+                        if (currency->SourcedMax > 0)
+                            if (int32* amount = Trinity::Containers::MapGetValuePtr(currencies, currency->ID))
+                                *amount = std::min(*amount, currency->SourcedMax);
                     }
                     break;
                 case TraitCurrencyType::TraitSourcedPlayerDataElement:
@@ -746,7 +753,7 @@ bool MeetsTraitCondition(WorldPackets::Traits::TraitConfig const& traitConfig, P
     if (condition->QuestID && !player.IsQuestRewarded(condition->QuestID))
         return false;
 
-    if (condition->AchievementID && !player.HasAchieved(condition->AchievementID))
+    if (condition->AchievementID && !player.HasAchievedOnAccount(condition->AchievementID))
         return false;
 
     if (condition->SpecSetID)

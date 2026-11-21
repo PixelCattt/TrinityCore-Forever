@@ -242,6 +242,18 @@ void CharmInfo::SetPetNumber(uint32 petnumber, bool statwindow)
         _unit->SetPetNumberForClient(_petnumber);
     else
         _unit->SetPetNumberForClient(0);
+
+    // Classic 1.60: official sends UnitData CreatureFamily on every pet that has a PetNumber (hunter pets, 18 of 18 in the
+    // 11-18 sniff) and 0 on wild creatures. The client reads it to find the pet's family skill line, where the Beast Training
+    // window takes each ability's training point cost (SkillLineAbility Field_5_5_4_67090_0142). Left at 0, every row showed
+    // one level-based cost (1330 at level 24, 1520 at level 30) and nothing could be learned; this is the one pet field we
+    // left unset that official fills.
+    int32 family = 0;
+    if (statwindow)
+        if (Creature const* creature = _unit->ToCreature())
+            if (CreatureTemplate const* cinfo = creature->GetCreatureTemplate())
+                family = int32(cinfo->family);
+    _unit->SetCreatureFamilyForClient(family);
 }
 
 void CharmInfo::LoadPetActionBar(const std::string& data)

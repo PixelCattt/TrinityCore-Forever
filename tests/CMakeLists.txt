@@ -31,6 +31,9 @@ if(NOT BUILD_PLAYERBOT_V2)
     ClassicTalentCode.cpp
     ClassicBotBridge.cpp
     ClassicBotConversation.cpp
+    ClassicChannelTalk.cpp
+    ClassicPartyTalk.cpp
+    ClassicBotMigrations.cpp
     ClassicGuildAskText.cpp
     ClassicBotLocale.cpp
     ClassicCompanionLeash.cpp
@@ -48,6 +51,7 @@ if(NOT BUILD_PLAYERBOT_V2)
     ClassicHumanLogin.cpp
     ClassicInstanceFullHold.cpp
     ClassicArmorSwapGate.cpp
+    ClassicArmorTypeFit.cpp
     ClassicBotCustomizationRoll.cpp
     ClassicBotListedGroupPlan.cpp
     ClassicLfgRoleGap.cpp

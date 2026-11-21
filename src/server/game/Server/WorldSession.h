@@ -1338,6 +1338,13 @@ class TC_GAME_API WorldSession
             bool checkRequiredDependentChoices, Trinity::IteratorPair<UF::ChrCustomizationChoice const*> selectedChoices) const;
         bool ValidateAppearance(Races race, Classes playerClass, Gender gender,
             Trinity::IteratorPair<UF::ChrCustomizationChoice const*> customizations); // customizations must be sorted
+        // Sets a choice that only another choice rules out (Feather Color with Feathers: None) to the one its option allows; returns how many changed
+        uint32 NormalizeDependentChoices(Races race, Classes playerClass, UF::ChrCustomizationChoice* customizations, std::size_t count) const;
+        template<typename Container>
+        uint32 NormalizeDependentChoices(Races race, Classes playerClass, Container& customizations) const
+        {
+            return NormalizeDependentChoices(race, playerClass, customizations.data(), customizations.size());
+        }
 
         void SendCharCreate(ResponseCodes result, ObjectGuid const& guid = ObjectGuid::Empty);
         void SendCharDelete(ResponseCodes result);
@@ -1416,6 +1423,14 @@ class TC_GAME_API WorldSession
         // Social
         void HandleContactListOpcode(WorldPackets::Social::SendContactList& packet);
         void HandleAddFriendOpcode(WorldPackets::Social::AddFriend& packet);
+        // Adds a character to this player's character (legacy) friend list and answers with SMSG_FRIEND_STATUS, as an Add Friend packet
+        // does once the friend's account is known to be a player account.
+        void AddCharacterFriend(ObjectGuid friendGuid, uint32 friendAccountId, uint8 friendRace, std::string const& note);
+        // A bot module names the game accounts no person plays (bot pool accounts). A Battle.net friend invitation to one is never
+        // answered, so the Add Friend box makes a character of such an account a character friend instead (FriendsService).
+        using AutomatedAccountCheck = bool (*)(uint32 gameAccountId);
+        static void SetAutomatedAccountCheck(AutomatedAccountCheck check);
+        static bool IsAutomatedAccount(uint32 gameAccountId);
         void HandleDelFriendOpcode(WorldPackets::Social::DelFriend& packet);
         void HandleAddIgnoreOpcode(WorldPackets::Social::AddIgnore& packet);
         void HandleDelIgnoreOpcode(WorldPackets::Social::DelIgnore& packet);

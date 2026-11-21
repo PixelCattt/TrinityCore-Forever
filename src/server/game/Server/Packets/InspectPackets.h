@@ -124,11 +124,17 @@ namespace WorldPackets
             bool Disqualified = false;
         };
 
+        // Classic 1.60 layout (live 71037 captures): two int32 before the level, and a second trait entry list after the config.
+        // Live sends 0 for the first; the second (750 for a level 44 druid, 1200 for a level 49 paladin) and the extra list
+        // (1 to 3 entries on nodes 110291-110315) are not decoded yet, so we send 0 and an empty list.
         struct TraitInspectInfo
         {
+            int32 Unknown1 = 0;
+            int32 Unknown2 = 0;
             int32 PlayerLevel = 0;
             int32 SpecID = 0;
             Traits::TraitConfig ActiveCombatTraits;
+            std::vector<Traits::TraitEntry> ExtraEntries;
         };
 
         class InspectResult final : public ServerPacket

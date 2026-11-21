@@ -140,13 +140,15 @@ void EscortAI::MovementInform(uint32 type, uint32 id)
     }
     else if (type == WAYPOINT_MOTION_TYPE)
     {
-        ASSERT(id < _path.Nodes.size(), "EscortAI::MovementInform: referenced movement id (%u) points to non-existing node in loaded path (%s)", id, me->GetGUID().ToString().c_str());
-        WaypointNode waypoint = _path.Nodes[id];
+        // The waypoint generator reports the node's own id (WaypointNode::Id), not its index in the path. A path whose ids start at 1
+        // (Blastmaster Emi Shortfuse's 1..19 and many DB paths) matched the old "index == size - 1" test one node early: the escort
+        // ended at its next to last node, went idle there and never reached the last one (Gnomeregan: Grubbis never came).
+        ASSERT(!_path.Nodes.empty(), "EscortAI::MovementInform: waypoint node %u reached with an empty path (%s)", id, me->GetGUID().ToString().c_str());
 
-        TC_LOG_DEBUG("scripts.ai.escortai", "EscortAI::MovementInform: waypoint node {} reached ({})", waypoint.Id, me->GetGUID().ToString());
+        TC_LOG_DEBUG("scripts.ai.escortai", "EscortAI::MovementInform: waypoint node {} reached ({})", id, me->GetGUID().ToString());
 
         // last point
-        if (id == _path.Nodes.size() - 1)
+        if (id == _path.Nodes.back().Id)
         {
             _started = false;
             _ended = true;

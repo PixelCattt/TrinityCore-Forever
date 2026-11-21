@@ -69,7 +69,15 @@ enum CommanderFelstrom
 
 struct classic_commander_felstrom : public ScriptedAI
 {
-    classic_commander_felstrom(Creature* creature) : ScriptedAI(creature), _suicide(false), _suicideTimer(1500) { }
+    classic_commander_felstrom(Creature* creature) : ScriptedAI(creature), _suicide(false), _risen(false), _suicideTimer(1500) { }
+
+    // Felstrom Resurrection summons a new Felstrom and kills the old one. The risen one must not rise again,
+    // or every kill at 10% brings back another one (reported as killing him 8 times in one run).
+    void IsSummonedBy(WorldObject* summoner) override
+    {
+        if (summoner && summoner->GetEntry() == NPC_COMMANDER_FELSTROM)
+            _risen = true;
+    }
 
     void Reset() override
     {
@@ -97,7 +105,7 @@ struct classic_commander_felstrom : public ScriptedAI
         {
             if (me->GetHealthPct() <= 10.0f)
             {
-                if (!_suicide)
+                if (!_suicide && !_risen)
                 {
                     DoCastSelf(SPELL_FELSTROM_RESURRECTION, true);
                     _suicide = true;
@@ -110,6 +118,7 @@ struct classic_commander_felstrom : public ScriptedAI
 
 private:
     bool _suicide;
+    bool _risen;
     uint32 _suicideTimer;
 };
 

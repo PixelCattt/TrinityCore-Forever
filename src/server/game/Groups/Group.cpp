@@ -337,12 +337,43 @@ void Group::ConvertToGroup()
         return; // What message error should we send?
 
     m_groupFlags = GroupFlags(m_groupFlags & ~GROUP_FLAG_RAID);
+    m_raidChosenByLeader = false;
 
     if (m_subGroupsCounts)
     {
         delete[] m_subGroupsCounts;
         m_subGroupsCounts = nullptr;
     }
+
+    // A party has one sub group. A member the raid had put in another one (the 6th member goes to group 2 and stays there when
+    // the raid is back to 5) did not count as in the party with the others after the change: party auras, totems and party
+    // spells check the sub group. Everyone goes back to the first sub group, as AddMember does for a party.
+    CharacterDatabaseTransaction subGroupTrans = (!isBGGroup() && !isBFGroup()) ? CharacterDatabase.BeginTransaction() : nullptr;
+    for (MemberSlot& slot : m_memberSlots)
+    {
+        if (!slot.group)
+            continue;
+
+        slot.group = 0;
+
+        if (subGroupTrans)
+        {
+            CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_UPD_GROUP_MEMBER_SUBGROUP);
+            stmt->setUInt8(0, 0);
+            stmt->setUInt64(1, slot.guid.GetCounter());
+            subGroupTrans->Append(stmt);
+        }
+
+        if (Player* player = ObjectAccessor::FindConnectedPlayer(slot.guid))
+        {
+            if (player->GetGroup() == this)
+                player->GetGroupRef().setSubGroup(0);
+            else
+                player->GetOriginalGroupRef().setSubGroup(0);
+        }
+    }
+    if (subGroupTrans)
+        CharacterDatabase.CommitTransaction(subGroupTrans);
 
     if (!isBGGroup() && !isBFGroup())
     {

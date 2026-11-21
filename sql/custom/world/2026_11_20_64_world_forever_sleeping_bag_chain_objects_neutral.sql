@@ -1,0 +1,14 @@
+-- Cozy Sleeping Bag chain, the steps after Stepping Stones (Discord, 6_1_8_8_1, 2026-11-20: a Horde shaman at 52.5,40.8
+-- Stonetalon "can't click" to hand in Stepping Stones). 2026_11_16_11 made the chain's first objects neutral (the restored
+-- Forever data gave them the Stormwind faction 12, and the client offers no quest on an object of a hostile faction), but
+-- the objects of the later steps kept faction 12. Every quest of the chain is open to both factions (79192 all races,
+-- 79974-79976/79980/80001 race mask 12884902143), so they become neutral too. INFERRED as in 2026_11_16_11: no sniff of
+-- these objects; stock data gives objects that both factions use faction 0.
+--   424005 Pocket Litter            hand in 79192 Stepping Stones, start 79980 Scramble (Stonetalon)
+--   424012 Mound of Dirt            hand in 79980, start 79974 Wet Job (Stonetalon)
+--   424007 Carved Figurine          hand in 79974, start 79975 Eagle's Fist (Eastern Kingdoms)
+--   406918 Messenger Bag            hand in 79975, start 79976 This Must Be The Place (Eastern Kingdoms)
+--   424006 Hastily Rolled-Up Satchel hand in 79976 (next to the bag)
+--   424082 Firepit                  start and hand in 80001 Rekindle (Stonetalon)
+-- Safe to run again.
+UPDATE `gameobject_template_addon` SET `faction` = 0 WHERE `entry` IN (424005,424012,424007,406918,424006,424082);

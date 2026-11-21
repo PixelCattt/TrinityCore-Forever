@@ -35,6 +35,7 @@
 #include "PetPackets.h"
 #include "Player.h"
 #include "ReputationMgr.h"
+#include "ScriptMgr.h"
 #include "SpellInfo.h"
 #include "Trainer.h"
 #include "WorldPacket.h"
@@ -228,6 +229,9 @@ void WorldSession::HandleGossipSelectOptionOpcode(WorldPackets::NPC::GossipSelec
     }
     else
     {
+        // Gossip menus sent with a player or an item as source have no core handler; the module that sent the menu answers them.
+        if (packet.GossipUnit.IsPlayer() || packet.GossipUnit.IsItem())
+            sScriptMgr->OnPlayerGossipSelect(_player, packet.GossipUnit, packet.GossipID, gossipMenuItem->OrderIndex, packet.PromotionCode);
 
         TC_LOG_DEBUG("network", "WORLD: HandleGossipSelectOptionOpcode - unsupported {}.", packet.GossipUnit.ToString());
         return;

@@ -90,6 +90,7 @@ enum WorldDatabaseStatements : uint32
     // Playerbot module statements
     WORLD_SEL_QUEST_GIVER_SPAWNS,               // SELECT c.guid, c.id, c.position_x, c.position_y, c.position_z, c.map, ct.faction, COALESCE(c.zoneId, 0) as zoneId FROM creature c INNER JOIN creature_template ct ON c.id = ct.entry WHERE ct.npcflag & 2 != 0
     WORLD_SEL_REPAIR_VENDOR_SPAWNS,             // SELECT c.guid, c.id, c.position_x, c.position_y, c.position_z, c.map, ct.faction, COALESCE(c.zoneId, 0) as zoneId FROM creature c INNER JOIN creature_template ct ON c.id = ct.entry WHERE ct.npcflag & 4096 != 0
+    WORLD_SEL_BOT_REALM_ITEMS,                  // item ids >= ? that the world data hands out: loot tables, vendors, quest rewards
 
     WORLD_SEL_AUCTIONHOUSEBOT_MARKET_PRICES,    // SELECT ItemID, UnitPrice FROM auctionhousebot_market_price WHERE UnitPrice > 0
 

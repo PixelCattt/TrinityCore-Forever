@@ -53,34 +53,14 @@ void WorldSession::HandleAddFriendOpcode(WorldPackets::Social::AddFriend& packet
     auto processFriendRequest = [this,
         playerGuid = _player->GetGUID(),
         friendGuid = friendCharacterInfo->Guid,
-        friendAccountGuid = ObjectGuid::Create<HighGuid::WowAccount>(friendCharacterInfo->AccountId),
-        team = Player::TeamForRace(friendCharacterInfo->Race),
+        friendAccountId = friendCharacterInfo->AccountId,
+        friendRace = friendCharacterInfo->Race,
         friendNote = std::move(packet.Notes)]()
     {
         if (playerGuid.GetCounter() != m_GUIDLow)
             return; // not the player initiating request, do nothing
 
-        FriendsResult friendResult = FRIEND_NOT_FOUND;
-        if (friendGuid == GetPlayer()->GetGUID())
-            friendResult = FRIEND_SELF;
-        else if (GetPlayer()->GetTeam() != team && !HasPermission(rbac::RBAC_PERM_TWO_SIDE_ADD_FRIEND))
-            friendResult = FRIEND_ENEMY;
-        else if (GetPlayer()->GetSocial()->HasFriend(friendGuid))
-            friendResult = FRIEND_ALREADY;
-        else
-        {
-            Player* pFriend = ObjectAccessor::FindPlayer(friendGuid);
-            if (pFriend && pFriend->IsVisibleGloballyFor(GetPlayer()))
-                friendResult = FRIEND_ADDED_ONLINE;
-            else
-                friendResult = FRIEND_ADDED_OFFLINE;
-            if (GetPlayer()->GetSocial()->AddToSocialList(friendGuid, friendAccountGuid, SOCIAL_FLAG_FRIEND))
-                GetPlayer()->GetSocial()->SetFriendNote(friendGuid, friendNote);
-            else
-                friendResult = FRIEND_LIST_FULL;
-        }
-
-        sSocialMgr->SendFriendStatus(GetPlayer(), friendResult, friendGuid);
+        AddCharacterFriend(friendGuid, friendAccountId, friendRace, friendNote);
     };
 
     if (HasPermission(rbac::RBAC_PERM_ALLOW_GM_FRIEND))
@@ -114,6 +94,50 @@ void WorldSession::HandleAddFriendOpcode(WorldPackets::Social::AddFriend& packet
 
         continuation();
     }));
+}
+
+void WorldSession::AddCharacterFriend(ObjectGuid friendGuid, uint32 friendAccountId, uint8 friendRace, std::string const& note)
+{
+    Player* player = GetPlayer();
+    if (!player)
+        return;
+
+    FriendsResult friendResult = FRIEND_NOT_FOUND;
+    if (friendGuid == player->GetGUID())
+        friendResult = FRIEND_SELF;
+    else if (player->GetTeam() != Player::TeamForRace(friendRace) && !HasPermission(rbac::RBAC_PERM_TWO_SIDE_ADD_FRIEND))
+        friendResult = FRIEND_ENEMY;
+    else if (player->GetSocial()->HasFriend(friendGuid))
+        friendResult = FRIEND_ALREADY;
+    else
+    {
+        Player* pFriend = ObjectAccessor::FindPlayer(friendGuid);
+        if (pFriend && pFriend->IsVisibleGloballyFor(player))
+            friendResult = FRIEND_ADDED_ONLINE;
+        else
+            friendResult = FRIEND_ADDED_OFFLINE;
+        if (player->GetSocial()->AddToSocialList(friendGuid, ObjectGuid::Create<HighGuid::WowAccount>(friendAccountId), SOCIAL_FLAG_FRIEND))
+            player->GetSocial()->SetFriendNote(friendGuid, note);
+        else
+            friendResult = FRIEND_LIST_FULL;
+    }
+
+    sSocialMgr->SendFriendStatus(player, friendResult, friendGuid);
+}
+
+namespace
+{
+WorldSession::AutomatedAccountCheck s_automatedAccountCheck = nullptr;
+}
+
+void WorldSession::SetAutomatedAccountCheck(AutomatedAccountCheck check)
+{
+    s_automatedAccountCheck = check;
+}
+
+bool WorldSession::IsAutomatedAccount(uint32 gameAccountId)
+{
+    return s_automatedAccountCheck && s_automatedAccountCheck(gameAccountId);
 }
 
 void WorldSession::HandleDelFriendOpcode(WorldPackets::Social::DelFriend& packet)

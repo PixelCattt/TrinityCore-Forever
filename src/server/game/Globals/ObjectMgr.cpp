@@ -3673,6 +3673,8 @@ void ObjectMgr::LoadItemTemplates()
         itemTemplate.RandomBonusListTemplateId = 0;
         itemTemplate.ItemSpecClassMask = 0;
         itemTemplate.QuestLogItemId = 0;
+        itemTemplate.ClassicMinDamage = 0.0f;
+        itemTemplate.ClassicMaxDamage = 0.0f;
 
         if (std::vector<ItemSpecOverrideEntry const*> const* itemSpecOverrides = sDB2Manager.GetItemSpecOverrides(sparse->ID))
         {
@@ -3813,6 +3815,52 @@ void ObjectMgr::LoadClassicItemDurability()
     } while (result->NextRow());
 
     TC_LOG_INFO("server.loading", ">> Loaded {} classic item durabilities in {} ms", count, GetMSTimeDiffToNow(oldMSTime));
+}
+
+// Classic 1.60: vanilla weapon damage. The item level tables (ItemDamageOneHand/TwoHand) give vanilla damage for melee weapons only;
+// a vanilla bow at item level 75 does 0.6 of the two-hand table, wands and caster weapons follow no table at all.
+void ObjectMgr::LoadClassicItemDamage()
+{
+    uint32 oldMSTime = getMSTime();
+    uint32 count = 0;
+
+    //                                               0      1           2
+    QueryResult result = WorldDatabase.Query("SELECT entry, min_damage, max_damage FROM classic_item_damage");
+    if (!result)
+    {
+        TC_LOG_INFO("server.loading", ">> Loaded 0 classic weapon damages. DB table `classic_item_damage` is empty.");
+        return;
+    }
+
+    do
+    {
+        Field* fields = result->Fetch();
+        uint32 entry = fields[0].GetUInt32();
+        float minDamage = fields[1].GetFloat();
+        float maxDamage = fields[2].GetFloat();
+
+        ItemTemplate* itemTemplate = Trinity::Containers::MapGetValuePtr(_itemTemplateStore, entry);
+        if (!itemTemplate)
+            continue;   // a vanilla item this client does not have
+
+        if (itemTemplate->GetClass() != ITEM_CLASS_WEAPON || !itemTemplate->GetDelay())
+        {
+            TC_LOG_ERROR("sql.sql", "Table `classic_item_damage` has item {} which is not a weapon with a delay, skipped.", entry);
+            continue;
+        }
+
+        if (minDamage <= 0.0f || maxDamage < minDamage)
+        {
+            TC_LOG_ERROR("sql.sql", "Table `classic_item_damage` has item {} with invalid damage {} - {}, skipped.", entry, minDamage, maxDamage);
+            continue;
+        }
+
+        itemTemplate->ClassicMinDamage = minDamage;
+        itemTemplate->ClassicMaxDamage = maxDamage;
+        ++count;
+    } while (result->NextRow());
+
+    TC_LOG_INFO("server.loading", ">> Loaded {} classic weapon damages in {} ms", count, GetMSTimeDiffToNow(oldMSTime));
 }
 
 void ObjectMgr::LoadItemScriptNames()

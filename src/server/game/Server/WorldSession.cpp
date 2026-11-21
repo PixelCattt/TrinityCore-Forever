@@ -26,6 +26,7 @@
 #include "CharacterPackets.h"
 #include "ChatPackets.h"
 #include "ClientConfigPackets.h"
+#include "CombatLogWatch.h"
 #include "Containers.h"
 #include "DatabaseEnv.h"
 #include "FriendsService.h"
@@ -639,6 +640,9 @@ void WorldSession::LogoutPlayer(bool save)
         // Captured early because the bot-only per-character offline write
         // below runs after _player is nulled out by SetPlayer(nullptr).
         uint64 const playerGuidLow = _player->GetGUID().GetCounter();
+
+        // a GM's combat log watch (.gm combatlog) ends with the GM's logout
+        CombatLogWatch::Stop(_player->GetGUID());
 
         if (!_player->GetLootGUID().IsEmpty())
             DoLootReleaseAll();

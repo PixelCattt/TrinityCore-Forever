@@ -24,6 +24,8 @@
 #include "Containers.h"
 #include "GameTime.h"
 #include "GridNotifiersImpl.h"
+#include "Item.h"
+#include "ItemTemplate.h"
 #include "ObjectAccessor.h"
 #include "Player.h"
 #include "Random.h"
@@ -35,6 +37,7 @@
 #include "SpellMgr.h"
 #include "SpellScript.h"
 #include "Unit.h"
+#include <algorithm>
 #include <cmath>
 
 namespace
@@ -450,8 +453,10 @@ class classic_spell_pri_renewed_hope_crit : public SpellScript
     }
 };
 
-// 431622 - Divine Aegis: "Your critical heals create a protective shield on the target, absorbing 15% of the amount healed. Lasts 12 sec."
-// (431624, crit only + triggered heals via spell_proc)
+// 431622 - Divine Aegis: "Your non-periodic critical heals create a protective shield on the target, absorbing $s1% of the amount healed.
+// Shields up to ${$s2*$pl} damage and lasts $431624d." (431624, crit only + triggered heals via spell_proc). A new crit adds to what is
+// left of this priest's shield on the target, up to effect 1 (20) times the priest's level (the tooltip; wowsims/forever, MIT,
+// sim/priest/talents_discipline.go reads it the same way).
 class classic_spell_pri_divine_aegis : public AuraScript
 {
     bool Validate(SpellInfo const* /*spellInfo*/) override
@@ -467,9 +472,20 @@ class classic_spell_pri_divine_aegis : public AuraScript
 
     void HandleProc(AuraEffect const* aurEff, ProcEventInfo& eventInfo)
     {
+        Unit* priest = GetTarget();
+        Unit* target = eventInfo.GetActionTarget();
         int32 absorb = CalculatePct(int32(eventInfo.GetHealInfo()->GetHeal()), aurEff->GetAmount());
-        if (absorb > 0)
-            GetTarget()->CastSpell(eventInfo.GetActionTarget(), SPELL_PRI_DIVINE_AEGIS_ABSORB, CastSpellExtraArgs(aurEff).AddSpellBP0(absorb));
+        if (absorb <= 0)
+            return;
+
+        if (AuraEffect const* shield = target->GetAuraEffect(SPELL_PRI_DIVINE_AEGIS_ABSORB, EFFECT_0, priest->GetGUID()))
+            absorb += std::max(shield->GetAmountAsInt(), 0);
+
+        if (AuraEffect const* capPerLevel = GetEffect(EFFECT_1))
+            if (int32 cap = capPerLevel->GetAmountAsInt() * int32(priest->GetLevel()); cap > 0)
+                absorb = std::min(absorb, cap);
+
+        priest->CastSpell(target, SPELL_PRI_DIVINE_AEGIS_ABSORB, CastSpellExtraArgs(aurEff).AddSpellBP0(absorb));
     }
 
     void Register() override
@@ -479,8 +495,8 @@ class classic_spell_pri_divine_aegis : public AuraScript
     }
 };
 
-// 1309969 - Power in Light: "Your Smite and Penance spells deal 15% increased damage to targets afflicted with your Holy Fire." Bound to
-// Smite (all ranks) and the Penance damage spells.
+// 1309969 - Power in Light: "Your Smite and Penance spells deal $m1% increased damage to targets afflicted with your Holy Fire or Shadow
+// Word: Pain." Bound to Smite (all ranks) and the Penance damage spells.
 class classic_spell_pri_power_in_light : public SpellScript
 {
     void HandleCalcDamage(SpellEffectInfo const& /*spellEffectInfo*/, Unit* victim, int32& /*damage*/, int32& /*flatMod*/, float& pctMod)
@@ -490,14 +506,125 @@ class classic_spell_pri_power_in_light : public SpellScript
         if (!talent || !victim)
             return;
 
-        // Holy Fire (all ranks): family flag 0x100000
-        if (victim->GetAuraEffect(SPELL_AURA_PERIODIC_DAMAGE, SPELLFAMILY_PRIEST, flag128(0x00100000, 0, 0, 0), caster->GetGUID()))
+        // Holy Fire (all ranks): family flag 0x100000; Shadow Word: Pain (all ranks): 0x8000
+        if (victim->GetAuraEffect(SPELL_AURA_PERIODIC_DAMAGE, SPELLFAMILY_PRIEST, flag128(0x00108000, 0, 0, 0), caster->GetGUID()))
             AddPct(pctMod, talent->GetAmount());
     }
 
     void Register() override
     {
         CalcDamage += SpellCalcDamageFn(classic_spell_pri_power_in_light::HandleCalcDamage);
+    }
+};
+
+// 1326159 - Dark Inspiration: "Your Mind Blast and fully channeled Mind Flay causes Dark Inspiration, increasing yours and your party's Spirit
+// by $m1% for $1326168d." The talent is a bare dummy with no proc data, so nothing cast the buff 1326168 (party Spirit, target 20). A landed
+// Mind Blast, or a Mind Flay channel that runs its full length, casts it with the talent's percent (3..15 by rank). Behaviour from the
+// tooltip and wowsims/forever (MIT, sim/priest/talents_shadow.go); no log reading.
+static constexpr uint32 SPELL_PRI_DARK_INSPIRATION = 1326159;
+static constexpr uint32 SPELL_PRI_DARK_INSPIRATION_BUFF = 1326168;
+
+static void CastClassicDarkInspiration(Unit* priest)
+{
+    if (!priest)
+        return;
+    AuraEffect const* talent = priest->GetAuraEffect(SPELL_PRI_DARK_INSPIRATION, EFFECT_0);
+    if (!talent || talent->GetAmountAsInt() <= 0)
+        return;
+    priest->CastSpell(priest, SPELL_PRI_DARK_INSPIRATION_BUFF, CastSpellExtraArgs(TRIGGERED_FULL_MASK).AddSpellBP0(talent->GetAmountAsInt()));
+}
+
+// Mind Blast (all ranks): a landed hit
+class classic_spell_pri_dark_inspiration_mind_blast : public SpellScript
+{
+    void HandleHit(SpellEffIndex /*effIndex*/)
+    {
+        CastClassicDarkInspiration(GetCaster());
+    }
+
+    void Register() override
+    {
+        OnEffectHitTarget += SpellEffectFn(classic_spell_pri_dark_inspiration_mind_blast::HandleHit, EFFECT_0, SPELL_EFFECT_SCHOOL_DAMAGE);
+    }
+};
+
+// Mind Flay (all ranks): the channel aura ends by running out, not by an interrupt or a cancel
+class classic_spell_pri_dark_inspiration_mind_flay : public AuraScript
+{
+    void HandleRemove(AuraEffect const* /*aurEff*/, AuraEffectHandleModes /*mode*/)
+    {
+        if (GetTargetApplication()->GetRemoveMode() == AURA_REMOVE_BY_EXPIRE)
+            CastClassicDarkInspiration(GetCaster());
+    }
+
+    void Register() override
+    {
+        AfterEffectRemove += AuraEffectRemoveFn(classic_spell_pri_dark_inspiration_mind_flay::HandleRemove, EFFECT_0, SPELL_AURA_PERIODIC_DAMAGE, AURA_EFFECT_HANDLE_REAL);
+    }
+};
+
+// 1309595, 1309633, 1309635, 1309636 - Shadow Word: Death: "If your target is not killed by Shadow Word: Death, you take backlash damage
+// equal to $s3% of your maximum health." Effect 2 holds the percent (30) as a dummy, so the priest never took the backlash. After the hit,
+// a target still alive deals the priest that share of maximum health as Shadow damage from the priest (tooltip; wowsims/forever, MIT,
+// sim/priest/shadow_word_death.go deals it on every cast; no log reading).
+class classic_spell_pri_shadow_word_death_backlash : public SpellScript
+{
+    bool Validate(SpellInfo const* spellInfo) override
+    {
+        return ValidateSpellEffect({ { spellInfo->Id, EFFECT_2 } });
+    }
+
+    void HandleAfterHit()
+    {
+        Unit* priest = GetCaster();
+        Unit* target = GetHitUnit();
+        if (!priest || !priest->IsAlive() || (target && !target->IsAlive()))
+            return;
+
+        int32 const percent = GetEffectInfo(EFFECT_2).CalcValueAsInt(priest);
+        uint32 const damage = uint32(priest->CountPctFromMaxHealth(percent));
+        if (!damage)
+            return;
+
+        SpellNonMeleeDamage damageInfo(priest, priest, GetSpellInfo(), GetSpell()->m_SpellVisual, SPELL_SCHOOL_MASK_SHADOW, GetSpell()->m_castId);
+        damageInfo.damage = damage;
+        priest->DealSpellDamage(&damageInfo, false);
+        priest->SendSpellNonMeleeDamageLog(&damageInfo);
+    }
+
+    void Register() override
+    {
+        AfterHit += SpellHitFn(classic_spell_pri_shadow_word_death_backlash::HandleAfterHit);
+    }
+};
+
+// 1277324-1277328 - Dark Sacrifice: "Cannibalize $o1 of your own Health over $d to gain ${$o2+$SPI} Mana." Effect 0 (the health) is a
+// periodic dummy, so nothing was taken, and effect 1 (mana) gave the row's amount without the Spirit. Each tick now takes effect 0's health
+// from the priest (never the last point) and the mana ticks share the priest's Spirit evenly (tooltip; wowsims/forever, MIT,
+// sim/priest/dark_sacrifice.go; no log reading).
+class classic_spell_pri_dark_sacrifice : public AuraScript
+{
+    void CalcManaAmount(AuraEffect const* aurEff, SpellEffectValue& amount, bool& canBeRecalculated)
+    {
+        canBeRecalculated = false;
+        Unit* priest = GetCaster();
+        uint32 const ticks = aurEff->GetTotalTicks();
+        if (priest && ticks)
+            amount += priest->GetStat(STAT_SPIRIT) / float(ticks);
+    }
+
+    void HandleHealthTick(AuraEffect const* aurEff)
+    {
+        Unit* priest = GetTarget();
+        int64 const take = std::min<int64>(aurEff->GetAmountAsInt(), int64(priest->GetHealth()) - 1);
+        if (take > 0)
+            priest->ModifyHealth(-take);
+    }
+
+    void Register() override
+    {
+        DoEffectCalcAmount += AuraEffectCalcAmountFn(classic_spell_pri_dark_sacrifice::CalcManaAmount, EFFECT_1, SPELL_AURA_PERIODIC_ENERGIZE);
+        OnEffectPeriodic += AuraEffectPeriodicFn(classic_spell_pri_dark_sacrifice::HandleHealthTick, EFFECT_0, SPELL_AURA_PERIODIC_DUMMY);
     }
 };
 
@@ -730,7 +857,10 @@ enum ClassicPaladinTalents
     SPELL_PAL_SACRED_SHIELD_ABSORB          = 412018,
     SPELL_PAL_SACRED_SHIELD_FLASH_OF_LIGHT  = 412020,
     SPELL_PAL_RECKONING_STORED              = 1326084,  // dummy aura, one stack per stored extra attack
-    SPELL_PAL_GUARDED_BY_THE_LIGHT_MANA     = 415058
+    SPELL_PAL_GUARDED_BY_THE_LIGHT_MANA     = 415058,
+    SPELL_PAL_VINDICATION_DEBUFF            = 440667,   // attack power and ranged attack power, scaled by the paladin's level
+    SPELL_PAL_OATH_OF_LIGHT                 = 1328548,  // on the ally: effect 0 Holy Light, 1 Flash of Light, 2 Holy Shock bonus healing
+    SPELL_PAL_BOUNDLESS_LIGHT               = 1328550   // effect 0: Holy Shock crit chance on allies without the paladin's Oath of Light
 };
 
 // 9799 - Eye for an Eye: "All critical strikes against you cause 15% of the damage taken to the attacker as well. The damage caused by Eye
@@ -1282,12 +1412,116 @@ class classic_spell_pal_holy_light_flash_of_light : public SpellScript
     }
 };
 
+// 9452 - Vindication (70532): "Gives your damaging melee attacks a chance to reduce the target's Attack Power by ${$m1/-3*$440667m1} for
+// $440667d." Both talent effects are dummies without a triggered spell, so nothing happened (123 + 123 "does not have triggered spell"
+// lines in the af54 log). Effect 0 is the rank (1 / 2 / 3); the debuff 440667 is the full reduction at rank 3 (its value grows with the
+// paladin's level: 204 at 60), so a rank gives a third of it, on attack power and ranged attack power alike. The client row states no
+// rate (chance 100); in game it is 5 procs a minute on the weapon's speed (spell_proc), on white hits and melee specials, and the debuff
+// is a spell of its own that can miss (wowsims/forever, MIT: sim/paladin/talents_retribution.go).
+class classic_spell_pal_vindication : public AuraScript
+{
+    bool Validate(SpellInfo const* /*spellInfo*/) override
+    {
+        return ValidateSpellInfo({ SPELL_PAL_VINDICATION_DEBUFF });
+    }
+
+    void HandleProc(AuraEffect const* aurEff, ProcEventInfo& eventInfo)
+    {
+        PreventDefaultAction();
+
+        Unit* paladin = GetTarget();
+        Unit* target = eventInfo.GetActionTarget();
+        if (!target || target == paladin)
+            return;
+
+        SpellInfo const* debuff = sSpellMgr->AssertSpellInfo(SPELL_PAL_VINDICATION_DEBUFF, DIFFICULTY_NONE);
+        int32 const full = std::min(0, debuff->GetEffect(EFFECT_0).CalcValueAsInt(paladin));
+        int32 const reduction = full * std::clamp(aurEff->GetAmountAsInt(), 0, 3) / 3;
+        if (!reduction)
+            return;
+
+        paladin->CastSpell(target, SPELL_PAL_VINDICATION_DEBUFF, CastSpellExtraArgs(aurEff).SetTriggerFlags(TRIGGERED_FULL_MASK)
+            .AddSpellMod(SPELLVALUE_BASE_POINT0, SpellEffectValue(reduction)).AddSpellMod(SPELLVALUE_BASE_POINT1, SpellEffectValue(reduction)));
+    }
+
+    void HandleTooltipEffect(AuraEffect const* /*aurEff*/, ProcEventInfo& /*eventInfo*/)
+    {
+        PreventDefaultAction();
+    }
+
+    void Register() override
+    {
+        OnEffectProc += AuraEffectProcFn(classic_spell_pal_vindication::HandleProc, EFFECT_0, SPELL_AURA_DUMMY);
+        OnEffectProc += AuraEffectProcFn(classic_spell_pal_vindication::HandleTooltipEffect, EFFECT_1, SPELL_AURA_DUMMY);
+    }
+};
+
+// 1328548 - Oath of Light, 1328550 - Boundless Light (Forever paladin talents, live hotfix data). Oath of Light: "Swear an Oath to protect
+// target ally for $d, increasing the healing of your Holy Light on them by up to $s1, your Flash of Light by up to $s2, and your Holy Shock
+// by up to $s3." Boundless Light: "Increases the critical strike chance of your Holy Shock spell by $s1% when cast on allies not affected by
+// your Oath of Light." Every effect of both is a dummy and nothing read them, so neither did anything. The Oath's three effects carry the
+// bonuses, scaled by the paladin's level (400 / 115 / 230 at 60), and are added to the base heal of the paladin's own Holy Light, Flash of
+// Light and Holy Shock heal on the ally with the Oath; Holy Shock heals on any other ally get the Boundless Light crit. One Oath per paladin
+// is the spell's own single-target attribute. The full bonus whatever the rank, as wowsims/forever (MIT) does (sim/paladin/oath_of_light.go,
+// holy_shock.go).
+class classic_spell_pal_oath_of_light_heal : public SpellScript
+{
+    static bool IsHolyShockHeal(uint32 spellId)
+    {
+        return spellId == 25903 || spellId == 25913 || spellId == 25914 || spellId == 1311605;
+    }
+
+    void HandleCalcHealing(SpellEffectInfo const& /*spellEffectInfo*/, Unit* victim, int32& /*healing*/, int32& flatMod, float& /*pctMod*/)
+    {
+        if (!victim)
+            return;
+
+        SpellInfo const* spellInfo = GetSpellInfo();
+        SpellEffIndex const bonusEffect = IsHolyShockHeal(spellInfo->Id) ? EFFECT_2
+                                        : (spellInfo->SpellFamilyFlags[0] & 0x80000000) ? EFFECT_0   // Holy Light
+                                        : EFFECT_1;                                                  // Flash of Light
+        if (AuraEffect const* oath = victim->GetAuraEffect(SPELL_PAL_OATH_OF_LIGHT, bonusEffect, GetCaster()->GetGUID()))
+            flatMod += std::max(0, oath->GetAmountAsInt());
+    }
+
+    void CalcCritChance(Unit const* victim, float& critChance)
+    {
+        if (!victim || !IsHolyShockHeal(GetSpellInfo()->Id) || victim->HasAura(SPELL_PAL_OATH_OF_LIGHT, GetCaster()->GetGUID()))
+            return;
+
+        if (AuraEffect const* boundless = GetCaster()->GetAuraEffect(SPELL_PAL_BOUNDLESS_LIGHT, EFFECT_0))
+            critChance += float(boundless->GetAmount());
+    }
+
+    void Register() override
+    {
+        CalcHealing += SpellCalcHealingFn(classic_spell_pal_oath_of_light_heal::HandleCalcHealing);
+        OnCalcCritChance += SpellOnCalcCritChanceFn(classic_spell_pal_oath_of_light_heal::CalcCritChance);
+    }
+};
+
 // Holy Strike (679, 678, 1866, 680, 2495, 5569, 10332, 10333): "An instant strike that causes $m2% weapon damage plus an additional $s1 as
 // Holy damage." Effect 0 (normalized weapon damage) holds the flat $s1, effect 1 the weapon percent. The core adds the flat part to the weapon
 // roll before the percent, so only half of $s1 was dealt and spell power (effect 0 bonus coefficient) was ignored. The missing part of $s1
 // and the spell power share are added back to the final weapon effect; the spell is Holy school in the client data.
+//
+// Shieldsworn (1328544, Forever talent): "Holy Strike now strikes with your shield, triggering your active Holy Shield and Shield
+// Specialization talents without consuming their charges or triggering their cooldowns, and allowing you to Block spells for
+// $1328551d." (its cooldown part is a spell modifier in the client data). With a shield on, a Holy Strike that lands deals the
+// Holy Shield damage of the active Holy Shield as a block would, gives the Shield Specialization mana at its chance, and puts up
+// the spell block 1328551 (SPELL_AURA_ALLOW_BLOCKING_SPELLS). The charges and the proc cooldowns are left alone.
 class classic_spell_pal_holy_strike : public SpellScript
 {
+    static constexpr uint32 SPELL_PAL_SHIELDSWORN           = 1328544;
+    static constexpr uint32 SPELL_PAL_SHIELDSWORN_SPELL_BLOCK = 1328551;
+    static constexpr uint32 SPELL_PAL_SHIELD_SPECIALIZATION = 20150;
+    static constexpr uint32 SPELL_PAL_SHIELD_SPEC_MANA      = 1310925;
+
+    static bool IsHolyShield(uint32 spellId)
+    {
+        return spellId == 20925 || spellId == 20927 || spellId == 20928;
+    }
+
     void HandleCalcDamage(SpellEffectInfo const& spellEffectInfo, Unit* /*victim*/, int32& /*damage*/, int32& flatMod, float& /*pctMod*/)
     {
         if (spellEffectInfo.EffectIndex != EFFECT_1)
@@ -1301,9 +1535,52 @@ class classic_spell_pal_holy_strike : public SpellScript
         flatMod += int32(caster->SpellBaseDamageBonusDone(SPELL_SCHOOL_MASK_HOLY) * holyEffect.BonusCoefficient);
     }
 
+    void HandleShieldsworn(SpellEffIndex /*effIndex*/)
+    {
+        Player* paladin = Object::ToPlayer(GetCaster());
+        Unit* target = GetHitUnit();
+        if (!paladin || !target || !paladin->HasAura(SPELL_PAL_SHIELDSWORN))
+            return;
+
+        Item const* offhand = paladin->GetUseableItemByPos(INVENTORY_SLOT_BAG_0, EQUIPMENT_SLOT_OFFHAND);
+        if (!offhand || offhand->IsBroken() || offhand->GetTemplate()->GetInventoryType() != INVTYPE_SHIELD)
+            return;
+
+        // the active Holy Shield's block damage (its SPELL_AURA_PROC_TRIGGER_DAMAGE effect), dealt as AuraEffect::HandleProcTriggerDamageAuraProc does
+        for (AuraEffect const* holyShield : paladin->GetAuraEffectsByType(SPELL_AURA_PROC_TRIGGER_DAMAGE))
+        {
+            if (!IsHolyShield(holyShield->GetId()) || !target->IsAlive())
+                continue;
+
+            SpellInfo const* spellInfo = holyShield->GetSpellInfo();
+            if (target->IsImmunedToDamage(paladin, spellInfo, &holyShield->GetSpellEffectInfo()))
+                break;
+
+            SpellNonMeleeDamage damageInfo(paladin, target, spellInfo, holyShield->GetBase()->GetSpellVisual(), spellInfo->SchoolMask,
+                holyShield->GetBase()->GetCastId());
+            uint32 damage = paladin->SpellDamageBonusDone(target, spellInfo, holyShield->GetAmountAsInt(), SPELL_DIRECT_DAMAGE,
+                holyShield->GetSpellEffectInfo(), 1, nullptr, holyShield);
+            damage = target->SpellDamageBonusTaken(paladin, spellInfo, damage, SPELL_DIRECT_DAMAGE);
+            paladin->CalculateSpellDamageTaken(&damageInfo, damage, spellInfo);
+            Unit::DealDamageMods(damageInfo.attacker, damageInfo.target, damageInfo.damage, &damageInfo.absorb);
+            paladin->DealSpellDamage(&damageInfo, true);
+            paladin->SendSpellNonMeleeDamageLog(&damageInfo);
+            break;
+        }
+
+        // Shield Specialization: its mana at the chance of its effect 1, as on a block (classic_spell_proc_chance_from_effect)
+        if (Aura const* shieldSpec = paladin->GetAura(SPELL_PAL_SHIELD_SPECIALIZATION))
+            if (AuraEffect const* chance = shieldSpec->GetEffect(EFFECT_1))
+                if (roll_chance(chance->GetAmount()))
+                    paladin->CastSpell(paladin, SPELL_PAL_SHIELD_SPEC_MANA, CastSpellExtraArgs(chance));
+
+        paladin->CastSpell(paladin, SPELL_PAL_SHIELDSWORN_SPELL_BLOCK, CastSpellExtraArgs(TRIGGERED_FULL_MASK).SetTriggeringSpell(GetSpell()));
+    }
+
     void Register() override
     {
         CalcDamage += SpellCalcDamageFn(classic_spell_pal_holy_strike::HandleCalcDamage);
+        OnEffectHitTarget += SpellEffectFn(classic_spell_pal_holy_strike::HandleShieldsworn, EFFECT_1, SPELL_EFFECT_WEAPON_PERCENT_DAMAGE);
     }
 };
 
@@ -1512,6 +1789,10 @@ void AddSC_classic_talents_priest_paladin()
     RegisterSpellScript(classic_spell_pri_holy_binding);
     // Priest
     RegisterSpellScript(classic_spell_pri_inspiration);
+    RegisterSpellScript(classic_spell_pri_dark_inspiration_mind_blast);
+    RegisterSpellScript(classic_spell_pri_dark_inspiration_mind_flay);
+    RegisterSpellScript(classic_spell_pri_shadow_word_death_backlash);
+    RegisterSpellScript(classic_spell_pri_dark_sacrifice);
     RegisterSpellScript(classic_spell_pri_blessed_recovery);
     RegisterSpellScript(classic_spell_pri_blessed_recovery_hot);
     RegisterSpellScript(classic_spell_pri_prayer_of_mending);
@@ -1546,6 +1827,8 @@ void AddSC_classic_talents_priest_paladin()
     RegisterSpellScript(classic_spell_pal_sanctified_judgement);
     RegisterSpellScript(classic_spell_pal_improved_seal_of_fury);
     RegisterSpellScript(classic_spell_pal_holy_light_flash_of_light);
+    RegisterSpellScript(classic_spell_pal_vindication);
+    RegisterSpellScript(classic_spell_pal_oath_of_light_heal);
     RegisterSpellScript(classic_spell_pal_sacred_shield);
     RegisterSpellScript(classic_spell_pal_forbearance);
     RegisterSpellScript(classic_spell_pal_illumination);

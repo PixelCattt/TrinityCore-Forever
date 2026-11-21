@@ -774,16 +774,6 @@ class TC_GAME_API Spell
         bool m_autoRepeat;
         uint8 m_runesState;
 
-        uint8 m_delayAtDamageCount;
-        bool IsDelayableNoMore()
-        {
-            if (m_delayAtDamageCount >= 2)
-                return true;
-
-            ++m_delayAtDamageCount;
-            return false;
-        }
-
         struct EmpowerData
         {
             Milliseconds MinHoldTime = 0ms;

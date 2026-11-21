@@ -261,29 +261,72 @@ struct classic_kt_p1AddAI : public ScriptedAI
     }
 
     bool hasAggroed;
+    bool loggedRefusal = false;
+    bool sent = false;   // sent at a raider by Kel'Thuzad (SpawnAndSendP1Creature), not one of an alcove's resting adds
 
     void Reset() override = 0;
 
     void ActualAttack(Unit* target)
     {
         me->GetThreatManager().AddThreat(target, 300.0f);
+        KeepFromCallingHelp();
         ScriptedAI::AttackStart(target);
         hasAggroed = true;
     }
 
-    void JustEngagedWith(Unit* /*pWho*/) override
+    // A sent add never calls its alcove for help (SpawnAndSendP1Creature). TC's flag for it is one-shot: Unit::AttackStop clears it (its
+    // victim died, feigned death or vanished), and the next Unit::Attack calls every resting add within 10 y into the fight. A Soul Weaver
+    // walks slowly and is still beside its alcove when the raid first reaches it (naxx_kelthuzad r8: the raid fought the sent Weaver 6.6 y
+    // from the south alcove's centre, and that alcove woke a second later). Set again before every attack.
+    void KeepFromCallingHelp()
+    {
+        if (sent)
+            me->SetNoCallAssistance(true);
+    }
+
+    // Which raider woke a resting alcove add, and how (sight, a spell, or its neighbour's call for help: then the raider is far off).
+    // An alcove that wakes kills the raid (naxx_kelthuzad r25: 17 Abominations engaged in 100 s where the script sends 2), and nothing
+    // said which raider or spell did it. Logger scripts.kelthuzad.
+    void LogWake(Unit const* who, char const* how, uint32 spellId) const
+    {
+        if (sent || !who)
+            return;
+        TC_LOG_INFO("scripts.kelthuzad", "[kt_wake] {} ({}) at {:.1f},{:.1f} woken by {} ({}) at {:.1f},{:.1f}, {:.1f} y 2D, {} {}",
+            me->GetName(), me->GetGUID().GetCounter(), me->GetPositionX(), me->GetPositionY(), who->GetName(), who->GetGUID().GetCounter(),
+            who->GetPositionX(), who->GetPositionY(), me->GetDistance2d(who), how, spellId);
+    }
+
+    void JustEngagedWith(Unit* pWho) override
     {
         // want to prevent the creature from aggroing unless we explicitly do it through base class
+        if (!hasAggroed)
+            LogWake(pWho, "engaged", 0);
+    }
+
+    // Combat without an engage (a raider's area spell or periodic damage puts it in combat): logged too, the r8 runs logged nothing at all.
+    void JustEnteredCombat(Unit* pWho) override
+    {
+        if (!hasAggroed)
+            LogWake(pWho, "combat", 0);
+        ScriptedAI::JustEnteredCombat(pWho);
     }
 
     void AttackStart(Unit* pWho) override
     {
+        KeepFromCallingHelp();
         if (hasAggroed)
             ScriptedAI::AttackStart(pWho);
         // want to prevent the creature from aggroing unless we explicitly do it through this class
         else if (me->GetDistance2d(pWho) < KT_ALCOVE_ADD_PULL_RADIUS)
         {
+            LogWake(pWho, "attackstart", 0);
             ActualAttack(pWho);
+        }
+        else if (!loggedRefusal)
+        {
+            // UpdateVictim asks again every tick while the add has no victim: said once.
+            loggedRefusal = true;
+            LogWake(pWho, "attackstart refused (30 y)", 0);
         }
     }
 
@@ -295,16 +338,22 @@ struct classic_kt_p1AddAI : public ScriptedAI
         }
         else if (me->IsHostileTo(pWho) && me->GetDistance2d(pWho) < KT_ALCOVE_ADD_PULL_RADIUS) //todo: no idea what the pull range should be
         {
+            bool const wasEngaged = me->IsEngaged();
             ScriptedAI::MoveInLineOfSight(pWho);
+            if (!wasEngaged && me->IsEngaged())
+                LogWake(pWho, "sight", 0);
         }
     }
 
-    void SpellHit(WorldObject* pCaster, SpellInfo const* /*spellInfo*/) override
+    void SpellHit(WorldObject* pCaster, SpellInfo const* spellInfo) override
     {
         if (!hasAggroed)
         {
             if (Unit* pUnit = pCaster->ToUnit())
+            {
+                LogWake(pUnit, "spell", spellInfo ? spellInfo->Id : 0);
                 ActualAttack(pUnit);
+            }
         }
     }
 };
@@ -555,6 +604,8 @@ struct classic_boss_kelthuzad : public ScriptedAI
                 pCreature->SetWanderDistance(5.0f);
             }
         }
+        // Proves the [kt_wake] logger reaches the log at all (r8 came back with an empty file and no way to tell why).
+        TC_LOG_INFO("scripts.kelthuzad", "[kt_wake] phase 1 begins: {} resting alcove adds", p1_adds.size());
     }
 
     // VMaNGOS SelectAttackingTarget(ATTACKING_TARGET_RANDOM, 0, nullptr, SELECT_FLAG_PLAYER): while Kel'Thuzad is
@@ -583,8 +634,19 @@ struct classic_boss_kelthuzad : public ScriptedAI
             float spawnAng = 3.14f + pTarget->GetAbsoluteAngle(spawnLoc[0], spawnLoc[1]);
             if (Creature* pAdd = me->SummonCreature(type, spawnLoc[0], spawnLoc[1], ktAlcoveZ, spawnAng, TEMPSUMMON_TIMED_DESPAWN_OUT_OF_COMBAT, 1000ms))
             {
+                // The add is born in the middle of an alcove, among that alcove's sleeping Soldiers, Abominations and Soul Weaver. Its first
+                // attack calls for assistance (Unit::Attack, 10 y), and TC's assistance engages each helper with the target outright
+                // (AssistDelayEvent: EngageWithTarget) instead of asking its AI (classic_kt_p1AddAI::AttackStart refuses a target 30 y off),
+                // so every sent add put the sleepers round its alcove in combat with a raider in the middle of the room. Engaged, they were
+                // the raid's targets, and the first hit woke them for good: naxx_kelthuzad r24, from the first send at 20 s the alcoves' adds
+                // in combat went 1 -> 33 Soldiers, 0 -> 8 Abominations and 0 -> 5 Soul Weavers in 24 s, and the Abominations killed the raid.
+                // The sent add comes alone; an alcove still wakes whole when a raider walks into it (its own aggro, then its assistance).
+                pAdd->SetNoCallAssistance(true);
+                classic_kt_p1AddAI* addAI = dynamic_cast<classic_kt_p1AddAI*>(pAdd->AI());
+                if (addAI)
+                    addAI->sent = true;
                 CreatureAI::DoZoneInCombat(pAdd);
-                if (classic_kt_p1AddAI* addAI = dynamic_cast<classic_kt_p1AddAI*>(pAdd->AI()))
+                if (addAI)
                     addAI->ActualAttack(pTarget);
                 return true;
             }
@@ -993,7 +1055,7 @@ struct classic_soldier_frozen_wastes_ai : public classic_kt_p1AddAI
             if (Unit* pNearest = SelectTarget(SelectTargetMethod::MinDistance, 0))
             {
                 if (me->GetVictim() != pNearest && me->IsWithinMeleeRange(pNearest))
-                    ScriptedAI::AttackStart(pNearest);
+                    AttackStart(pNearest);   // through classic_kt_p1AddAI: a sent add keeps from calling its alcove
             }
         }
     }
@@ -1026,7 +1088,7 @@ struct classic_soul_weaver_ai : public classic_kt_p1AddAI
             if (Unit* pNearest = SelectTarget(SelectTargetMethod::MinDistance, 0))
             {
                 if (me->GetVictim() != pNearest && me->IsWithinMeleeRange(pNearest))
-                    ScriptedAI::AttackStart(pNearest);
+                    AttackStart(pNearest);   // through classic_kt_p1AddAI: a sent add keeps from calling its alcove
             }
         }
     }

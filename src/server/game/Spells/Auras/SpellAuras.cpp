@@ -1958,6 +1958,12 @@ uint32 Aura::GetProcEffectMask(AuraApplication* aurApp, ProcEventInfo& eventInfo
             if ((procEntry->DisableEffectsMask & (1u << aurEff->GetEffIndex())) || !aurEff->CheckEffectProc(aurApp, eventInfo))
                 procEffectMask &= ~(1u << aurEff->GetEffIndex());
 
+    // Classic 1.60: the effect holding a "times as likely to activate" factor is only that number (Hand of Justice's second effect would
+    // otherwise trigger a second extra attack with every proc; spell_versus_bonus, ClassicVersusBonus.h)
+    if (SpellMgr::ClassicVersusBonusEntry const* versus = sSpellMgr->GetClassicVersusBonus(GetId(), ClassicVersusBonus::Kind::ProcChance))
+        if (versus->SourceSpellId == GetId())
+            procEffectMask &= ~(1u << versus->SourceEffect);
+
     if (!procEffectMask)
         return 0;
 
@@ -2028,15 +2034,60 @@ float Aura::CalcProcChance(SpellProcEntry const& procEntry, ProcEventInfo& event
     // so talents modifying chances and judgements will have properly calculated proc chance
     if (Unit* caster = GetCaster())
     {
-        // calculate ppm chance if present and we're using weapon
-        if (eventInfo.GetDamageInfo() && procEntry.ProcsPerMinute != 0)
+        // Classic 1.60 (WoW Forever): a procs-per-minute row heard on a spell that is not a melee or ranged attack prices the chance on that
+        // spell's cast time, at least 1.5 s, in place of a weapon speed or the client's retail real-PPM (time since the last proc). Moonshadow
+        // Stave 1300435 at 1.5 a minute: 3.8% on an instant or a 1.5 s Wrath, 6 to 9% on Starfire (359 procs from 10 druids; wowsims/forever,
+        // MIT, docs/evidence EV-0115).
+        SpellInfo const* procSpellInfo = eventInfo.GetSpellInfo();
+        bool const castTimePriced = procEntry.ProcsPerMinute != 0 && procSpellInfo
+            && procSpellInfo->DmgClass != SPELL_DAMAGE_CLASS_MELEE && procSpellInfo->DmgClass != SPELL_DAMAGE_CLASS_RANGED;
+        if (castTimePriced)
         {
-            uint32 WeaponSpeed = caster->GetBaseAttackTime(eventInfo.GetDamageInfo()->GetAttackType());
+            int32 castTime = procSpellInfo->CalcCastTime();
+            if (Spell const* procSpell = eventInfo.GetProcSpell())
+                castTime = procSpell->GetCastTime();
+            chance = caster->GetPPMProcChance(std::max<int32>(castTime, 1500), procEntry.ProcsPerMinute, GetSpellInfo());
+            // Highborne Research Tablet: weapon hits on procs per minute, spell hits a flat chance whatever the cast time (about 7% on
+            // instants and 3 s casts alike; wowsims/forever, MIT, docs/evidence EV-0131)
+            if (procEntry.AttributesMask & PROC_ATTR_CLASSIC_SPELL_FLAT_CHANCE)
+                chance = procEntry.Chance;
+        }
+        // calculate ppm chance if present and we're using weapon
+        else if (eventInfo.GetDamageInfo() && procEntry.ProcsPerMinute != 0)
+        {
+            // Classic 1.60 (WoW Forever): a hit taken prices the rate on the attacker's swing interval, not the wearer's weapon (Argent
+            // Defender, 0.5 a minute on the attacker's speed; wowsims/forever, MIT, docs/evidence EV-0126)
+            Unit const* speedUnit = caster;
+            if (Unit* actor = eventInfo.GetActor())
+                if (actor != caster && eventInfo.GetActionTarget() == caster)
+                    speedUnit = actor;
+            uint32 WeaponSpeed = speedUnit->GetBaseAttackTime(eventInfo.GetDamageInfo()->GetAttackType());
             chance = caster->GetPPMProcChance(WeaponSpeed, procEntry.ProcsPerMinute, GetSpellInfo());
         }
+        // Classic 1.60 (WoW Forever): a procs-per-minute row that hears damage-free spells (PROC_SPELL_TYPE_NO_DMG_HEAL) rolls on them too,
+        // which had no damage to read a weapon from and so a chance of 0. A melee ability (Bash) rolls on the main-hand (paw) speed, a spell
+        // (Faerie Fire) on its cast time, an instant at 1.5 s. Omen of Clarity: Faerie Fire 23 of 365, Bash 2 of 22 (wowsims/forever, MIT,
+        // docs/evidence EV-0020).
+        else if (procEntry.ProcsPerMinute != 0 && (procEntry.SpellTypeMask & PROC_SPELL_TYPE_NO_DMG_HEAL))
+        {
+            if (SpellInfo const* procSpell = eventInfo.GetSpellInfo())
+            {
+                uint32 speed = 0;
+                if (procSpell->DmgClass == SPELL_DAMAGE_CLASS_MELEE)
+                    speed = caster->GetBaseAttackTime(BASE_ATTACK);
+                else
+                    speed = std::max<uint32>(procSpell->CalcCastTime(), 1500);
+                chance = caster->GetPPMProcChance(speed, procEntry.ProcsPerMinute, GetSpellInfo());
+            }
+        }
 
-        if (GetSpellInfo()->ProcBasePPM > 0.0f)
+        if (GetSpellInfo()->ProcBasePPM > 0.0f && !castTimePriced)
             chance = CalcPPMProcChance(caster);
+
+        // Classic 1.60: "Attacks against Dwarves are $s2 times as likely to activate this effect" (Hand of Justice; spell_versus_bonus,
+        // ClassicVersusBonus.h). The enemy is the unit the wearer hit, or the one that hit the wearer.
+        Unit* enemy = eventInfo.GetActor() == caster ? eventInfo.GetActionTarget() : eventInfo.GetActor();
+        chance *= sSpellMgr->GetClassicVersusFactor(GetId(), ClassicVersusBonus::Kind::ProcChance, enemy);
 
         // apply chance modifer aura, applies also to ppm chance (see improved judgement of light spell)
         if (Player* modOwner = caster->GetSpellModOwner())

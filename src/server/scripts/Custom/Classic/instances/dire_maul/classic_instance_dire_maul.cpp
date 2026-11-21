@@ -263,8 +263,8 @@ public:
                 case GO_FELVINE_SHARD:
                     m_lFelvineShardGUIDs.push_back(go->GetGUID());
                     break;
-                case GO_DOOR_ALZZIN_IN:
-                    m_uiDoorAlzzinInGUID = go->GetGUID();
+                case GO_CONSERVATORY_DOOR:
+                    m_uiConservatoryDoorGUID = go->GetGUID();
                     break;
                 // DM West
                 case GO_CRISTAL_1_EVENT:
@@ -484,7 +484,7 @@ public:
                 case TYPE_SPEAK_ECORCEFER:
                 {
                     if (data == DONE)
-                        DoUseDoorOrButton(m_uiDoorAlzzinInGUID);
+                        DoUseDoorOrButton(m_uiConservatoryDoorGUID);
                     m_auiEncounter[TYPE_SPEAK_ECORCEFER] = data;
                     break;
                 }
@@ -645,7 +645,7 @@ public:
         std::array<std::unique_ptr<PersistentInstanceScriptValue<uint32>>, INSTANCE_DIRE_MAUL_MAX_ENCOUNTER> m_savedEncounter;
 
         // East
-        ObjectGuid m_uiDoorAlzzinInGUID;
+        ObjectGuid m_uiConservatoryDoorGUID;
         ObjectGuid m_uiCrumbleWallGUID;
         ObjectGuid m_uiCorruptVineGUID;
         std::list<ObjectGuid> m_lFelvineShardGUIDs;

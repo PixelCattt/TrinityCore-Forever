@@ -72,6 +72,7 @@
 #include "SharedDefines.h"
 #include "SkillExtraItems.h"
 #include "SocialMgr.h"
+#include "ClassicRounding.h"
 #include "SpellAuraEffects.h"
 #include "SpellAuras.h"
 #include "SpellHistory.h"
@@ -527,7 +528,12 @@ void Spell::EffectEnvironmentalDMG()
     uint32 damage = GetEffectValueAsInt();
     // CalcAbsorbResist already in Player::EnvironmentalDamage
     if (unitTarget->GetTypeId() == TYPEID_PLAYER)
+    {
+        // Player::EnvironmentalDamage deals the damage as the player on itself with no spell, so the damage hooks only see a
+        // self-inflicted hit. Name the spell and its caster to the scripts first; the next damage hook on this player is this hit.
+        sScriptMgr->OnDamageSpell(GetUnitCasterForEffectHandlers(), unitTarget, damage, m_spellInfo);
         unitTarget->ToPlayer()->EnvironmentalDamage(DAMAGE_FIRE, damage);
+    }
     else
     {
         Unit* unitCaster = GetUnitCasterForEffectHandlers();
@@ -567,7 +573,9 @@ void Spell::EffectSchoolDMG()
         if (unitCaster && apply_direct_bonus)
         {
             int32 bonus = unitCaster->SpellDamageBonusDone(unitTarget, m_spellInfo, damage, SPELL_DIRECT_DAMAGE, *effectInfo, 1, this);
-            damage = bonus + int32(bonus * variance);
+            // Classic 1.60: "Deals $s2 times as much damage to Plants" (spell_versus_bonus, ClassicVersusBonus.h)
+            float const versus = sSpellMgr->GetClassicVersusFactor(m_spellInfo->Id, ClassicVersusBonus::Kind::Damage, unitTarget);
+            damage = ClassicRounding::RoundByFraction(bonus * (1.0 + variance) * versus, rand_norm());
             damage = unitTarget->SpellDamageBonusTaken(unitCaster, m_spellInfo, damage, SPELL_DIRECT_DAMAGE);
         }
 
@@ -1164,7 +1172,7 @@ void Spell::EffectPowerDrain()
     if (unitCaster)
     {
         int32 bonus = unitCaster->SpellDamageBonusDone(unitTarget, m_spellInfo, drainAmount, SPELL_DIRECT_DAMAGE, *effectInfo, 1, this);
-        drainAmount = bonus + int32(bonus * variance);
+        drainAmount = ClassicRounding::RoundByFraction(bonus * (1.0 + variance), rand_norm());
         drainAmount = unitTarget->SpellDamageBonusTaken(unitCaster, m_spellInfo, drainAmount, SPELL_DIRECT_DAMAGE);
     }
 
@@ -1282,7 +1290,7 @@ void Spell::EffectHeal()
     else
     {
         int32 bonus = unitCaster->SpellHealingBonusDone(unitTarget, m_spellInfo, addhealth, HEAL, *effectInfo, 1, this);
-        addhealth = bonus + int32(bonus * variance);
+        addhealth = ClassicRounding::RoundByFraction(bonus * (1.0 + variance), rand_norm());
     }
 
     addhealth = unitTarget->SpellHealingBonusTaken(unitCaster, m_spellInfo, addhealth, HEAL);
@@ -1325,7 +1333,7 @@ void Spell::EffectHealMechanical()
     if (unitCaster)
         heal = unitCaster->SpellHealingBonusDone(unitTarget, m_spellInfo, heal, HEAL, *effectInfo, 1, this);
 
-    heal += int32(heal * variance);
+    heal = ClassicRounding::RoundByFraction(heal * (1.0 + variance), rand_norm());
     if (unitCaster)
         heal = unitTarget->SpellHealingBonusTaken(unitCaster, m_spellInfo, heal, HEAL);
 
@@ -1346,7 +1354,7 @@ void Spell::EffectHealthLeech()
     if (unitCaster)
         bonus = unitCaster->SpellDamageBonusDone(unitTarget, m_spellInfo, damage, SPELL_DIRECT_DAMAGE, *effectInfo, 1, this);
 
-    damage = bonus + int32(bonus * variance);
+    damage = ClassicRounding::RoundByFraction(bonus * (1.0 + variance), rand_norm());
 
     if (unitCaster)
         damage = unitTarget->SpellDamageBonusTaken(unitCaster, m_spellInfo, damage, SPELL_DIRECT_DAMAGE);

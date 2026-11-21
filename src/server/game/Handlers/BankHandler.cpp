@@ -126,10 +126,13 @@ void WorldSession::HandleAutoStoreBankItemOpcode(WorldPackets::Bank::AutoStoreBa
             return;
         }
 
+        // The count moved, read before the store: a stack that merges into one in the bags comes back as that bigger stack, and
+        // counting all of it gave quest item objectives more than was moved.
+        uint32 const entry = item->GetEntry();
+        uint32 const count = item->GetCount();
         _player->RemoveItem(packet.Bag, packet.Slot, true);
-        if (Item const* storedItem = _player->StoreItem(dest, item, true))
-            _player->ItemAddedQuestCheck(storedItem->GetEntry(), storedItem->GetCount());
-
+        if (_player->StoreItem(dest, item, true))
+            _player->ItemAddedQuestCheck(entry, count);
     }
     else                                                                // moving from inventory to bank
     {
@@ -141,7 +144,9 @@ void WorldSession::HandleAutoStoreBankItemOpcode(WorldPackets::Bank::AutoStoreBa
             return;
         }
 
+        // Quest item objectives count the bags only (the turn-in checks the same), as the bank-it button above does.
         _player->RemoveItem(packet.Bag, packet.Slot, true);
+        _player->ItemRemovedQuestCheck(item->GetEntry(), item->GetCount());
         _player->BankItem(dest, item, true);
     }
 }

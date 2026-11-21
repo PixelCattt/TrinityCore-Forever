@@ -99,17 +99,19 @@ TEST_CASE("Round robin without bots rotates as before", "[ClassicBotGroupRules]"
 TEST_CASE("A raid of a player and bots that fits a party goes back to one", "[ClassicBotGroupRules]")
 {
     // player + 2 bots left in a raid, open world
-    REQUIRE(RevertBotRaidToParty(true, false, 3, 5, true, true, false));
-    REQUIRE(RevertBotRaidToParty(true, false, 5, 5, true, true, false));
+    REQUIRE(RevertBotRaidToParty(true, false, 3, 5, true, true, false, false));
+    REQUIRE(RevertBotRaidToParty(true, false, 5, 5, true, true, false, false));
     // six members: stays a raid
-    REQUIRE_FALSE(RevertBotRaidToParty(true, false, 6, 5, true, true, false));
+    REQUIRE_FALSE(RevertBotRaidToParty(true, false, 6, 5, true, true, false, false));
     // someone is on a raid map: the instance needs the raid
-    REQUIRE_FALSE(RevertBotRaidToParty(true, false, 3, 5, true, true, true));
+    REQUIRE_FALSE(RevertBotRaidToParty(true, false, 3, 5, true, true, true, false));
     // battleground or dungeon finder groups are left alone
-    REQUIRE_FALSE(RevertBotRaidToParty(true, true, 3, 5, true, true, false));
+    REQUIRE_FALSE(RevertBotRaidToParty(true, true, 3, 5, true, true, false, false));
     // a raid of players only, or of bots only, keeps its vanilla behaviour
-    REQUIRE_FALSE(RevertBotRaidToParty(true, false, 3, 5, false, true, false));
-    REQUIRE_FALSE(RevertBotRaidToParty(true, false, 3, 5, true, false, false));
+    REQUIRE_FALSE(RevertBotRaidToParty(true, false, 3, 5, false, true, false, false));
+    REQUIRE_FALSE(RevertBotRaidToParty(true, false, 3, 5, true, false, false, false));
+    // the leader made it a raid by hand: it stays one
+    REQUIRE_FALSE(RevertBotRaidToParty(true, false, 3, 5, true, true, false, true));
     // already a party
-    REQUIRE_FALSE(RevertBotRaidToParty(false, false, 3, 5, true, true, false));
+    REQUIRE_FALSE(RevertBotRaidToParty(false, false, 3, 5, true, true, false, false));
 }

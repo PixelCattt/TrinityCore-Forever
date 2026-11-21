@@ -155,7 +155,9 @@ ChatMessageResult WorldSession::HandleChatMessage(ChatMsg type, Language lang, s
 
     // prevent talking at unknown language (cheating)
     auto languageData = sLanguageMgr->GetLanguageDescById(lang);
-    if (languageData.begin() == languageData.end())
+    // a Languages.db2 language that no spell teaches has no entry: it is known to the game but nobody can learn it, so it falls
+    // through to the "not learned" check below (Classic 1.60, LanguageMgr::LoadLanguages)
+    if (languageData.begin() == languageData.end() && !sLanguageMgr->IsLanguageExist(lang))
     {
         SendNotification(LANG_UNKNOWN_LANGUAGE);
         return ChatMessageResult::InvalidLanguage;

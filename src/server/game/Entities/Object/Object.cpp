@@ -21,6 +21,7 @@
 #include "CinematicMgr.h"
 #include "ClassicLegacyPerks.h"
 #include "CombatLogPackets.h"
+#include "CombatLogWatch.h"
 #include "Corpse.h"
 #include "CreatureGroups.h"
 #include "DB2Stores.h"
@@ -1149,6 +1150,9 @@ void WorldObject::SendCombatLogMessage(WorldPackets::CombatLog::CombatLogServerP
 
     Trinity::MessageDistDeliverer<CombatLogSender> notifier(this, combatLogSender, GetVisibilityRange());
     Cell::VisitWorldObjects(this, notifier, GetVisibilityRange());
+
+    // GMs watching a unit or group here from afar (.gm combatlog); returns at once while nobody watches
+    CombatLogWatch::Deliver(this, combatLog);
 }
 
 void WorldObject::SetMap(Map* map)
@@ -1792,7 +1796,13 @@ int32 WorldObject::ModSpellDuration(SpellInfo const* spellInfo, WorldObject cons
         if (Player const* targetPlayer = unitTarget->ToPlayer())
         {
             // Gourmand 1225499: beneficial effects from eating food last longer (Well Fed buffs: food icon 136000, Well Fed XP Boost)
-            if (spellInfo->IconFileDataId == 136000 || spellInfo->Id == 1243969)
+            // The Classic 1.60 foods' own Well Fed buffs carry icon 133943 (spell_misc_food), which three spells of unclear origin share,
+            // so they are listed by id (every "Well Fed" with that icon in the 70790 client data). Without them Gourmand only lengthened
+            // the old foods' buffs (Discord, 6_1_8_8_1 2026-11-20).
+            static constexpr uint32 ClassicWellFedSpells[] = { 1225778, 1225779, 1225780, 1225782, 1248406, 1248420, 1248421, 1248422,
+                1248688, 1249519, 1249520, 1249521, 1249523, 1249907, 1249926, 1249927, 1283082, 1294007, 1302064, 1319310 };
+            if (spellInfo->IconFileDataId == 136000 || spellInfo->Id == 1243969
+                || std::ranges::find(ClassicWellFedSpells, spellInfo->Id) != std::end(ClassicWellFedSpells))
                 if (int32 pct = targetPlayer->GetClassicLegacyPerkAmount(1225499, EFFECT_0))
                     AddPct(duration, pct);
 
@@ -1983,6 +1993,20 @@ SpellMissInfo WorldObject::MagicSpellHitResult(Unit* victim, SpellInfo const* sp
         int32 deflect_chance = victim->GetTotalAuraModifier(SPELL_AURA_DEFLECT_SPELLS) * 100.0f;
         if (deflect_chance > 0 && rand < (tmp += deflect_chance))
             return SPELL_MISS_DEFLECT;
+
+        // SPELL_AURA_ALLOW_BLOCKING_SPELLS (Classic 1.60 Shieldsworn 1328551: "allowing you to Block spells"): a damaging spell from the
+        // front is blocked with the melee block chance, unless the victim is casting (it cannot block a melee hit then either); the
+        // shield block value comes off its damage (Unit::CalculateSpellDamageTaken)
+        if (victim->HasAuraType(SPELL_AURA_ALLOW_BLOCKING_SPELLS) && !spellInfo->HasAttribute(SPELL_ATTR8_NO_ATTACK_BLOCK)
+            && !victim->IsNonMeleeSpellCast(false, false, true) && spellInfo->HasEffect(SPELL_EFFECT_SCHOOL_DAMAGE))
+        {
+            if (Unit const* caster = ToUnit())
+            {
+                int32 const blockChance = int32(caster->GetUnitBlockChance(BASE_ATTACK, victim) * 100.0f);
+                if (blockChance > 0 && rand < (tmp += blockChance))
+                    return SPELL_MISS_BLOCK;
+            }
+        }
     }
 
     return SPELL_MISS_NONE;

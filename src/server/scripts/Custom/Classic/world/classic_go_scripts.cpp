@@ -297,7 +297,11 @@ class classic_spell_campfire_rest : public AuraScript
             CastCampBuff(target, buff);
         // the Boosted buffs are hidden auras (Attributes 0x80); the visible buff is Camp Benefits, whose tooltip lists every one of them
         // the player has (official beta sniff: both in the same aura updates). Its other effects are area dummies, so add the aura only.
-        if (!buffs.empty() && sSpellMgr->GetSpellInfo(SPELL_CAMP_BENEFITS, DIFFICULTY_NONE))
+        // Its tooltip (client AuraDescription) has a line for each feature buff but none for the tent's Boosted Rest, which shows as its
+        // own XP buff: a camp of only a tent and a fire gave a Camp Benefits listing nothing (Discord, 6_1_8_8_1 2026-11-20, Camp
+        // Taurajo). So it comes only with at least one buff it lists.
+        bool const hasListedBuff = std::ranges::any_of(buffs, [](uint32 buff) { return buff != SPELL_BOOSTED_REST; });
+        if (hasListedBuff && sSpellMgr->GetSpellInfo(SPELL_CAMP_BENEFITS, DIFFICULTY_NONE))
             target->AddAura(SPELL_CAMP_BENEFITS, target);
 
         if (target->IsSitState())

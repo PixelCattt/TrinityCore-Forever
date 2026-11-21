@@ -729,7 +729,9 @@ void World::LoadConfigSettings(bool reload)
         { .Name = "Classic.SecuredBagSlotsForAll"sv, .DefaultValue = true, .Index = CONFIG_CLASSIC_SECURED_BAG_SLOTS_FOR_ALL },
         { .Name = "Classic.ForeverCreatureHealth"sv, .DefaultValue = false, .Index = CONFIG_CLASSIC_FOREVER_CREATURE_HEALTH },
         { .Name = "Classic.ForeverKillXp"sv, .DefaultValue = false, .Index = CONFIG_CLASSIC_FOREVER_KILL_XP },
+        { .Name = "Classic.DungeonCarryXpBlock"sv, .DefaultValue = true, .Index = CONFIG_CLASSIC_DUNGEON_CARRY_XP_BLOCK },
         { .Name = "Classic.AutoEquipNewBags"sv, .DefaultValue = false, .Index = CONFIG_CLASSIC_AUTO_EQUIP_NEW_BAGS },
+        { .Name = "Classic.FirstTagOwnsMob"sv, .DefaultValue = false, .Index = CONFIG_CLASSIC_FIRST_TAG_OWNS_MOB },
         { .Name = "Classic.CreatureHealth.Raids"sv, .DefaultValue = false, .Index = CONFIG_CLASSIC_CREATURE_HEALTH_RAIDS },
         { .Name = "Forever.VanillaAoE"sv, .DefaultValue = false, .Index = CONFIG_FOREVER_VANILLA_AOE },
         // read here once, not on every path or every death: a key missing from an older worldserver.conf warned on every read
@@ -846,7 +848,7 @@ void World::LoadConfigSettings(bool reload)
         { .Name = "WorldBossLevelDiff"sv, .DefaultValue = 3, .Index = CONFIG_WORLD_BOSS_LEVEL_DIFF },
         { .Name = "Quests.LowLevelHideDiff"sv, .DefaultValue = 4, .Index = CONFIG_QUEST_LOW_LEVEL_HIDE_DIFF, .Max = MAX_LEVEL },
         { .Name = "Quests.HighLevelHideDiff"sv, .DefaultValue = 7, .Index = CONFIG_QUEST_HIGH_LEVEL_HIDE_DIFF, .Max = MAX_LEVEL },
-        { .Name = "Quests.LogSize"sv, .DefaultValue = 35, .Index = CONFIG_QUEST_LOG_SIZE, .Min = 1, .Max = 40 }, // MAX_QUEST_LOG_SIZE
+        { .Name = "Quests.LogSize"sv, .DefaultValue = 40, .Index = CONFIG_QUEST_LOG_SIZE, .Min = 1, .Max = 40 }, // MAX_QUEST_LOG_SIZE
         { .Name = "Battleground.Random.ResetHour"sv, .DefaultValue = 6, .Index = CONFIG_RANDOM_BG_RESET_HOUR, .Min = 0, .Max = 23 },
         { .Name = "Calendar.DeleteOldEventsHour"sv, .DefaultValue = 6, .Index = CONFIG_CALENDAR_DELETE_OLD_EVENTS_HOUR, .Min = 0, .Max = 23 },
         { .Name = "Guild.ResetHour"sv, .DefaultValue = 6, .Index = CONFIG_GUILD_RESET_HOUR, .Min = 0, .Max = 23 },
@@ -1028,7 +1030,7 @@ void World::LoadConfigSettings(bool reload)
         { .Name = "Rate.XP.BattlegroundKill"sv, .DefaultValue = 1.0f, .Index = RATE_XP_BG_KILL },
         { .Name = "Rate.XP.Quest"sv, .DefaultValue = 1.0f, .Index = RATE_XP_QUEST },
         { .Name = "Rate.XP.Explore"sv, .DefaultValue = 1.0f, .Index = RATE_XP_EXPLORE },
-        { .Name = "Rate.XP.DungeonKill"sv, .DefaultValue = 1.8f, .Index = RATE_XP_DUNGEON_KILL, .Min = 0.0f },
+        { .Name = "Rate.XP.DungeonKill"sv, .DefaultValue = 0.6f, .Index = RATE_XP_DUNGEON_KILL, .Min = 0.0f },
         { .Name = "XP.Boost.Rate"sv, .DefaultValue = 2.0f, .Index = RATE_XP_BOOST },
         { .Name = "Rate.RepairCost"sv, .DefaultValue = 1.0f, .Index = RATE_REPAIRCOST, .Min = 0.0f },
         { .Name = "Rate.Reputation.Gain"sv, .DefaultValue = 1.0f, .Index = RATE_REPUTATION_GAIN },
@@ -1076,7 +1078,7 @@ void World::LoadConfigSettings(bool reload)
         { .Name = "DurabilityLossChance.Parry"sv, .DefaultValue = 0.05f, .Index = RATE_DURABILITY_LOSS_PARRY, .Min = 0.0f },
         { .Name = "DurabilityLossChance.Block"sv, .DefaultValue = 0.05f, .Index = RATE_DURABILITY_LOSS_BLOCK, .Min = 0.0f },
         { .Name = "Rate.Quest.Money.Reward"sv, .DefaultValue = 1.0f, .Index = RATE_MONEY_QUEST, .Min = 0.0f },
-        { .Name = "Rate.Quest.Money.Max.Level.Reward"sv, .DefaultValue = 1.0f, .Index = RATE_MONEY_MAX_LEVEL_QUEST, .Min = 0.0f },
+        { .Name = "Rate.Quest.Money.Max.Level.Reward"sv, .DefaultValue = 0.0f, .Index = RATE_MONEY_MAX_LEVEL_QUEST, .Min = 0.0f },
     } };
 
     for (ConfigOptionLoadDefinition<bool, WorldBoolConfigs> const& definition : bools)
@@ -1491,6 +1493,7 @@ bool World::SetInitialWorldSettings()
     sSpellMgr->LoadSpellInfoCorrections();
 
     TC_LOG_INFO("server.loading", "Loading classic spell values...");
+    sSpellMgr->LoadClassicCreatureSpellTwins();
     sSpellMgr->LoadClassicSpellInfo();
     sSpellMgr->LoadClassicTwinChannels();
     sSpellMgr->LoadClassicSpellEffects();
@@ -1627,6 +1630,9 @@ bool World::SetInitialWorldSettings()
     TC_LOG_INFO("server.loading", "Loading Classic item durability...");      // must be after LoadItemTemplates
     sObjectMgr->LoadClassicItemDurability();
 
+    TC_LOG_INFO("server.loading", "Loading Classic weapon damage...");        // must be after LoadItemTemplates
+    sObjectMgr->LoadClassicItemDamage();
+
     TC_LOG_INFO("server.loading", "Loading Classic crate bundles...");        // must be after LoadSpellInfoStore and LoadItemTemplates
     sSpellMgr->LoadClassicCrateBundles();
 
@@ -1638,6 +1644,9 @@ bool World::SetInitialWorldSettings()
 
     TC_LOG_INFO("server.loading", "Loading Creature templates...");
     sObjectMgr->LoadCreatureTemplates();
+
+    TC_LOG_INFO("server.loading", "Loading Classic versus bonuses (item effects stronger against one kind of enemy)...");
+    sSpellMgr->LoadClassicVersusBonus();                          // must be after LoadCreatureTemplates() and LoadSpellProcs()
 
     TC_LOG_INFO("server.loading", "Loading Classic creature levels...");
     sObjectMgr->LoadCreatureClassicLevels();

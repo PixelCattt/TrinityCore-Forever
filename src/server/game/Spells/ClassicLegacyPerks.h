@@ -7,13 +7,14 @@ namespace ClassicLegacyPerks
 {
     // Conquering Hero 1225506 and Second Chance 1225508: "effects gained from celebrating the defeat of bosses". The world buffs the
     // server casts on a boss kill (Rallying Cry of the Dragonslayer for Onyxia and Nefarian, Warchief's Blessing for Rend, Spirit of
-    // Zandalar for Hakkar) and the client's copies of them.
+    // Zandalar for Hakkar, Might of Stormwind for the Alliance's Rend head) and the client's copies of them.
     constexpr bool IsBossCelebrationBuff(uint32_t spellId)
     {
         switch (spellId)
         {
             case 22888: case 355363: case 1304452:      // Rallying Cry of the Dragonslayer
             case 16609: case 355366: case 1304594:      // Warchief's Blessing
+            case 460939: case 460940: case 1304678:     // Might of Stormwind
             case 24425:                                 // Spirit of Zandalar
                 return true;
             default:

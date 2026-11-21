@@ -390,8 +390,25 @@ void Channel::KickOrBan(Player const* player, std::string const& badname, bool b
 
     if (changeowner && _ownershipEnabled && !_playersStore.empty())
     {
-        info.SetModerator(true);
-        SetOwner(good);
+        // the kicker takes over. When the owner kicked or banned themselves, the kicker's entry (info) was the one just
+        // erased: it must not be used, and the new owner is picked like LeaveChannel does (a visible member first)
+        ObjectGuid newOwner = good;
+        if (good == victim)
+        {
+            auto itr = std::find_if(_playersStore.begin(), _playersStore.end(), [](PlayerContainer::value_type const& member)
+            {
+                return !member.second.IsInvisible();
+            });
+            if (itr == _playersStore.end())
+                itr = _playersStore.begin();
+
+            newOwner = itr->first;
+            _isOwnerInvisible = itr->second.IsInvisible();
+        }
+        else
+            info.SetModerator(true);
+
+        SetOwner(newOwner);
     }
 }
 

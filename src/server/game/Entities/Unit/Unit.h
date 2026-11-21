@@ -103,6 +103,14 @@ class VehicleJoinEvent;
 
 enum CharmType : uint8;
 enum class EncounterType : uint8;
+
+// Classic 1.60 (WoW Forever): how a hit's partial resist and Spell Piercing bonus are rolled (EV-0142)
+enum class ClassicResistRoll : uint8
+{
+    Spell,          // as the spell's row says: none for a binary spell, a tenth of the share for most periodic ticks, else the full share
+    Binary,         // no partial resist and no Spell Piercing bonus (ground ticks of a binary spell, Hurricane's)
+    TenthShare      // a tenth of the share and no Spell Piercing bonus (Flamestrike's ground ticks)
+};
 enum PetAction : int32;
 enum class PetActionFeedback : uint8;
 enum MovementGeneratorType : uint8;
@@ -801,6 +809,8 @@ class TC_GAME_API Unit : public WorldObject
         void SetResistance(SpellSchools school, int32 val) { SetUpdateFieldValue(m_values.ModifyValue(&Unit::m_unitData).ModifyValue(&UF::UnitData::Resistances, school), val); }
         void SetBonusResistanceMod(SpellSchools school, int32 val) { SetUpdateFieldValue(m_values.ModifyValue(&Unit::m_unitData).ModifyValue(&UF::UnitData::BonusResistanceMods, school), val); }
         static float CalculateAverageResistReduction(WorldObject const* caster, SpellSchoolMask schoolMask, Unit const* victim, SpellInfo const* spellInfo = nullptr);
+        // Classic 1.60: the average resist before it is floored at 0; Spell Piercing past the target's resistance makes it negative
+        static float CalculateSignedAverageResist(WorldObject const* caster, SpellSchoolMask schoolMask, Unit const* victim, SpellInfo const* spellInfo = nullptr);
 
         uint64 GetHealth()    const { return m_unitData->Health; }
         uint64 GetMaxHealth() const { return m_unitData->MaxHealth; }
@@ -965,6 +975,8 @@ class TC_GAME_API Unit : public WorldObject
         void TriggerAurasProcOnEvent(ProcEventInfo& eventInfo, AuraApplicationProcContainer& procAuras);
 
         void HandleEmoteCommand(Emote emoteId, Player* target = nullptr, Trinity::IteratorPair<int32 const*> spellVisualKitIds = {}, int32 sequenceVariation = 0);
+        // Classic 1.60: the current cast is an explosive thrown from an item (the melee swing keeps running through it)
+        bool IsClassicExplosiveCast() const;
         void DoMeleeAttackIfReady();
         void AttackerStateUpdate(Unit* victim, WeaponAttackType attType = BASE_ATTACK, bool extra = false);
 
@@ -978,7 +990,8 @@ class TC_GAME_API Unit : public WorldObject
         void SetLastDamagedTargetGuid(ObjectGuid guid) { _lastDamagedTargetGuid = guid; }
         ObjectGuid GetLastDamagedTargetGuid() const { return _lastDamagedTargetGuid; }
 
-        void CalculateSpellDamageTaken(SpellNonMeleeDamage* damageInfo, int32 damage, SpellInfo const* spellInfo, WeaponAttackType attackType = BASE_ATTACK, bool crit = false, bool blocked = false, Spell* spell = nullptr);
+        void CalculateSpellDamageTaken(SpellNonMeleeDamage* damageInfo, int32 damage, SpellInfo const* spellInfo, WeaponAttackType attackType = BASE_ATTACK, bool crit = false, bool blocked = false, Spell* spell = nullptr,
+            ClassicResistRoll resistRoll = ClassicResistRoll::Spell);
         void DealSpellDamage(SpellNonMeleeDamage const* damageInfo, bool durabilityLoss);
 
         // player or player's pet resilience (-1%)
@@ -1119,6 +1132,8 @@ class TC_GAME_API Unit : public WorldObject
         void SendHealSpellLog(HealInfo& healInfo, bool critical = false);
         int32 HealBySpell(HealInfo& healInfo, bool critical = false);
         void SendEnergizeSpellLog(Unit* victim, uint32 spellId, int32 damage, int32 overEnergize, Powers powerType);
+        // Classic 1.60: true when the power a spell gives threatens with the threat modifiers (druid Enrage)
+        static bool ClassicRageThreatTakesModifiers(SpellInfo const* spellInfo);
         void EnergizeBySpell(Unit* victim, SpellInfo const* spellInfo, int32 damage, Powers powerType);
 
         Aura* AddAura(uint32 spellId, Unit* target);
@@ -1267,6 +1282,7 @@ class TC_GAME_API Unit : public WorldObject
         CharmInfo* InitCharmInfo();
         void DeleteCharmInfo();
         void SetPetNumberForClient(uint32 petNumber) { SetUpdateFieldValue(m_values.ModifyValue(&Unit::m_unitData).ModifyValue(&UF::UnitData::PetNumber), petNumber); }
+        void SetCreatureFamilyForClient(int32 family) { SetUpdateFieldValue(m_values.ModifyValue(&Unit::m_unitData).ModifyValue(&UF::UnitData::CreatureFamily), family); }
         void SetPetNameTimestamp(uint32 timestamp) { SetUpdateFieldValue(m_values.ModifyValue(&Unit::m_unitData).ModifyValue(&UF::UnitData::PetNameTimestamp), timestamp); }
 
         // all of these are for DIRECT CLIENT CONTROL only
@@ -1734,8 +1750,12 @@ class TC_GAME_API Unit : public WorldObject
 
         static bool IsDamageReducedByArmor(SpellSchoolMask damageSchoolMask, SpellInfo const* spellInfo = nullptr);
         static uint32 CalcArmorReducedDamage(Unit const* attacker, Unit* victim, uint32 damage, SpellInfo const* spellInfo, WeaponAttackType attackType = MAX_ATTACK, uint8 attackerLevel = 0);
-        static uint32 CalcSpellResistedDamage(Unit const* attacker, Unit* victim, uint32 damage, SpellSchoolMask schoolMask, SpellInfo const* spellInfo);
-        static void CalcAbsorbResist(DamageInfo& damageInfo, Spell* spell = nullptr);
+        static uint32 CalcSpellResistedDamage(Unit const* attacker, Unit* victim, uint32 damage, SpellSchoolMask schoolMask, SpellInfo const* spellInfo, bool periodicTick = false,
+            ClassicResistRoll resistRoll = ClassicResistRoll::Spell);
+        static float ClassicTickResistShare(SpellInfo const* spellInfo, bool periodicTick, ClassicResistRoll resistRoll = ClassicResistRoll::Spell);
+        static uint32 CalcSpellPiercingBonusDamage(Unit const* attacker, Unit* victim, uint32 damage, SpellSchoolMask schoolMask, SpellInfo const* spellInfo, bool periodicTick = false,
+            ClassicResistRoll resistRoll = ClassicResistRoll::Spell);
+        static void CalcAbsorbResist(DamageInfo& damageInfo, Spell* spell = nullptr, ClassicResistRoll resistRoll = ClassicResistRoll::Spell);
         static void CalcHealAbsorb(HealInfo& healInfo);
 
         void UpdateSpeed(UnitMoveType mtype);

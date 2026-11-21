@@ -85,7 +85,7 @@ enum ClassicDireMaulGameObjects
     GO_CRUMBLE_WALL        = 177220,
     GO_FELVINE_SHARD       = 179559,
     GO_CORRUPT_VINE        = 179502,
-    GO_DOOR_ALZZIN_IN      = 181496,
+    GO_CONSERVATORY_DOOR   = 176907, // opened by Ironbark the Redeemed (VMaNGOS had 181496, Naxxramas's Heigan exit door here)
 
     // DM West
     GO_FORCE_FIELD         = 179503,

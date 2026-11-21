@@ -1303,6 +1303,7 @@ enum ItemBonusType
     ITEM_BONUS_SCALING_CONFIG                   = 51,
     ITEM_BONUS_CRAFTED_ITEM_LEVEL               = 52,
     ITEM_BONUS_SCALING_ITEM_LEVEL_BONUS         = 53,             // Applied only when ItemScalingConfig is used
+    ITEM_BONUS_CLASSIC_REDUCED_CASTER_DPS       = 54,             // Classic 1.60 (WoW Forever): no value, the weapon deals a caster weapon's share of its damage table
 };
 
 enum class ItemCollectionType : uint8

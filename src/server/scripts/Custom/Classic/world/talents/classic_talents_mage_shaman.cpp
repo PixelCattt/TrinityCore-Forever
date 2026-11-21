@@ -774,9 +774,9 @@ class classic_spell_mage_cone_of_cold_winters_chill : public SpellScript
     }
 };
 
-// 1326080, 1326081, 1326082 - Arcane Wrath (70532): "Launches a projectile of pure Arcane energy at the enemy target, causing $s1 Arcane
-// damage. This spell gains additional Spell Damage equal to $s2% of your maximum Mana." Effect 1 is the percentage as a dummy; the extra
-// spell damage counts like spell power, with the damage effect's coefficient.
+// 1326079 (the talent's rank), 1326080, 1326081, 1326082 - Arcane Wrath (70532): "Launches a projectile of pure Arcane energy at the enemy
+// target, causing $s1 Arcane damage. This spell gains additional Spell Damage equal to $s2% of your maximum Mana." Effect 1 is the percentage
+// as a dummy; the extra spell damage counts like spell power, with the damage effect's coefficient.
 class classic_spell_mage_arcane_wrath : public SpellScript
 {
     bool Validate(SpellInfo const* spellInfo) override
@@ -865,9 +865,19 @@ class classic_spell_mage_missile_barrage : public AuraScript
         return false;
     }
 
+    // Effect 1 is a dummy that only holds the missile period ($m2 = 5, "missiles fire every 0.5 sec", read by the Arcane Missiles
+    // script below), but the client data gives it 400589 as its trigger spell, and a dummy aura with a trigger spell casts it on every
+    // proc (AuraEffect::HandleProc). It had no check, so every harmful spell gave Missile Barrage: Frostbolt and the rest at 100%
+    // (glacier, Discord 20 Nov). It never procs; effect 0 above is the one chance.
+    bool CheckPeriodHolderProc(AuraEffect const* /*aurEff*/, ProcEventInfo& /*eventInfo*/)
+    {
+        return false;
+    }
+
     void Register() override
     {
         DoCheckEffectProc += AuraCheckEffectProcFn(classic_spell_mage_missile_barrage::CheckProc, EFFECT_0, SPELL_AURA_PROC_TRIGGER_SPELL);
+        DoCheckEffectProc += AuraCheckEffectProcFn(classic_spell_mage_missile_barrage::CheckPeriodHolderProc, EFFECT_1, SPELL_AURA_DUMMY);
     }
 };
 

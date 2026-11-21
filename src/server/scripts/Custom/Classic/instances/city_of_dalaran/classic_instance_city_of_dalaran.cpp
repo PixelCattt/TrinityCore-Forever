@@ -28,6 +28,12 @@
 // trigger, Bounding Mana and Fel Timbers are dummies, Malfunction pulses), so those are rebuilt here, with damage values
 // picked for a level 28-33 group. Every timer and every number marked INFERRED below is a guess, not live data.
 //
+// 19 Nov: every boss spell checked against the live casts of many runs (EG Link combat logs, builds 70205-70959, all players
+// merged: casts per pull, no timestamps). The ids live casts replace our stand-ins (Shadow Bolt Volley 17228, Silence 8988,
+// Entangle 1240688, Debilitate 1240750, Malfunction's pulse 1241325), the live spells we lacked are in (Fel Ancient's
+// Trample, the Shade's Arcane Explosion and Slow), and each repeat timer is set so a fight of the boss's live health (about
+// 230 damage a second from a level 30 group, INFERRED) casts each spell about as often per pull as live does.
+//
 // The way in: the Sewer Grate (656283) outside the city, map 0 (388.8, 537.4, 45.8). It needs the Dalaran Sewer Key
 // (277507); one key opens it for the whole group (guides), so a group member near the grate with the key is enough. Ghosts can
 // always go through, for the corpse run. The landing spot is the sewer start next to Rexxie Copperclutch (INFERRED: the
@@ -112,25 +118,27 @@ enum ClassicCityOfDalaranSpells : uint32
     SPELL_COD_STRIKE = 12057,
     SPELL_COD_THRASH = 3391,
     SPELL_COD_UNHOLY_FRENZY = 1303264,
-    SPELL_COD_SHADOW_BOLT_VOLLEY = 9081,
+    SPELL_COD_SHADOW_BOLT_VOLLEY = 17228,   // live id (9081 is never cast)
     SPELL_COD_CURSE_OF_THORNS = 1304473,
     SPELL_COD_ARCANE_BOLT = 1240682,        // Arcane Anomaly's live bolt
     SPELL_COD_SHADE_ARCANE_BOLT = 1241506,  // the Shade's live bolt
     SPELL_COD_FOCAL_BLAST = 1241501,        // live spell; its area trigger is server-side, so it is cast for the look only
     SPELL_COD_MANAMORPH = 1240869,
-    SPELL_COD_SILENCE = 6726,
+    SPELL_COD_SILENCE = 8988,               // live id: 15 yd around the caster
     SPELL_COD_SUMMON_MANALING = 1304455,    // cast for the look; its creature 269467 has no template
     SPELL_COD_ARCING_SMASH = 16169,
-    SPELL_COD_MALFUNCTION = 13319,
-    SPELL_COD_ENTANGLE = 339,               // Entangling Roots: root + nature damage over time. 720 "Entangle" is Fankriss's
-                                            // spell (Temple of Ahn'Qiraj): its script spawns level 60 Vekniss Hatchlings
+    SPELL_COD_MALFUNCTION_PULSE = 1241325,  // the 25 yd Arcane Explosion live Malfunction (1241329) fires every 2 s
+    SPELL_COD_ENTANGLE = 1240688,           // live id: root + damage over time on everyone within 15 yd
+    SPELL_COD_TRAMPLE = 1240687,            // live: damage to everyone within 10 yd
     SPELL_COD_FEL_TIMBERS = 1240692,        // live dummy, cast for the look
     SPELL_COD_FELFIRE = 24530,
     SPELL_COD_DRAIN_VITALITY = 1240738,
-    SPELL_COD_ARCANE_CASCADE = 1241359,     // 40 arcane damage and 200 mana burned in a cone: the guides' "Debilitate"
+    SPELL_COD_DEBILITATE = 1240750,         // live id: mana burn on everyone within 45 yd
     SPELL_COD_BOUNDING_MANA = 1241515,      // live dummy, cast for the look
     SPELL_COD_MASS_POLYMORPH = 1303598,
-    SPELL_COD_EVOCATION = 1303599
+    SPELL_COD_EVOCATION = 1303599,
+    SPELL_COD_ARCANE_EXPLOSION = 1304398,   // live: the Shade's 10 yd blast
+    SPELL_COD_SLOW = 1303350                // live: the Shade slows everyone within 20 yd
 };
 
 // INFERRED landing spots (no sniff): on the navmesh, each one checked with dungeon_reach_check
@@ -328,10 +336,10 @@ struct classic_boss_cod_atrexis : public ScriptedAI
 
     void JustEngagedWith(Unit* /*who*/) override
     {
-        _events.ScheduleEvent(EV_STRIKE, 5s);           // INFERRED timers
-        _events.ScheduleEvent(EV_DISARM, 12s);
-        _events.ScheduleEvent(EV_THRASH, 8s);
-        _events.ScheduleEvent(EV_FRENZY, 15s);
+        _events.ScheduleEvent(EV_STRIKE, 5s);           // INFERRED timers: live a pull has 5 Thrash, 4 Strike, 2 Raise Dead,
+        _events.ScheduleEvent(EV_DISARM, 15s);          // 1 Disarm and 1 Unholy Frenzy
+        _events.ScheduleEvent(EV_THRASH, 4s);
+        _events.ScheduleEvent(EV_FRENZY, 20s);
         _events.ScheduleEvent(EV_RAISE_DEAD, 10s);
     }
 
@@ -350,10 +358,10 @@ struct classic_boss_cod_atrexis : public ScriptedAI
         {
             switch (ev)
             {
-                case EV_STRIKE: DoCastVictim(SPELL_COD_STRIKE); _events.Repeat(6s, 9s); break;
-                case EV_DISARM: DoCastVictim(SPELL_COD_DISARM); _events.Repeat(20s, 25s); break;
-                case EV_THRASH: DoCastSelf(SPELL_COD_THRASH); _events.Repeat(10s, 14s); break;
-                case EV_FRENZY: DoCastSelf(SPELL_COD_UNHOLY_FRENZY); _events.Repeat(25s, 30s); break;
+                case EV_STRIKE: DoCastVictim(SPELL_COD_STRIKE); _events.Repeat(10s, 12s); break;
+                case EV_DISARM: DoCastVictim(SPELL_COD_DISARM); _events.Repeat(45s, 50s); break;
+                case EV_THRASH: DoCastSelf(SPELL_COD_THRASH); _events.Repeat(8s, 10s); break;
+                case EV_FRENZY: DoCastSelf(SPELL_COD_UNHOLY_FRENZY); _events.Repeat(45s, 50s); break;
                 case EV_RAISE_DEAD:
                     if (_raised < MaxRaised)
                     {
@@ -363,7 +371,7 @@ struct classic_boss_cod_atrexis : public ScriptedAI
                             CodAddJoins(me, me->SummonCreature(NPC_COD_RISEN_TERROR, pos, TEMPSUMMON_CORPSE_TIMED_DESPAWN, 10s));
                         }
                     }
-                    _events.Repeat(18s, 22s);
+                    _events.Repeat(25s, 28s);
                     break;
                 default: break;
             }
@@ -393,9 +401,9 @@ struct classic_boss_cod_lyn : public ScriptedAI
 
     void JustEngagedWith(Unit* /*who*/) override
     {
-        _events.ScheduleEvent(EV_THORNS, 3s);           // INFERRED timers
-        _events.ScheduleEvent(EV_VOLLEY, 9s);
-        _events.ScheduleEvent(EV_RAISE_DEAD, 6s);
+        _events.ScheduleEvent(EV_THORNS, 3s);           // INFERRED timers: live a pull has 4 volleys, 2 Raise Dead, 2 Curse of Thorns
+        _events.ScheduleEvent(EV_VOLLEY, 8s);
+        _events.ScheduleEvent(EV_RAISE_DEAD, 12s);
     }
 
     void JustSummoned(Creature* summon) override { _summons.Summon(summon); }
@@ -413,8 +421,8 @@ struct classic_boss_cod_lyn : public ScriptedAI
         {
             switch (ev)
             {
-                case EV_THORNS: DoCastVictim(SPELL_COD_CURSE_OF_THORNS); _events.Repeat(20s); break;
-                case EV_VOLLEY: DoCastSelf(SPELL_COD_SHADOW_BOLT_VOLLEY); _events.Repeat(12s, 15s); break;
+                case EV_THORNS: DoCastVictim(SPELL_COD_CURSE_OF_THORNS); _events.Repeat(35s, 40s); break;
+                case EV_VOLLEY: DoCastSelf(SPELL_COD_SHADOW_BOLT_VOLLEY); _events.Repeat(15s, 18s); break;
                 case EV_RAISE_DEAD:
                     if (_raised < MaxRaised)
                     {
@@ -422,7 +430,7 @@ struct classic_boss_cod_lyn : public ScriptedAI
                         CodAddJoins(me, me->SummonCreature(NPC_COD_RISEN_TERROR, pos, TEMPSUMMON_CORPSE_TIMED_DESPAWN, 10s));
                         ++_raised;
                     }
-                    _events.Repeat(12s, 15s);
+                    _events.Repeat(35s, 40s);
                     break;
                 default: break;
             }
@@ -456,7 +464,7 @@ struct classic_boss_cod_arcane_anomaly : public ScriptedAI
 
     void JustEngagedWith(Unit* /*who*/) override
     {
-        _events.ScheduleEvent(EV_BOLT, 4s);
+        _events.ScheduleEvent(EV_BOLT, 6s);             // INFERRED timers: live a pull has 2 Arcane Bolts and 2 Focal Blasts
         _events.ScheduleEvent(EV_FOCAL_BLAST, 15s);
     }
 
@@ -474,7 +482,7 @@ struct classic_boss_cod_arcane_anomaly : public ScriptedAI
                     if (_ticks == 0)
                         if (Unit* victim = me->GetVictim())
                             CodHit(me, victim, SPELL_COD_ARCANE_BOLT, BoltDamage);
-                    _events.Repeat(6s, 8s);
+                    _events.Repeat(20s, 25s);
                     break;
                 case EV_FOCAL_BLAST:
                 {
@@ -534,8 +542,7 @@ struct classic_boss_cod_arcanic_enigma : public ScriptedAI
     classic_boss_cod_arcanic_enigma(Creature* creature) : ScriptedAI(creature), _summons(creature) { }
 
     enum : uint32 { EV_MANAMORPH = 1, EV_SILENCE, EV_MANALING };
-    static constexpr float SilenceRange = 10.0f;    // INFERRED: "ranged players can avoid it"
-    static constexpr uint32 MaxManalings = 6;
+    static constexpr uint32 MaxManalings = 8;       // live: 2 Manalings a cast, 4 casts a pull
 
     void Reset() override
     {
@@ -547,9 +554,9 @@ struct classic_boss_cod_arcanic_enigma : public ScriptedAI
     void JustEngagedWith(Unit* /*who*/) override
     {
         me->CallForHelp(20.0f);                     // the two Mana Phantoms next to it
-        _events.ScheduleEvent(EV_MANAMORPH, 8s);    // INFERRED timers
+        _events.ScheduleEvent(EV_MANAMORPH, 8s);    // INFERRED timers: live a pull has 4 Manamorph, 4 Summon Manaling, 2 Silence
         _events.ScheduleEvent(EV_SILENCE, 12s);
-        _events.ScheduleEvent(EV_MANALING, 15s);
+        _events.ScheduleEvent(EV_MANALING, 10s);
     }
 
     void JustSummoned(Creature* summon) override { _summons.Summon(summon); }
@@ -575,9 +582,8 @@ struct classic_boss_cod_arcanic_enigma : public ScriptedAI
                     _events.Repeat(15s, 18s);
                     break;
                 case EV_SILENCE:
-                    for (Player* player : CodPlayersNear(me, me->GetPosition(), SilenceRange))
-                        me->CastSpell(player, SPELL_COD_SILENCE, true);
-                    _events.Repeat(18s, 22s);
+                    DoCastSelf(SPELL_COD_SILENCE, true);    // 15 yd around it: ranged players can stay out
+                    _events.Repeat(30s, 35s);
                     break;
                 case EV_MANALING:
                     DoCastSelf(SPELL_COD_SUMMON_MANALING, true);
@@ -586,7 +592,7 @@ struct classic_boss_cod_arcanic_enigma : public ScriptedAI
                         Position pos = me->GetRandomNearPosition(5.0f);
                         CodAddJoins(me, me->SummonCreature(NPC_COD_ARCANE_MANALING, pos, TEMPSUMMON_CORPSE_TIMED_DESPAWN, 10s));
                     }
-                    _events.Repeat(20s, 25s);
+                    _events.Repeat(14s, 16s);
                     break;
                 default: break;
             }
@@ -606,9 +612,7 @@ struct classic_boss_cod_unstable_sentinel : public ScriptedAI
     classic_boss_cod_unstable_sentinel(Creature* creature) : ScriptedAI(creature) { }
 
     enum : uint32 { EV_SMASH = 1, EV_MALFUNCTION, EV_MALFUNCTION_START, EV_MALFUNCTION_PULSE };
-    static constexpr float MalfunctionRange = 25.0f;   // guides
-    static constexpr int32 PulseDamage = 150;          // INFERRED, per pulse
-    static constexpr uint32 Pulses = 5;                // INFERRED
+    static constexpr uint32 Pulses = 5;                // INFERRED; live pulses every 2 s, 25 yd (the guides' range)
 
     void Reset() override
     {
@@ -618,7 +622,7 @@ struct classic_boss_cod_unstable_sentinel : public ScriptedAI
 
     void JustEngagedWith(Unit* /*who*/) override
     {
-        _events.ScheduleEvent(EV_SMASH, 6s);
+        _events.ScheduleEvent(EV_SMASH, 6s);            // INFERRED timers: live a pull has 6 Arcing Smash and 3 Malfunction
         _events.ScheduleEvent(EV_MALFUNCTION, 18s);
     }
 
@@ -635,7 +639,7 @@ struct classic_boss_cod_unstable_sentinel : public ScriptedAI
                 case EV_SMASH:
                     if (_pulses == 0 && !me->HasUnitState(UNIT_STATE_CASTING))
                         DoCastVictim(SPELL_COD_ARCING_SMASH);
-                    _events.Repeat(8s, 11s);
+                    _events.Repeat(11s, 14s);
                     break;
                 case EV_MALFUNCTION:
                     me->TextEmote("Unstable Sentinel begins to malfunction!", nullptr, true);
@@ -652,10 +656,9 @@ struct classic_boss_cod_unstable_sentinel : public ScriptedAI
                 case EV_MALFUNCTION_PULSE:
                     if (_pulses > 0)
                     {
-                        for (Player* player : CodPlayersNear(me, me->GetPosition(), MalfunctionRange))
-                            CodHit(me, player, SPELL_COD_MALFUNCTION, PulseDamage);
+                        DoCastSelf(SPELL_COD_MALFUNCTION_PULSE, true);
                         if (--_pulses > 0)
-                            _events.ScheduleEvent(EV_MALFUNCTION_PULSE, 1s);
+                            _events.ScheduleEvent(EV_MALFUNCTION_PULSE, 2s);
                     }
                     break;
                 default: break;
@@ -681,8 +684,8 @@ struct classic_boss_cod_mana_devourer : public ScriptedAI
     void JustEngagedWith(Unit* /*who*/) override
     {
         me->CallForHelp(35.0f);                     // guides: clear the room first
-        _events.ScheduleEvent(EV_DRAIN, 5s);        // INFERRED timers
-        _events.ScheduleEvent(EV_DEBILITATE, 10s);
+        _events.ScheduleEvent(EV_DRAIN, 5s);        // INFERRED timers: live a pull has 4 Drain Vitality and 2 Debilitate
+        _events.ScheduleEvent(EV_DEBILITATE, 15s);
     }
 
     void UpdateAI(uint32 diff) override
@@ -697,11 +700,10 @@ struct classic_boss_cod_mana_devourer : public ScriptedAI
         {
             switch (ev)
             {
-                case EV_DRAIN: DoCastVictim(SPELL_COD_DRAIN_VITALITY); _events.Repeat(10s, 13s); break;
+                case EV_DRAIN: DoCastVictim(SPELL_COD_DRAIN_VITALITY); _events.Repeat(15s, 18s); break;
                 case EV_DEBILITATE:
-                    for (Player* player : CodPlayersNear(me, me->GetPosition(), 40.0f))
-                        me->CastSpell(player, SPELL_COD_ARCANE_CASCADE, true);
-                    _events.Repeat(14s, 18s);
+                    DoCastSelf(SPELL_COD_DEBILITATE);
+                    _events.Repeat(30s, 35s);
                     break;
                 default: break;
             }
@@ -712,13 +714,13 @@ private:
     EventMap _events;
 };
 
-// Fel Ancient (city centre): Entangle (the guides' root with damage; cast as Entangling Roots 339), Fel Timbers: green pools
-// that burn whoever stands in them.
+// Fel Ancient (city centre): Trample and Entangle (root with damage) on everyone near it, Fel Timbers: green pools that burn
+// whoever stands in them.
 struct classic_boss_cod_fel_ancient : public ScriptedAI
 {
     classic_boss_cod_fel_ancient(Creature* creature) : ScriptedAI(creature) { }
 
-    enum : uint32 { EV_ENTANGLE = 1, EV_FEL_TIMBERS, EV_POOL_TICK };
+    enum : uint32 { EV_ENTANGLE = 1, EV_FEL_TIMBERS, EV_POOL_TICK, EV_TRAMPLE };
     static constexpr float PoolRadius = 4.0f;       // INFERRED
     static constexpr int32 PoolDamage = 90;         // INFERRED, per second
     static constexpr Seconds PoolDuration = 15s;    // INFERRED
@@ -733,8 +735,9 @@ struct classic_boss_cod_fel_ancient : public ScriptedAI
 
     void JustEngagedWith(Unit* /*who*/) override
     {
-        _events.ScheduleEvent(EV_ENTANGLE, 10s);
-        _events.ScheduleEvent(EV_FEL_TIMBERS, 7s);
+        _events.ScheduleEvent(EV_TRAMPLE, 8s);          // INFERRED timers: live a pull has 3 Trample, 3 Entangle, 3 Fel Timbers
+        _events.ScheduleEvent(EV_ENTANGLE, 12s);
+        _events.ScheduleEvent(EV_FEL_TIMBERS, 10s);
         _events.ScheduleEvent(EV_POOL_TICK, 1s);
     }
 
@@ -748,10 +751,13 @@ struct classic_boss_cod_fel_ancient : public ScriptedAI
         {
             switch (ev)
             {
+                case EV_TRAMPLE:
+                    DoCastSelf(SPELL_COD_TRAMPLE, true);
+                    _events.Repeat(20s, 24s);
+                    break;
                 case EV_ENTANGLE:
-                    if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0, 40.0f, true))
-                        me->CastSpell(target, SPELL_COD_ENTANGLE, true);
-                    _events.Repeat(15s, 20s);
+                    DoCastSelf(SPELL_COD_ENTANGLE, true);
+                    _events.Repeat(20s, 24s);
                     break;
                 case EV_FEL_TIMBERS:
                     DoCastSelf(SPELL_COD_FEL_TIMBERS, true);
@@ -763,7 +769,7 @@ struct classic_boss_cod_fel_ancient : public ScriptedAI
                                 PoolDuration);
                             _pools.push_back({ pos, uint32(PoolDuration.count()) });
                         }
-                    _events.Repeat(12s, 15s);
+                    _events.Repeat(25s, 28s);
                     break;
                 case EV_POOL_TICK:
                     for (Pool& pool : _pools)
@@ -786,16 +792,15 @@ private:
 };
 
 // Shade of the Archmage (Purple Parlor, last boss): Arcane Bolt on the tank, Bounding Mana: a sphere goes out to a player and
-// back, then Arcane Explosion hits everyone within 20 yd of where the Shade stood; when its mana runs out it casts Mass
-// Polymorph on the group and Evocation, then the cycle starts again. Leaving the room resets it.
+// back, then Arcane Explosion hits everyone within 10 yd of it (live spell radius; the guides say 20); Slow on everyone
+// within 20 yd; when its mana runs out it casts Mass Polymorph on the group and Evocation, then the cycle starts again.
+// Leaving the room resets it.
 struct classic_boss_cod_shade_of_the_archmage : public ScriptedAI
 {
     classic_boss_cod_shade_of_the_archmage(Creature* creature) : ScriptedAI(creature) { }
 
-    enum : uint32 { EV_BOLT = 1, EV_BOUNDING_MANA, EV_EXPLOSION, EV_OUT_OF_MANA, EV_EVOCATION, EV_LEASH };
+    enum : uint32 { EV_BOLT = 1, EV_BOUNDING_MANA, EV_EXPLOSION, EV_OUT_OF_MANA, EV_EVOCATION, EV_LEASH, EV_LONE_EXPLOSION, EV_SLOW };
     static constexpr int32 BoltDamage = 600;            // INFERRED
-    static constexpr int32 ExplosionDamage = 700;       // INFERRED
-    static constexpr float ExplosionRange = 20.0f;      // guides
     static constexpr Seconds ManaCycle = 50s;           // INFERRED: how long its mana lasts
 
     void Reset() override
@@ -806,8 +811,10 @@ struct classic_boss_cod_shade_of_the_archmage : public ScriptedAI
 
     void JustEngagedWith(Unit* /*who*/) override
     {
-        _events.ScheduleEvent(EV_BOLT, 3s);
-        _events.ScheduleEvent(EV_BOUNDING_MANA, 12s);
+        _events.ScheduleEvent(EV_BOLT, 3s);             // INFERRED timers: live a pull has 19 Arcane Bolts, 5 Arcane Explosions,
+        _events.ScheduleEvent(EV_BOUNDING_MANA, 12s);   // 3 Bounding Mana, 2 Slow, 1 Mass Polymorph and 1 Evocation
+        _events.ScheduleEvent(EV_LONE_EXPLOSION, 25s);
+        _events.ScheduleEvent(EV_SLOW, 18s);
         _events.ScheduleEvent(EV_OUT_OF_MANA, ManaCycle);
         _events.ScheduleEvent(EV_LEASH, 2s);
     }
@@ -834,21 +841,29 @@ struct classic_boss_cod_shade_of_the_archmage : public ScriptedAI
                     if (!_polymorphing)
                         if (Unit* victim = me->GetVictim())
                             CodHit(me, victim, SPELL_COD_SHADE_ARCANE_BOLT, BoltDamage);
-                    _events.Repeat(4s, 6s);
+                    _events.Repeat(4s, 5s);
                     break;
                 case EV_BOUNDING_MANA:
                     if (!_polymorphing)
                     {
                         if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0, 40.0f, true))
                             me->CastSpell(target, SPELL_COD_BOUNDING_MANA, true);
-                        _explosionAt = me->GetPosition();
                         _events.ScheduleEvent(EV_EXPLOSION, 6s);   // INFERRED: the sphere's trip out and back
                     }
-                    _events.Repeat(20s, 24s);
+                    _events.Repeat(25s, 30s);
                     break;
                 case EV_EXPLOSION:
-                    for (Player* player : CodPlayersNear(me, _explosionAt, ExplosionRange))
-                        CodHit(me, player, SPELL_COD_SHADE_ARCANE_BOLT, ExplosionDamage);
+                    DoCastSelf(SPELL_COD_ARCANE_EXPLOSION, true);
+                    break;
+                case EV_LONE_EXPLOSION:                     // live casts more explosions than spheres (5 to 3 a pull)
+                    if (!_polymorphing)
+                        DoCastSelf(SPELL_COD_ARCANE_EXPLOSION, true);
+                    _events.Repeat(35s, 40s);
+                    break;
+                case EV_SLOW:
+                    if (!_polymorphing)
+                        DoCastSelf(SPELL_COD_SLOW, true);
+                    _events.Repeat(40s, 45s);
                     break;
                 case EV_OUT_OF_MANA:
                     _polymorphing = true;
@@ -868,7 +883,6 @@ struct classic_boss_cod_shade_of_the_archmage : public ScriptedAI
 
 private:
     EventMap _events;
-    Position _explosionAt;
     bool _polymorphing = false;
 };
 

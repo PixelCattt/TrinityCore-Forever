@@ -21,6 +21,7 @@
 #include "ChatCommand.h"
 #include "CryptoRandom.h"
 #include "DatabaseEnv.h"
+#include "FriendsService.h"
 #include "IPLocation.h"
 #include "Language.h"
 #include "Log.h"
@@ -61,9 +62,45 @@ public:
         static ChatCommandTable commandTable =
         {
             { "bnetaccount",       accountCommandTable },
+            { "battletag",         HandleBattleTagCommand,         rbac::RBAC_PERM_COMMAND_BATTLETAG,                       Console::No  },
         };
 
         return commandTable;
+    }
+
+    // .battletag [name]: show the account's BattleTag, or pick a new name; the server adds a free number ("Name#1234").
+    // Battle.net friends see and whisper the account by it.
+    static bool HandleBattleTagCommand(ChatHandler* handler, Optional<std::string> name)
+    {
+        WorldSession* session = handler->GetSession();
+        if (!name)
+        {
+            std::string const tag = BattlenetPresence::GetBattleTag(session);
+            if (tag.empty())
+                handler->SendSysMessage("You have no BattleTag yet. Pick one with .battletag <name>; a number is added, like Name#1234.");
+            else
+                handler->PSendSysMessage("Your BattleTag is %s. Change it with .battletag <name>.", tag.c_str());
+            return true;
+        }
+
+        std::string tag;
+        switch (BattlenetPresence::SetBattleTag(session, *name, tag))
+        {
+            case BattlenetPresence::BattleTagResult::Ok:
+                handler->PSendSysMessage("Your BattleTag is now %s.", tag.c_str());
+                return true;
+            case BattlenetPresence::BattleTagResult::NoAccount:
+                handler->SendSysMessage("This account has no Battle.net account, so it can't have a BattleTag.");
+                break;
+            case BattlenetPresence::BattleTagResult::InvalidName:
+                handler->SendSysMessage("A BattleTag name is 2-12 letters and digits (A-Z, 0-9), starting with a letter.");
+                break;
+            case BattlenetPresence::BattleTagResult::NoFreeNumber:
+                handler->SendSysMessage("That name has no free numbers left, pick another one.");
+                break;
+        }
+        handler->SetSentErrorMessage(true);
+        return false;
     }
 
     /// Create an account

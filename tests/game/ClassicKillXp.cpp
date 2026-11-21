@@ -84,3 +84,18 @@ TEST_CASE("Classic kill XP of a gray mob is zero", "[ClassicKillXp]")
     }
     SetKillXp(false);
 }
+
+TEST_CASE("Classic dungeon carry rule: no party kill XP while the highest member is more than 12 levels above the enemy", "[ClassicKillXp]")
+{
+    // Forever hotfix of November 14 2026: a level 60 still blocks a level 47 enemy, not a level 48 one
+    CHECK(Trinity::XP::BlocksDungeonCarry(60, 47));
+    CHECK_FALSE(Trinity::XP::BlocksDungeonCarry(60, 48));
+    CHECK(Trinity::XP::BlocksDungeonCarry(35, 22));
+    CHECK_FALSE(Trinity::XP::BlocksDungeonCarry(35, 23));
+    // a party at the enemy's level, or below it, is never blocked
+    CHECK_FALSE(Trinity::XP::BlocksDungeonCarry(20, 20));
+    CHECK_FALSE(Trinity::XP::BlocksDungeonCarry(18, 24));
+    // the block starts exactly where the enemy turns gray to the highest member at 60 (gray level 47)
+    CHECK(Trinity::XP::BlocksDungeonCarry(60, Trinity::XP::GetGrayLevel(60)));
+    CHECK_FALSE(Trinity::XP::BlocksDungeonCarry(60, Trinity::XP::GetGrayLevel(60) + 1));
+}

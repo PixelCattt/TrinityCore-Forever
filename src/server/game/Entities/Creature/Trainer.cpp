@@ -120,7 +120,11 @@ namespace Trainer
 
         WorldPackets::NPC::TrainerList trainerList;
         trainerList.TrainerGUID = npc->GetGUID();
-        trainerList.TrainerType = AsUnderlyingType(_type);
+        // Classic 1.60 pet trainers sell the hunter the pet abilities for money in the ordinary trainer window, with the trainer's
+        // name and portrait (official realm, Karrina Mekenda; lilmonixx, 2026-11-20). The client opens its pet training window
+        // (the pet's name, training point costs, empty with no pet out) for trainer type Pet, so a pet trainer is sent as a plain
+        // trainer. The server keeps the Pet type for its own checks (the bots never train there).
+        trainerList.TrainerType = AsUnderlyingType(_type == Type::Pet ? Type::None : _type);
         trainerList.TrainerID = _id;
         trainerList.Greeting = GetGreeting(locale);
         trainerList.Spells.reserve(_spells.size());

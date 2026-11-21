@@ -3115,6 +3115,11 @@ uint64 Guild::GetMemberAvailableMoneyForRepairItems(ObjectGuid guid) const
     if (!member)
         return 0;
 
+    // Only a rank with the repair right repairs from the bank (the right HandleMemberWithdrawMoney asks for); the daily amount below
+    // counts for the gold right too.
+    if (!member->IsRank(GuildRankId::GuildMaster) && !HasAnyRankRight(member->GetRankId(), GR_RIGHT_WITHDRAW_REPAIR))
+        return 0;
+
     return std::min(m_bankMoney, static_cast<uint64>(_GetMemberRemainingMoney(*member)));
 }
 

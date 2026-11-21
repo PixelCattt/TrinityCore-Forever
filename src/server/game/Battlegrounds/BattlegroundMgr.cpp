@@ -34,9 +34,13 @@
 #include "ObjectMgr.h"
 #include "Player.h"
 #include "SharedDefines.h"
+#include "StringFormat.h"
+#include "VMapFactory.h"
+#include "VMapManager.h"
 #include "World.h"
 #include "WorldSession.h"
 #include <algorithm>
+#include <filesystem>
 
 bool BattlegroundTemplate::IsArena() const
 {
@@ -249,8 +253,8 @@ Battleground* BattlegroundMgr::GetBattleground(uint32 instanceId, BattlegroundQu
     BattlegroundDataContainer::const_iterator begin, end;
 
     // A queue that picks another template ("All Arenas" 6, the random battlegrounds) has its matches stored under the picked
-    // template, so look through all of them, also when it lists just one map (Classic: "All Arenas" has only map 2995, played as
-    // Mak'gora Arena 1169). Before, an arena match was never found here: Enter did nothing and the invite never ran out.
+    // template, so look through all of them, also when it lists just one map. Before, an arena match was never found here: Enter did
+    // nothing and the invite never ran out.
     if (battlegroundTemplate->MapIDs.size() > 1 || queueId.BattlemasterListId == BATTLEGROUND_AA || IsRandomBattleground(queueId.BattlemasterListId))
     {
         begin = bgDataStore.begin();
@@ -382,6 +386,22 @@ Battleground* BattlegroundMgr::CreateNewBattleground(BattlegroundQueueTypeId que
         return nullptr;
     }
 
+    // A template that is only a choice of others ("All Arenas", the random battlegrounds) loads no start points
+    // (LoadBattlegroundTemplates), and SendToBattleground reads them for everyone who enters: playing one crashed the server
+    // when someone entered (".debug arena 6", TestPlayer 2026-11-19).
+    if (!bg_template->StartLocation[TEAM_ALLIANCE] || !bg_template->StartLocation[TEAM_HORDE])
+    {
+        TC_LOG_ERROR("bg.battleground", "Battleground: CreateNewBattleground - bg template {} has no start points, it cannot be played itself", bgTypeId);
+        return nullptr;
+    }
+
+    if (bg_template->MissingMapData)
+    {
+        TC_LOG_ERROR("bg.battleground", "Battleground: CreateNewBattleground - bg template {} plays map {}, which has no game data files on this server (see the startup log)",
+            bgTypeId, bg_template->MapIDs.front());
+        return nullptr;
+    }
+
     PVPDifficultyEntry const* bracketEntry = DB2Manager::GetBattlegroundBracketById(bg_template->MapIDs.front(), bracketId);
     if (!bracketEntry)
     {
@@ -405,6 +425,27 @@ Battleground* BattlegroundMgr::CreateNewBattleground(BattlegroundQueueTypeId que
     bg->SetQueueId(queueId);
 
     return bg;
+}
+
+namespace
+{
+// The files the server reads for a map's ground and line of sight. The extractors write both for every map they build, also for a map made
+// only of buildings (Blackrock Depths has a tile list and no grid files), so these are checked and not the grid under a start point.
+std::vector<std::string> FindMissingMapDataFiles(uint32 mapId)
+{
+    std::vector<std::string> missing;
+    auto check = [&](std::string name)
+    {
+        std::error_code error;
+        if (!std::filesystem::exists(sWorld->GetDataPath() + name, error))
+            missing.push_back(std::move(name));
+    };
+
+    check(Trinity::StringFormat("maps/{:04}.tilelist", mapId));
+    if (VMAP::VMapManager* vmgr = VMAP::VMapFactory::createOrGetVMapManager(); vmgr && vmgr->isMapLoadingEnabled())
+        check("vmaps/" + VMAP::VMapManager::getMapFileName(mapId));
+    return missing;
+}
 }
 
 void BattlegroundMgr::LoadBattlegroundTemplates()
@@ -453,7 +494,7 @@ void BattlegroundMgr::LoadBattlegroundTemplates()
         bgTemplate.MapIDs            = std::move(mapsByBattleground[bgTypeId]);
 
         // Only a battleground that is played itself needs start points. "All Arenas" (6) and the random battlegrounds pick another
-        // template, even when they list just one map (Classic: "All Arenas" has only map 2995); with start points 0 they were dropped
+        // template, even when they list just one map; with start points 0 they were dropped
         // here and every arena join failed.
         if (bgTemplate.MapIDs.size() == 1 && bgTypeId != BATTLEGROUND_AA && !IsRandomBattleground(bgTypeId))
         {
@@ -483,10 +524,37 @@ void BattlegroundMgr::LoadBattlegroundTemplates()
 
         }
 
+        // A battleground or arena whose map has no game data files on this server cannot be played: its bots stand still and the match
+        // ends as soon as the gates open. Such a battleground is not played, and the reason is written here once at startup.
+        bgTemplate.MissingMapData = false;
+        if (bgTemplate.StartLocation[TEAM_ALLIANCE] && bgTemplate.StartLocation[TEAM_HORDE] && bgTemplate.MapIDs.size() == 1)
+        {
+            uint32 const mapId = bgTemplate.MapIDs.front();
+            std::vector<std::string> const missing = FindMissingMapDataFiles(mapId);
+            if (!missing.empty())
+            {
+                bgTemplate.MissingMapData = true;
+                std::string files;
+                for (std::string const& file : missing)
+                    files += (files.empty() ? "" : ", ") + sWorld->GetDataPath() + file;
+                TC_LOG_ERROR("server.loading", "Battleground {} ({}) is turned off: the game data of map {} is missing on this server ({}). Build the game data "
+                    "again.", bgTypeId, bl->Name[sWorld->GetDefaultDbcLocale()], mapId, files);
+            }
+            else if (DisableMgr::IsPathfindingEnabled(mapId))
+            {
+                // pathing is not needed to play, so this only warns
+                std::string const mmapFile = Trinity::StringFormat("{}mmaps/{:04}.mmap", sWorld->GetDataPath(), mapId);
+                std::error_code error;
+                if (!std::filesystem::exists(mmapFile, error))
+                    TC_LOG_WARN("server.loading", "Battleground {} ({}): map {} has no pathing file {}, bots in it cannot walk.",
+                        bgTypeId, bl->Name[sWorld->GetDefaultDbcLocale()], mapId, mmapFile);
+            }
+        }
+
         if (bgTemplate.MapIDs.empty())
             TC_LOG_ERROR("bg.battleground", "Battleground ID {} has no map in BattlemasterListXMap, nobody can join it.", bgTypeId);
         // "All Arenas" (6) and the random battlegrounds are queues that pick another template; they must not take the place
-        // of that template when they list only one map (Classic: "All Arenas" plays only map 2995, Mak'gora Arena 1169)
+        // of that template when they list only one map
         else if (bgTemplate.MapIDs.size() == 1 && bgTypeId != BATTLEGROUND_AA && !IsRandomBattleground(bgTypeId))
         {
             // this key combination is not unique for brawl battlegrounds
@@ -568,6 +636,15 @@ bool BattlegroundMgr::ToggleArenaTesting(uint32 battlemasterListId)
             return false;
 
         if (!bgTemplate->IsArena())
+            return false;
+
+        // The test plays this arena itself (GetRandomBG), so it must be one with start points: not "All Arenas" (6), which only
+        // picks another arena and has none.
+        if (!bgTemplate->StartLocation[TEAM_ALLIANCE] || !bgTemplate->StartLocation[TEAM_HORDE])
+            return false;
+
+        // nor one whose map files are missing (LoadBattlegroundTemplates)
+        if (bgTemplate->MissingMapData)
             return false;
     }
 
@@ -776,13 +853,38 @@ BattlegroundTypeId BattlegroundMgr::GetRandomBG(BattlegroundTypeId bgTypeId)
         ids.reserve(bgTemplate->MapIDs.size());
         for (int32 mapId : bgTemplate->MapIDs)
             if (BattlegroundTemplate const* bg = GetBattlegroundTemplateByMapId(mapId, bgTemplate->BattlemasterEntry->GetFlags()))
-                ids.push_back(bg);
+                if (!bg->MissingMapData) // the files of its map are missing on this server: the queue plays the others
+                    ids.push_back(bg);
 
         if (!ids.empty())
             return (*Trinity::Containers::SelectRandomWeightedContainerElement(ids, [](BattlegroundTemplate const* bg) { return bg->Weight; }))->Id;
     }
 
     return BATTLEGROUND_TYPE_NONE;
+}
+
+bool BattlegroundMgr::HasMapDataToPlay(BattlegroundTemplate const* bgTemplate)
+{
+    // the same choice as GetRandomBG
+    if (bgTemplate->IsArena() && isArenaTesting())
+    {
+        BattlegroundTemplate const* testArena = GetBattlegroundTemplateByTypeId(static_cast<BattlegroundTypeId>(m_ArenaTesting));
+        return testArena && !testArena->MissingMapData;
+    }
+
+    bool missing = false;
+    for (int32 mapId : bgTemplate->MapIDs)
+    {
+        if (BattlegroundTemplate const* bg = GetBattlegroundTemplateByMapId(mapId, bgTemplate->BattlemasterEntry->GetFlags()))
+        {
+            if (!bg->MissingMapData)
+                return true;
+            missing = true;
+        }
+    }
+
+    // a queue with no playable template at all is not a missing-files case
+    return !missing;
 }
 
 BGFreeSlotQueueContainer& BattlegroundMgr::GetBGFreeSlotQueueStore(BattlegroundQueueTypeId queueId)

@@ -20,10 +20,12 @@
 // so the scripts read aurEff->GetAmount() and never hardcode rank values.
 
 #include "ScriptMgr.h"
+#include "CellImpl.h"
 #include "Containers.h"
 #include "Creature.h"
 #include "DB2Stores.h"
 #include "Formulas.h"
+#include "GridNotifiersImpl.h"
 #include "Item.h"
 #include "ObjectAccessor.h"
 #include "ObjectMgr.h"
@@ -61,12 +63,15 @@ enum ClassicWarriorRogueHunterTalents
     SPELL_WARRIOR_SWEEPING_STRIKES_NORMALIZED   = 26654,
     SPELL_WARRIOR_LAST_STAND_HEALTH             = 12976,    // +health aura, amount = 30% of the warrior's maximum health (set by the script)
     SPELL_WARRIOR_RETALIATION_STRIKE            = 20240,    // weapon strike on the attacker
+    SPELL_WARRIOR_BERSERKER_RAGE                = 18499,
+    SPELL_WARRIOR_IMPROVED_BERSERKER_RAGE_RAGE  = 23690,    // energize rage (base points: rage x10)
     SPELL_WARRIOR_IMPROVED_WHIRLWIND_CLASSIC    = 1310315,  // Forever talent (Fury row 6): effect 0 Whirlwind cooldown, effect 1 closest enemy bonus (dummy)
 
     // rogue
     SPELL_ROGUE_SETUP_COMBO_POINT               = 15250,
     SPELL_ROGUE_SEAL_FATE_COMBO_POINT           = 14189,
     SPELL_ROGUE_CUTTHROAT_BUFF                  = 462707,
+    SPELL_ROGUE_REMORSELESS                     = 14143,    // +crit on the next Sinister Strike, Backstab, Ambush, Mutilate or Ghostly Strike, 1 charge
     SPELL_ROGUE_QUIETUS                         = 1310728,
     SPELL_ROGUE_SHIV                            = 424799,
     SPELL_ROGUE_SHIV_STRIKE                     = 424800,
@@ -284,11 +289,18 @@ class classic_spell_warr_deep_wounds : public AuraScript
         if (period <= 0 || bleed->GetMaxDuration() <= 0)
             return;
 
-        float minDamage = 0.0f;
-        float maxDamage = 0.0f;
-        warrior->CalculateMinMaxDamage(BASE_ATTACK, false, true, minDamage, maxDamage);
-        float const total = (minDamage + maxDamage) * 0.5f * float(aurEff->GetAmountAsInt()) / 100.0f;
+        // WoW Forever: the bleed is the talent's share of the average damage of the weapon that crit, the off hand's own range without
+        // its damage penalty, with no attack power and none of the warrior's damage bonuses (Death Wish, Enrage: SPELL_ATTR3_IGNORE_
+        // CASTER_MODIFIERS on 412613); a crit on a running bleed adds the damage it has not ticked yet, so two crits in one batch add up
+        // (wowsims/forever, MIT, docs/evidence EV-0139: off-hand crits tick 15.7 against the main hand's 17.2, both together 32).
+        // Vanilla (VMaNGOS) used the main hand with attack power.
+        DamageInfo const* damageInfo = eventInfo.GetDamageInfo();
+        WeaponAttackType const attType = damageInfo && damageInfo->GetAttackType() == OFF_ATTACK ? OFF_ATTACK : BASE_ATTACK;
+        float const averageWeaponDamage = (warrior->GetWeaponDamageRange(attType, MINDAMAGE) + warrior->GetWeaponDamageRange(attType, MAXDAMAGE)) * 0.5f;
+        float total = averageWeaponDamage * float(aurEff->GetAmountAsInt()) / 100.0f;
         int32 const ticks = bleed->GetMaxDuration() / period;
+        if (AuraEffect const* running = victim->GetAuraEffect(SPELL_WARRIOR_DEEP_WOUND, EFFECT_0, warrior->GetGUID()))
+            total += float(running->GetAmount()) * float(running->GetRemainingTicks());
         int32 const perTick = std::max(1, int32(total / float(ticks)));
 
         victim->RemoveAurasDueToSpell(SPELL_WARRIOR_DEEP_WOUND, warrior->GetGUID());
@@ -355,6 +367,32 @@ class classic_spell_warr_flurry : public AuraScript
     }
 };
 
+// 12966 - Flurry (the buff): which swings spend a charge beyond its client proc flags. Windfury Totem's strike spends none,
+// and a crit always leaves 3 charges: the talent 12319 recasts the buff on the same event, and the charge drop ran after that recast in
+// part of the cases (wowsims/forever, MIT, docs/evidence EV-0140: 60 of 60 crits end at 3; EV-0138).
+class classic_spell_warr_flurry_buff : public AuraScript
+{
+    bool CheckProc(ProcEventInfo& eventInfo)
+    {
+        Unit* warrior = GetTarget();
+        switch (warrior->GetLastExtraAttackSpell())
+        {
+            case 8516: case 10608: case 10610:          // Windfury Totem's strike
+                return false;
+            default:
+                break;
+        }
+        if ((eventInfo.GetHitMask() & PROC_HIT_CRITICAL) && warrior->HasAura(12319))
+            return false;
+        return true;
+    }
+
+    void Register() override
+    {
+        DoCheckProc += AuraCheckProcFn(classic_spell_warr_flurry_buff::CheckProc);
+    }
+};
+
 // 12322 - Unbridled Wrath (talent): "Gives you a $m1% chance to generate an additional Rage point when you deal melee damage with a weapon."
 // The client talent triggers 12964 (one rage) with the spell's own 100% proc chance; the rank (aura amount) is the chance.
 class classic_spell_warr_unbridled_wrath : public AuraScript
@@ -400,12 +438,40 @@ class classic_spell_warr_sweeping_strikes : public AuraScript
         return !spellInfo || (spellInfo->Id != SPELL_WARRIOR_SWEEPING_STRIKES_STRIKE && spellInfo->Id != SPELL_WARRIOR_SWEEPING_STRIKES_NORMALIZED);
     }
 
+    // Unit::SelectNearbyTarget, plus: "Sweeping Strikes will now ignore dead targets, and will ignore PvP enabled targets if you are not
+    // PvP enabled" (patch 1.7.0; VMaNGOS CanAttackWithoutEnablingPvP). A neutral or hostile mob next to the target is still hit and
+    // pulled, as in Classic: only a player, or a player's pet, that the hit would turn PvP on for is left out.
+    static Unit* SelectSecondTarget(Unit* warrior, Unit* victim)
+    {
+        std::list<Unit*> targets;
+        Trinity::AnyUnfriendlyUnitInObjectRangeCheck check(warrior, warrior, NOMINAL_MELEE_RANGE);
+        Trinity::UnitListSearcher<Trinity::AnyUnfriendlyUnitInObjectRangeCheck> searcher(warrior, targets, check);
+        Cell::VisitAllObjects(warrior, searcher, NOMINAL_MELEE_RANGE);
+
+        Player const* warriorPlayer = warrior->GetCharmerOrOwnerPlayerOrPlayerItself();
+        targets.remove_if([&](Unit* unit)
+        {
+            if (unit == victim || unit == warrior->GetVictim() || !warrior->IsWithinLOSInMap(unit) || unit->IsTotem() || unit->IsSpiritService()
+                || unit->IsCritter() || !warrior->IsValidAttackTarget(unit))
+                return true;
+
+            if (Player const* attackedPlayer = unit->GetCharmerOrOwnerPlayerOrPlayerItself(); attackedPlayer && warriorPlayer)
+                if (!warriorPlayer->IsPvP() && !(warriorPlayer->IsFFAPvP() && attackedPlayer->IsFFAPvP())
+                    && !(warriorPlayer->duel && warriorPlayer->duel->Opponent == attackedPlayer))
+                    return true;
+
+            return false;
+        });
+
+        return targets.empty() ? nullptr : Trinity::Containers::SelectRandomContainerElement(targets);
+    }
+
     void HandleProc(AuraEffect const* aurEff, ProcEventInfo& eventInfo)
     {
         PreventDefaultAction();
 
         Unit* warrior = GetTarget();
-        Unit* other = warrior->SelectNearbyTarget(eventInfo.GetActionTarget());
+        Unit* other = SelectSecondTarget(warrior, eventInfo.GetActionTarget());
         if (!other)
             return;
 
@@ -473,6 +539,48 @@ class classic_spell_warr_retaliation : public AuraScript
     {
         DoCheckProc += AuraCheckProcFn(classic_spell_warr_retaliation::CheckProc);
         OnEffectProc += AuraEffectProcFn(classic_spell_warr_retaliation::HandleProc, EFFECT_0, SPELL_AURA_DUMMY);
+    }
+};
+
+// 20500 - Improved Berserker Rage (70959): "Your Berserker Rage ability will instantly generate $/10;m1 Rage and has a $m2% chance to remove
+// all movement impairing effects when activated." Both effects are dummies with no triggered spell and the proc has no class mask, so
+// the talent fired on every helpful or harmful spell and did nothing. Bound here to Berserker Rage: effect 0 is the rage (x10) given
+// through 23690, effect 1 the chance to remove movement impairing effects.
+class classic_spell_warr_improved_berserker_rage : public AuraScript
+{
+    bool Validate(SpellInfo const* spellInfo) override
+    {
+        LogTalentSpellOnce(spellInfo);
+        return ValidateSpellInfo({ SPELL_WARRIOR_IMPROVED_BERSERKER_RAGE_RAGE });
+    }
+
+    bool CheckProc(ProcEventInfo& eventInfo)
+    {
+        SpellInfo const* spellInfo = eventInfo.GetSpellInfo();
+        return spellInfo && spellInfo->GetFirstRankSpell()->Id == SPELL_WARRIOR_BERSERKER_RAGE;
+    }
+
+    void HandleRage(AuraEffect const* aurEff, ProcEventInfo& /*eventInfo*/)
+    {
+        PreventDefaultAction();
+        int32 const rage = int32(aurEff->GetAmount());
+        if (rage > 0)
+            GetTarget()->CastSpell(GetTarget(), SPELL_WARRIOR_IMPROVED_BERSERKER_RAGE_RAGE,
+                CastSpellExtraArgs(aurEff).SetTriggerFlags(TRIGGERED_FULL_MASK).AddSpellBP0(rage));
+    }
+
+    void HandleImpairing(AuraEffect const* aurEff, ProcEventInfo& /*eventInfo*/)
+    {
+        PreventDefaultAction();
+        if (roll_chance(float(aurEff->GetAmount())))
+            GetTarget()->RemoveMovementImpairingAuras(true);
+    }
+
+    void Register() override
+    {
+        DoCheckProc += AuraCheckProcFn(classic_spell_warr_improved_berserker_rage::CheckProc);
+        OnEffectProc += AuraEffectProcFn(classic_spell_warr_improved_berserker_rage::HandleRage, EFFECT_0, SPELL_AURA_DUMMY);
+        OnEffectProc += AuraEffectProcFn(classic_spell_warr_improved_berserker_rage::HandleImpairing, EFFECT_1, SPELL_AURA_DUMMY);
     }
 };
 
@@ -1022,6 +1130,32 @@ class classic_spell_rog_cutthroat : public AuraScript
     {
         DoCheckProc += AuraCheckProcFn(classic_spell_rog_cutthroat::CheckProc);
         OnProc += AuraProcFn(classic_spell_rog_cutthroat::HandleProc);
+    }
+};
+
+// 14144 - Remorseless Attacks: "After killing a non-trivial enemy, gives you a $m1% increased critical strike chance on your next Sinister
+// Strike, Backstab, Ambush, Mutilate, or Ghostly Strike. Lasts $14143d." The client talent is a kill-proc dummy with
+// no triggered spell, so nothing happened (60 "does not have triggered spell" lines in the af54 log). Its proc already needs a kill that
+// gives experience or honor (SpellMgr adds PROC_ATTR_REQ_EXP_OR_HONOR for PROC_FLAG_KILL). The kill gives Remorseless 14143 with the
+// talent amount (20 / 40); its charge is used by the next of those strikes (charged spell mod).
+class classic_spell_rog_remorseless_attacks : public AuraScript
+{
+    bool Validate(SpellInfo const* /*spellInfo*/) override
+    {
+        return ValidateSpellInfo({ SPELL_ROGUE_REMORSELESS });
+    }
+
+    void HandleProc(AuraEffect const* aurEff, ProcEventInfo& /*eventInfo*/)
+    {
+        PreventDefaultAction();
+        int32 const crit = int32(aurEff->GetAmount());
+        if (crit > 0)
+            GetTarget()->CastSpell(GetTarget(), SPELL_ROGUE_REMORSELESS, CastSpellExtraArgs(aurEff).SetTriggerFlags(TRIGGERED_FULL_MASK).AddSpellBP0(crit));
+    }
+
+    void Register() override
+    {
+        OnEffectProc += AuraEffectProcFn(classic_spell_rog_remorseless_attacks::HandleProc, EFFECT_0, SPELL_AURA_DUMMY);
     }
 };
 
@@ -2058,11 +2192,13 @@ void AddSC_classic_talents_warrior_rogue_hunter()
     RegisterSpellScript(classic_spell_warr_deep_wounds);
     RegisterSpellScript(classic_spell_warr_deep_wound_bleed);
     RegisterSpellScript(classic_spell_warr_flurry);
+    RegisterSpellScript(classic_spell_warr_flurry_buff);
     RegisterSpellScript(classic_spell_warr_bloodthirst);
     RegisterSpellScript(classic_spell_warr_unbridled_wrath);
     RegisterSpellScript(classic_spell_warr_sweeping_strikes);
     RegisterSpellScript(classic_spell_warr_last_stand);
     RegisterSpellScript(classic_spell_warr_retaliation);
+    RegisterSpellScript(classic_spell_warr_improved_berserker_rage);
     RegisterSpellScript(classic_spell_warr_shield_slam);
     RegisterSpellScript(classic_spell_warr_victory_rush);
     RegisterSpellScriptWithArgs(classic_spell_weapon_type_talent, "classic_spell_warr_weaponmaster", 12700u, 12284u, 12281u);
@@ -2079,6 +2215,7 @@ void AddSC_classic_talents_warrior_rogue_hunter()
     RegisterSpellScript(classic_spell_rog_setup);
     RegisterSpellScript(classic_spell_rog_seal_fate);
     RegisterSpellScript(classic_spell_rog_cutthroat);
+    RegisterSpellScript(classic_spell_rog_remorseless_attacks);
     RegisterSpellScript(classic_spell_rog_offhand_strike);
     RegisterSpellScript(classic_spell_rog_offhand_poison);
     RegisterSpellAndAuraScriptPair(classic_spell_rog_redirect, classic_spell_rog_redirect_aura);

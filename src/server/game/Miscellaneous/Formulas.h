@@ -177,6 +177,16 @@ namespace Trinity
             return baseGain;
         }
 
+        // Classic 1.60 (WoW Forever hotfixes of November 13 and 14 2026): nobody in a party gets kill experience in a 5 player dungeon
+        // while its highest level member is more than 12 levels above the enemy, so a level 60 can't carry low characters through a
+        // dungeon for experience (a level 60 still blocks a level 47 enemy, not a level 48 one). Open world and raids are not affected.
+        inline constexpr uint8 DungeonCarryLevelGap = 12;
+
+        inline constexpr bool BlocksDungeonCarry(uint8 maxPartyLevel, uint8 victimLevel)
+        {
+            return maxPartyLevel > victimLevel + DungeonCarryLevelGap;
+        }
+
         inline uint32 Gain(Player* player, Unit* u, bool isBattleGround = false)
         {
             Creature* creature = u->ToCreature();
@@ -202,9 +212,9 @@ namespace Trinity
                             xpMod *= 2.0f;
                     }
 
-                    // Classic 1.60: extra kill experience in 5 player dungeons (Rate.XP.DungeonKill). Forever beta notes of
-                    // October 8 2026 gave +20% (1.2); Blizzard's hotfix of November 8 2026 raised dungeon kill experience by
-                    // another 50% (1.2 * 1.5 = 1.8, the default)
+                    // Classic 1.60: kill experience in 5 player dungeons (Rate.XP.DungeonKill), as a share of the Classic Era value
+                    // this formula gives. Blizzard (Kaivax, November 10 2026): the November 8 hotfix "took dungeon kill XP from 40%
+                    // of the values in Classic Era to 60%", so the default is 0.6
                     if (u->GetMap()->IsNonRaidDungeon())
                         xpMod *= sWorld->getRate(RATE_XP_DUNGEON_KILL);
 

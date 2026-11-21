@@ -139,8 +139,7 @@ public:
             }
         }
 
-        // TODO(classic): TYPE_AGATHELOS is set (data DONE) by the VMaNGOS EventAI of the Ward Keepers on death
-        // (creature_ai_scripts 462501, command 37) - that DB script must be ported for the ward to open.
+        // TYPE_AGATHELOS is set (data DONE) by the Ward Keepers on death (VMaNGOS EventAI 462501, smart_scripts 4625 id 0)
         void SetData(uint32 type, uint32 data) override
         {
             switch (type)
@@ -155,9 +154,11 @@ public:
                         if (Creature* agathelos = instance->GetCreature(_agathelosGUID))
                         {
                             agathelos->SetWalk(false);
+                            // VMaNGOS MoveWaypoint(): Agathelos' spawn has no creature_movement path of its own, so he runs
+                            // his entry path (creature_movement_template, waypoint_path 810044220). The TC waypoint movement
+                            // takes the creature's path id, which only a creature_addon would set, so set it here.
+                            agathelos->LoadPath(PATH_AGATHELOS);
                             agathelos->SetDefaultMovementType(WAYPOINT_MOTION_TYPE);
-                            // TODO(classic): VMaNGOS MoveWaypoint() uses the creature_movement path of Agathelos' spawn;
-                            // in TC the default waypoint movement needs creature_addon.PathId for that spawn.
                             agathelos->GetMotionMaster()->Initialize();
                         }
                     }

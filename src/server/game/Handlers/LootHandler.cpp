@@ -459,7 +459,10 @@ void WorldSession::HandleLootMasterGiveOpcode(WorldPackets::Loot::MasterLootItem
         }
 
         LootItem& item = loot->items[req.LootListID];
-        if (item.type != LootItemType::Item)
+        // An item that was already given (a second give for the same slot, sent before the first one's removal reached the client):
+        // giving it again made nothing for its count of 0 but still ran its looted spell and counted it off the corpse once more, so
+        // the corpse never read as looted.
+        if (item.is_looted || item.type != LootItemType::Item)
         {
             _player->SendLootError(req.Object, loot->GetOwnerGUID(), LOOT_ERROR_MASTER_OTHER);
             return;

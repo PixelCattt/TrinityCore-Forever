@@ -30,6 +30,7 @@
 #include "Optional.h"
 #include "Player.h"
 #include "RealmList.h"
+#include "ScriptMgr.h"
 #include "StringConvert.h"
 #include "World.h"
 #include "WorldSession.h"
@@ -198,7 +199,14 @@ bool ChatHandler::ParseCommands(std::string_view text)
     if (text[1] == Trinity::Impl::ChatCommands::COMMAND_DELIMITER)
         return false;
 
-    return _ParseCommands(text.substr(1));
+    std::string_view command = text.substr(1);
+
+    // let modules answer their own commands before the core looks the command up
+    if (Player* player = GetPlayer())
+        if (sScriptMgr->OnPlayerCommand(player, command))
+            return true;
+
+    return _ParseCommands(command);
 }
 
 Player* ChatHandler::getSelectedPlayer()

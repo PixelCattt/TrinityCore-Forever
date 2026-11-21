@@ -648,13 +648,21 @@ namespace MMAP
             if (npolys > 0)
             {
                 // Build adjacency from shared edges (polys sharing 2 verts).
+                // onTileEdge: the poly has an edge on the tile's border (Recast marks it 0x8000 | side). Detour links such an edge to the
+                // neighbouring tile when both are loaded, so the poly's piece of mesh is only an island inside this tile, not in the world.
                 std::vector<std::vector<int>> adj(npolys);
+                std::vector<char> onTileEdge(npolys, 0);
                 for (int i = 0; i < npolys; ++i)
                 {
                     for (int j = 0; j < nvp; ++j)
                     {
                         unsigned short nei = iv.polyMesh->polys[i * 2 * nvp + nvp + j];
                         if (nei == RC_MESH_NULL_IDX) continue;
+                        if (nei & 0x8000)
+                        {
+                            onTileEdge[i] = 1;
+                            continue;
+                        }
                         int neiIdx = static_cast<int>(nei);
                         if (neiIdx >= 0 && neiIdx < npolys)
                             adj[i].push_back(neiIdx);
@@ -850,7 +858,14 @@ namespace MMAP
                                 bridged_this = true;
                             }
                         }
-                        if (!bridged_this && comp_sizes[c] < 10)
+                        // A piece that reaches the tile's border goes on in the next tile: it is never pruned. AQ40 0531_46_29: the ramp up
+                        // from the tunnel past Fankriss to the ledge into Viscidus's room crosses the corner of three tiles; the 9 polys of it
+                        // inside this tile read as a small island and were pruned (area 0), and his room was cut off from the rest of the
+                        // temple (navmesh gap 30.8 y, aq40_viscidus could not place the raid).
+                        bool touchesTileEdge = false;
+                        for (int i = 0; i < npolys && !touchesTileEdge; ++i)
+                            touchesTileEdge = comp_id[i] == c && onTileEdge[i];
+                        if (!bridged_this && !touchesTileEdge && comp_sizes[c] < 10)
                         {
                             for (int i = 0; i < npolys; ++i)
                                 if (comp_id[i] == c)

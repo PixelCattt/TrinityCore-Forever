@@ -495,7 +495,10 @@ void WorldSession::HandleConvertRaidOpcode(WorldPackets::Party::ConvertRaid& pac
 
     // New 4.x: it is now possible to convert a raid to a group if member count is 5 or less
     if (packet.Raid)
+    {
         group->ConvertToRaid();
+        group->SetRaidChosenByLeader(true);
+    }
     else
         group->ConvertToGroup();
 }

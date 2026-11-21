@@ -16,6 +16,7 @@
  */
 
 #include "SpellAuraEffects.h"
+#include "ClassicRounding.h"
 #include "Battlefield.h"
 #include "BattlefieldMgr.h"
 #include "Battleground.h"
@@ -597,7 +598,7 @@ NonDefaultConstructible<pAuraEffectHandler> AuraEffectHandler[TOTAL_AURAS]=
     &AuraEffect::HandleNULL,                                      //525 SPELL_AURA_DISPLAY_PROFESSION_EQUIPMENT
     &AuraEffect::HandleNULL,                                      //526
     &AuraEffect::HandleNULL,                                      //527
-    &AuraEffect::HandleNULL,                                      //528 SPELL_AURA_ALLOW_BLOCKING_SPELLS
+    &AuraEffect::HandleNoImmediateEffect,                         //528 SPELL_AURA_ALLOW_BLOCKING_SPELLS implemented in WorldObject::MagicSpellHitResult
     &AuraEffect::HandleNULL,                                      //529 SPELL_AURA_MOD_SPELL_BLOCK_CHANCE
     &AuraEffect::HandleNULL,                                      //530
     &AuraEffect::HandleNULL,                                      //531
@@ -5706,6 +5707,8 @@ void AuraEffect::HandlePeriodicDamageAurasTick(Unit* target, Unit* caster) const
             float exact = damage == damageBeforeHook ? float(std::max(GetAmount(), SpellEffectValue(0))) : float(damage);
             if (caster)
                 exact = caster->SpellDamageBonusDoneExact(target, GetSpellInfo(), exact, DOT, GetSpellEffectInfo(), stackAmountForBonuses, nullptr, this);
+            // Classic 1.60: "Deals $s2 times as much damage to Aquatic enemies" (Rot; spell_versus_bonus, ClassicVersusBonus.h)
+            exact *= sSpellMgr->GetClassicVersusFactor(GetId(), ClassicVersusBonus::Kind::Damage, target);
             exact += _periodicDamageRemainder;
             damage = uint32(std::max(exact, 0.0f));
             _periodicDamageRemainder = std::max(exact, 0.0f) - float(damage);
@@ -5827,7 +5830,7 @@ void AuraEffect::HandlePeriodicHealthLeechAuraTick(Unit* target, Unit* caster) c
     uint32 stackAmountForBonuses = !GetSpellEffectInfo().EffectAttributes.HasFlag(SpellEffectAttributes::SuppressPointsStacking) ? GetBase()->GetStackAmount() : 1;
 
     // ignore negative values (can be result apply spellmods to aura damage
-    uint32 damage = std::max(GetAmountAsInt(), 0);
+    uint32 damage = ClassicRounding::RoundByFraction(GetAmount(), rand_norm());   // Classic 1.60: each tick rounds by its fraction (EV-0095)
 
     if (caster)
         damage = caster->SpellDamageBonusDone(target, GetSpellInfo(), damage, DOT, GetSpellEffectInfo(), stackAmountForBonuses, nullptr, this);
@@ -5955,7 +5958,7 @@ void AuraEffect::HandlePeriodicHealAurasTick(Unit* target, Unit* caster) const
     uint32 stackAmountForBonuses = !GetSpellEffectInfo().EffectAttributes.HasFlag(SpellEffectAttributes::SuppressPointsStacking) ? GetBase()->GetStackAmount() : 1;
 
     // ignore negative values (can be result apply spellmods to aura damage
-    uint32 damage = std::max(GetAmountAsInt(), 0);
+    uint32 damage = ClassicRounding::RoundByFraction(GetAmount(), rand_norm());   // Classic 1.60: each tick rounds by its fraction (EV-0095)
 
     if (GetAuraType() == SPELL_AURA_OBS_MOD_HEALTH)
         damage = uint32(target->CountPctFromMaxHealth(damage));
@@ -6121,7 +6124,7 @@ void AuraEffect::HandlePeriodicEnergizeAuraTick(Unit* target, Unit* caster) cons
     target->SendPeriodicAuraLog(&pInfo);
 
     if (caster)
-        target->GetThreatManager().ForwardThreatForAssistingMe(caster, float(gain)*0.5f, GetSpellInfo(), true);
+        target->GetThreatManager().ForwardThreatForAssistingMe(caster, float(gain)*0.5f, GetSpellInfo(), !Unit::ClassicRageThreatTakesModifiers(GetSpellInfo()));
 }
 
 void AuraEffect::HandlePeriodicPowerBurnAuraTick(Unit* target, Unit* caster) const
@@ -6212,9 +6215,16 @@ void AuraEffect::HandleProcTriggerSpellAuraProc(AuraApplication* aurApp, ProcEve
     if (SpellInfo const* triggeredSpellInfo = sSpellMgr->GetSpellInfo(triggerSpellId, GetBase()->GetCastDifficulty()))
     {
         TC_LOG_DEBUG("spells.aura.effect", "AuraEffect::HandleProcTriggerSpellAuraProc: Triggering spell {} from aura {} proc", triggeredSpellInfo->Id, GetId());
-        triggerCaster->CastSpell(triggerTarget, triggeredSpellInfo->Id, CastSpellExtraArgs(this)
-            .SetTriggeringSpell(eventInfo.GetProcSpell())
-            .SetTriggerFlags(TRIGGERED_FULL_MASK & ~(TRIGGERED_IGNORE_POWER_COST | TRIGGERED_IGNORE_REAGENT_COST)));
+        CastSpellExtraArgs args(this);
+        args.SetTriggeringSpell(eventInfo.GetProcSpell());
+        args.SetTriggerFlags(TRIGGERED_FULL_MASK & ~(TRIGGERED_IGNORE_POWER_COST | TRIGGERED_IGNORE_REAGENT_COST));
+        // Classic 1.60: "Restores $s1 times as much if attacking an Earth Elemental" (Fist of Stone; spell_versus_bonus, ClassicVersusBonus.h). The
+        // enemy is the unit the wearer hit, whatever the triggered spell targets (the wearer, for mana).
+        Unit* enemy = triggerCaster == eventInfo.GetActor() ? eventInfo.GetActionTarget() : eventInfo.GetActor();
+        float const versus = sSpellMgr->GetClassicVersusFactor(GetId(), ClassicVersusBonus::Kind::Restore, enemy);
+        if (versus > 1.0f && !triggeredSpellInfo->GetEffects().empty())
+            args.AddSpellBP0(triggeredSpellInfo->GetEffect(EFFECT_0).CalcValue(triggerCaster) * versus);
+        triggerCaster->CastSpell(triggerTarget, triggeredSpellInfo->Id, args);
     }
     else if (triggerSpellId && GetAuraType() != SPELL_AURA_DUMMY)
         TC_LOG_ERROR("spells.aura.effect.nospell","AuraEffect::HandleProcTriggerSpellAuraProc: Spell {} has non-existent spell {} in EffectTriggered[{}] and is therefore not triggered.", GetId(), triggerSpellId, GetEffIndex());

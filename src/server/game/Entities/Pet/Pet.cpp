@@ -143,9 +143,18 @@ std::pair<PetStable::PetInfo const*, PetSaveMode> Pet::GetLoadPetInfo(PetStable 
     else if (petEntry)
     {
         // known petEntry entry (unique for summoned pet, but non unique for hunter pet (only from current or not stabled pets)
+        // A character can hold more than one unslotted pet of the same entry (an older warlock demon left behind when a load
+        // failed once). Take the one saved last, so the demon that learned its grimoire spells comes back after a restart
+        // instead of the older copy the database happens to return first.
+        PetStable::PetInfo const* newest = nullptr;
         for (PetStable::PetInfo const& pet : stable.UnslottedPets)
             if (pet.CreatureId == petEntry)
-                return { &pet, PET_SAVE_NOT_IN_SLOT };
+                if (!newest || pet.LastSaveTime > newest->LastSaveTime
+                    || (pet.LastSaveTime == newest->LastSaveTime && pet.PetNumber > newest->PetNumber))
+                    newest = &pet;
+
+        if (newest)
+            return { newest, PET_SAVE_NOT_IN_SLOT };
     }
     else
     {

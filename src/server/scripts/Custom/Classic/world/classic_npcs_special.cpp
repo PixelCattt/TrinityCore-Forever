@@ -34,6 +34,7 @@
 #include "QuaternionData.h"
 #include "QuestDef.h"
 #include "WaypointDefines.h"
+#include <array>
 #include <functional>
 
 /*
@@ -1171,8 +1172,64 @@ private:
     bool _busy = false;
 };
 
+/*######
+## classic_npc_shahram (10718, summoned by Blackblade of Shahram's 16602)
+######*/
+
+// WoW Forever: Shahram casts exactly one of his six spells and nothing else, starting its 1 sec hardcast 1.03 to 1.83 sec after the summon:
+// Flames of Shahram (Fire around him) and Will of Shahram (on the wearer) three times as often as Curse, Blessing (his party), Might and
+// Fist (himself); every spell picks its own targets (wowsims/forever, MIT, sim/common/forever/items_blackblade_of_shahram.go, docs/evidence
+// EV-0125: 102 summons, 102 single casts). He had no script, so he stood there and cast nothing.
+struct classic_npc_shahram : public ScriptedAI
+{
+    explicit classic_npc_shahram(Creature* creature) : ScriptedAI(creature) { }
+
+    void JustAppeared() override
+    {
+        me->SetReactState(REACT_PASSIVE);
+        _castIn = Milliseconds(urand(1030, 1830));
+        _cast = false;
+    }
+
+    void UpdateAI(uint32 diff) override
+    {
+        if (_cast)
+            return;
+
+        _castIn -= Milliseconds(diff);
+        if (_castIn > 0ms)
+            return;
+
+        _cast = true;
+        static constexpr std::array<std::pair<uint32, uint32>, 6> Picks =
+        { {
+            { 16596, 3 },   // Flames of Shahram
+            { 16598, 3 },   // Will of Shahram
+            { 16597, 1 },   // Curse of Shahram
+            { 16599, 1 },   // Blessing of Shahram
+            { 16600, 1 },   // Might of Shahram
+            { 16601, 1 },   // Fist of Shahram
+        } };
+        uint32 roll = urand(1, 10);
+        for (auto const& [spellId, weight] : Picks)
+        {
+            if (roll <= weight)
+            {
+                me->CastSpell(me, spellId, CastSpellExtraArgs(TRIGGERED_IGNORE_POWER_COST));
+                return;
+            }
+            roll -= weight;
+        }
+    }
+
+private:
+    Milliseconds _castIn = 0ms;
+    bool _cast = false;
+};
+
 void AddSC_classic_npcs_special()
 {
+    RegisterCreatureAI(classic_npc_shahram);
     RegisterCreatureAI(classic_npc_talaanis_shadowsong);
     RegisterCreatureAI(classic_npc_valennia_stormfist);
     RegisterCreatureAI(classic_npc_valennia_muster);

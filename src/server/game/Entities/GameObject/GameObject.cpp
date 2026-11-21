@@ -966,6 +966,8 @@ void GameObject::AddToWorld()
             else
                 GetMap()->InsertGameObjectModel(*m_model);
         }
+        if (GetGoType() == GAMEOBJECT_TYPE_DOOR)
+            GetMap()->AddDoor(this);    // published for paths searched off the map thread (Map::PublishClosedDoors)
 
         EnableCollision(toggledState);
         WorldObject::AddToWorld();
@@ -984,6 +986,7 @@ void GameObject::RemoveFromWorld()
         if (m_model)
             if (GetMap()->ContainsGameObjectModel(*m_model))
                 GetMap()->RemoveGameObjectModel(*m_model);
+        GetMap()->RemoveDoor(this);
 
         // If linked trap exists, despawn it
         if (GameObject* linkedTrap = GetLinkedTrap())
@@ -3294,10 +3297,13 @@ void GameObject::Use(Unit* user, bool ignoreCastInProgress /*= false*/)
                 if (targetPlayer->GetLevel() < targetLevels->MaxLevel)
                     return;
 
-            if (info->entry == 194097)
-                spellId = 61994;                            // Ritual of Summoning
-            else
-                spellId = 59782;                            // Summoning Stone Effect
+            // Classic 1.60 (WoW Forever): meeting stones don't summon; Blizzard ruled summoning stones out ("easy quick access to
+            // teleports shrink the world"). A warlock's Ritual of Summoning is the only summon. The Wrath summoning spell 59782 is not
+            // in the Forever client either.
+            if (info->entry != 194097)
+                return;
+
+            spellId = 61994;                                // Ritual of Summoning
 
             break;
         }
@@ -4203,6 +4209,8 @@ void GameObject::EnableCollision(bool enable)
         GetMap()->InsertGameObjectModel(*m_model);*/
 
     m_model->EnableCollision(enable);
+    if (IsInWorld() && GetGoType() == GAMEOBJECT_TYPE_DOOR)
+        GetMap()->MarkClosedDoorsChanged();
 }
 
 void GameObject::UpdateModel()
@@ -4229,6 +4237,8 @@ void GameObject::UpdateModel()
         if (modelCollisionEnabled)
             m_model->EnableCollision(modelCollisionEnabled);
     }
+    if (GetGoType() == GAMEOBJECT_TYPE_DOOR)
+        GetMap()->MarkClosedDoorsChanged();
 
     switch (GetGoType())
     {
@@ -4444,6 +4454,8 @@ void GameObject::UpdateModelPosition()
         GetMap()->RemoveGameObjectModel(*m_model);
         m_model->UpdatePosition();
         GetMap()->InsertGameObjectModel(*m_model);
+        if (GetGoType() == GAMEOBJECT_TYPE_DOOR)
+            GetMap()->MarkClosedDoorsChanged();
     }
 }
 

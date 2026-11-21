@@ -1692,6 +1692,11 @@ bool ScriptMgr::OnItemUse(Player* player, Item* item, SpellCastTargets const& ta
     ASSERT(player);
     ASSERT(item);
 
+    // Also for items without a ScriptName: ItemScript below only knows the item's own script.
+    FOR_SCRIPTS(PlayerScript, itr, end)
+        if (itr->second->OnItemUse(player, item, targets, castId))
+            return true;
+
     GET_SCRIPT_RET(ItemScript, item->GetScriptId(), tmpscript, false);
     return tmpscript->OnUse(player, item, targets, castId);
 }
@@ -2137,6 +2142,14 @@ void ScriptMgr::OnPlayerAddonMessageSent(Player* player, uint32 type, std::strin
     FOREACH_SCRIPT(PlayerScript)->OnAddonMessageSent(player, type, prefix, text, group);
 }
 
+bool ScriptMgr::OnPlayerCommand(Player* player, std::string_view command)
+{
+    FOR_SCRIPTS_RET(PlayerScript, itr, end, false)
+        if (itr->second->OnCommand(player, command))
+            return true;
+    return false;
+}
+
 void ScriptMgr::OnPlayerPingUnit(Player* player, Group* group, Unit* target, uint8 type)
 {
     FOREACH_SCRIPT(PlayerScript)->OnPingUnit(player, group, target, type);
@@ -2155,6 +2168,11 @@ void ScriptMgr::OnPlayerClearEmote(Player* player)
 void ScriptMgr::OnPlayerTextEmote(Player* player, uint32 textEmote, uint32 emoteNum, ObjectGuid guid)
 {
     FOREACH_SCRIPT(PlayerScript)->OnTextEmote(player, textEmote, emoteNum, guid);
+}
+
+void ScriptMgr::OnPlayerGossipSelect(Player* player, ObjectGuid source, uint32 menuId, uint32 listId, std::string const& code)
+{
+    FOREACH_SCRIPT(PlayerScript)->OnGossipSelect(player, source, menuId, listId, code);
 }
 
 void ScriptMgr::OnPlayerSpellCast(Player* player, Spell* spell, bool skipCheck)
@@ -3168,6 +3186,11 @@ void PlayerScript::OnAddonMessageSent(Player* /*player*/, uint32 /*type*/, std::
 {
 }
 
+bool PlayerScript::OnCommand(Player* /*player*/, std::string_view /*command*/)
+{
+    return false;
+}
+
 void PlayerScript::OnPingUnit(Player* /*player*/, Group* /*group*/, Unit* /*target*/, uint8 /*type*/)
 {
 }
@@ -3182,6 +3205,15 @@ void PlayerScript::OnClearEmote(Player* /*player*/)
 
 void PlayerScript::OnTextEmote(Player* /*player*/, uint32 /*textEmote*/, uint32 /*emoteNum*/, ObjectGuid /*guid*/)
 {
+}
+
+void PlayerScript::OnGossipSelect(Player* /*player*/, ObjectGuid /*source*/, uint32 /*menuId*/, uint32 /*listId*/, std::string const& /*code*/)
+{
+}
+
+bool PlayerScript::OnItemUse(Player* /*player*/, Item* /*item*/, SpellCastTargets const& /*targets*/, ObjectGuid /*castId*/)
+{
+    return false;
 }
 
 void PlayerScript::OnSpellCast(Player* /*player*/, Spell* /*spell*/, bool /*skipCheck*/)

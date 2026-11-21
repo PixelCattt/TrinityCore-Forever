@@ -53,6 +53,8 @@ struct BattlegroundTemplate
     uint32 ScriptId;
     BattlemasterListEntry const* BattlemasterEntry;
     std::vector<int32> MapIDs;
+    // the server has no ground / line of sight files for the map this battleground plays (LoadBattlegroundTemplates); it is not played
+    bool MissingMapData = false;
 
     bool IsArena() const;
     uint16 GetMinPlayersPerTeam() const;
@@ -149,6 +151,8 @@ class TC_GAME_API BattlegroundMgr
         BattlegroundTypeId GetBattleMasterBG(uint32 entry) const;
 
         BattlegroundTemplate const* GetBattlegroundTemplateByTypeId(BattlegroundTypeId id);
+        // false when every map this battleground or arena queue can play lacks its game data files on this server (MissingMapData)
+        bool HasMapDataToPlay(BattlegroundTemplate const* bgTemplate);
 
         void LoadBattlegroundScriptTemplate();
         BattlegroundScriptTemplate const* FindBattlegroundScriptTemplate(uint32 mapId, BattlegroundTypeId bgTypeId) const;

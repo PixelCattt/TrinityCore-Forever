@@ -22,11 +22,13 @@
 #include "Formulas.h"
 #include "Group.h"
 #include "Guild.h"
+#include "Map.h"
 #include "GuildMgr.h"
 #include "Pet.h"
 #include "Player.h"
 #include "Scenario.h"
 #include "SpellAuraEffects.h"
+#include "World.h"
 #include <boost/container/small_vector.hpp>
 
  // == KillRewarder ====================================================
@@ -88,6 +90,15 @@ KillRewarder::KillRewarder(Trinity::IteratorPair<Player**> killers, Unit* victim
 
 inline void KillRewarder::_InitGroupData(Player const* killer)
 {
+    // Reward() calls this once for every killer: each group is measured on its own, not on top of the one before (a second
+    // party on the tap list kept the first one's count, level sum and highest level)
+    _count = 0;
+    _sumLevel = 0;
+    _maxLevel = 0;
+    _maxNotGrayMember = nullptr;
+    _isFullXP = false;
+    _xp = 0;
+
     if (Group const* group = killer->GetGroup())
     {
         // 2. In case when player is in group, initialize variables necessary for group calculations:
@@ -146,6 +157,12 @@ inline void KillRewarder::_RewardXP(Player* player, float rate)
         //        against the victim (it was penalized by the highest level party member); each member gets their own share
         //        of the group rate, nothing for a victim that is gray to them.
         xp = player->IsAlive() ? uint32(Trinity::XP::Gain(player, _victim, _isBattleGround) * rate) : 0;
+
+        // 4.2.1b. Classic 1.60 (WoW Forever hotfixes of November 13 and 14 2026): no kill XP for anyone in the party in a 5 player
+        //         dungeon while its highest level member in reward range is more than 12 levels above the enemy (no carries).
+        if (xp && sWorld->getBoolConfig(CONFIG_CLASSIC_DUNGEON_CARRY_XP_BLOCK) && _victim->GetMap()->IsNonRaidDungeon()
+            && Trinity::XP::BlocksDungeonCarry(_maxLevel, _victim->GetLevel()))
+            xp = 0;
     }
     if (xp)
     {

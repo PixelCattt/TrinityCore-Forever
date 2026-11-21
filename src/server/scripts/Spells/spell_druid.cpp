@@ -1496,12 +1496,17 @@ class spell_dru_item_t6_trinket : public AuraScript
 
 // Classic 1.60 (Forever) Lacerate: 1328617, 1328616, 414644, 1235826, 1235827
 // "making them bleed for $o1 damage over $d plus $s2% weapon damage per existing application of Lacerate on the target". Effect 0 is
-// the bleed; effect 1 is a dummy that carries the weapon damage percent, so without this script the cast hit for nothing.
+// the bleed; effect 1 is a dummy that carries the weapon damage percent. The weapon hit is its own spell, 414647, cast after a landed
+// rank (the rank alone misses, is dodged, parried or immune; 414647 always hits, is never blocked and crits for x2.0, outside Natural
+// Instinct's mask). It deals $s2% of the weapon damage times the stacks after this cast, up to 5: the hits grow 1:2:3:4:5, so a first
+// Lacerate hits for $s2% (wowsims/forever, MIT, docs/evidence EV-0033 and EV-0040).
 class spell_dru_lacerate_classic : public SpellScript
 {
+    static constexpr uint32 SPELL_DRUID_LACERATE_HIT = 414647;
+
     bool Validate(SpellInfo const* spellInfo) override
     {
-        return ValidateSpellEffect({ { spellInfo->Id, EFFECT_1 } });
+        return ValidateSpellEffect({ { spellInfo->Id, EFFECT_1 } }) && ValidateSpellInfo({ SPELL_DRUID_LACERATE_HIT });
     }
 
     // Before this cast's own application: the stacks of the caster's Lacerate (any rank) already on the target.
@@ -1516,21 +1521,24 @@ class spell_dru_lacerate_classic : public SpellScript
                 _applications += aura->GetStackAmount();
     }
 
-    void HandleWeaponDamage(SpellEffIndex /*effIndex*/)
+    void HandleWeaponHit(SpellEffIndex /*effIndex*/)
     {
         Unit* caster = GetCaster();
-        if (!_applications || !caster)
+        Unit* target = GetHitUnit();
+        if (!caster || !target)
             return;
-        uint32 const weaponDamage = caster->CalculateDamage(BASE_ATTACK, false, true);
-        int32 const bonus = int32(CalculatePct(float(weaponDamage), GetEffectValue() * float(_applications)));
-        if (bonus > 0)
-            SetHitDamage(GetHitDamage() + bonus);
+
+        uint32 const maxStacks = std::max<uint32>(GetSpellInfo()->StackAmount, 1);
+        uint32 const stacksAfterCast = std::min<uint32>(_applications + 1, maxStacks);
+        int32 const weaponPercent = GetEffectValue() * int32(stacksAfterCast);
+        if (weaponPercent > 0)
+            caster->CastSpell(target, SPELL_DRUID_LACERATE_HIT, CastSpellExtraArgs(TRIGGERED_FULL_MASK).AddSpellBP0(weaponPercent));
     }
 
     void Register() override
     {
         BeforeHit += BeforeSpellHitFn(spell_dru_lacerate_classic::CountApplications);
-        OnEffectHitTarget += SpellEffectFn(spell_dru_lacerate_classic::HandleWeaponDamage, EFFECT_1, SPELL_EFFECT_DUMMY);
+        OnEffectHitTarget += SpellEffectFn(spell_dru_lacerate_classic::HandleWeaponHit, EFFECT_1, SPELL_EFFECT_DUMMY);
     }
 
     uint32 _applications = 0;

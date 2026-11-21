@@ -39,7 +39,10 @@ enum ClassicRFKEntries
     GO_AGATHELOS_WARD     = 21099,
 
     NPC_WARD_KEEPER       = 4625,
-    NPC_AGATHELOS         = 4422
+    NPC_AGATHELOS         = 4422,
+
+    // VMaNGOS creature_movement_template path of Agathelos (waypoint_path 810044220, "VMaNGOS 1.12 entry path")
+    PATH_AGATHELOS        = 810044220
 };
 
 #endif

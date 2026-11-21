@@ -19,6 +19,7 @@
 #include "ClassicRage.h"
 #include "ClassicArmor.h"
 #include "ClassicAutoShot.h"
+#include "ClassicDaze.h"
 #include "ClassicLegacyPerks.h"
 #include "DeathRecap.h"
 #include "AbstractFollower.h"
@@ -80,6 +81,7 @@
 #include "RecentAllies.h"
 #include "Spell.h"
 #include "ScheduledChangeAI.h"
+#include "ClassicRounding.h"
 #include "SpellAuraEffects.h"
 #include "SpellAuras.h"
 #include "SpellHistory.h"
@@ -1257,7 +1259,8 @@ void Unit::CastStop(uint32 except_spellid)
             InterruptSpell(CurrentSpellTypes(i), false);
 }
 
-void Unit::CalculateSpellDamageTaken(SpellNonMeleeDamage* damageInfo, int32 damage, SpellInfo const* spellInfo, WeaponAttackType attackType, bool crit /*= false*/, bool blocked /*= false*/, Spell* spell /*= nullptr*/)
+void Unit::CalculateSpellDamageTaken(SpellNonMeleeDamage* damageInfo, int32 damage, SpellInfo const* spellInfo, WeaponAttackType attackType, bool crit /*= false*/, bool blocked /*= false*/, Spell* spell /*= nullptr*/,
+    ClassicResistRoll resistRoll /*= ClassicResistRoll::Spell*/)
 {
     if (damage < 0)
         return;
@@ -1267,6 +1270,26 @@ void Unit::CalculateSpellDamageTaken(SpellNonMeleeDamage* damageInfo, int32 dama
         return;
 
     SpellSchoolMask damageSchoolMask = SpellSchoolMask(damageInfo->schoolMask);
+
+    // Classic 1.60 (vanilla): a blocked spell loses the flat shield block value like a melee hit (retail: a share of the damage;
+    // Player::GetBlockPercent gave a fraction that truncated to 0, so players blocked nothing)
+    auto applyBlock = [&]()
+    {
+        float value = float(victim->GetClassicShieldBlockValue());
+        if (victim->IsBlockCritical())
+        {
+            value *= 2; // double blocked amount if block is critical
+            value *= GetTotalAuraMultiplier(SPELL_AURA_MOD_CRITICAL_BLOCK_AMOUNT);
+        }
+
+        damageInfo->blocked = uint32(value);
+        if (damage <= int32(damageInfo->blocked))
+        {
+            damageInfo->blocked = uint32(damage);
+            damageInfo->fullBlock = true;
+        }
+        damage -= damageInfo->blocked;
+    };
 
     // Spells with SPELL_ATTR4_IGNORE_DAMAGE_TAKEN_MODIFIERS ignore resilience because their damage is based off another spell's damage.
     if (!spellInfo->HasAttribute(SPELL_ATTR4_IGNORE_DAMAGE_TAKEN_MODIFIERS))
@@ -1301,24 +1324,7 @@ void Unit::CalculateSpellDamageTaken(SpellNonMeleeDamage* damageInfo, int32 dama
 
                 // Spell weapon based damage CAN BE crit & blocked at same time
                 if (blocked)
-                {
-                    // Classic 1.60 (vanilla): weapon based spells are blocked by the flat shield block value like melee hits (retail: a
-                    // share of the damage; Player::GetBlockPercent gave a fraction that truncated to 0, so players blocked nothing)
-                    float value = float(victim->GetClassicShieldBlockValue());
-                    if (victim->IsBlockCritical())
-                    {
-                        value *= 2; // double blocked amount if block is critical
-                        value *= GetTotalAuraMultiplier(SPELL_AURA_MOD_CRITICAL_BLOCK_AMOUNT);
-                    }
-
-                    damageInfo->blocked = uint32(value);
-                    if (damage <= int32(damageInfo->blocked))
-                    {
-                        damageInfo->blocked = uint32(damage);
-                        damageInfo->fullBlock = true;
-                    }
-                    damage -= damageInfo->blocked;
-                }
+                    applyBlock();
 
                 if (CanApplyResilience())
                     Unit::ApplyResilience(victim, &damage);
@@ -1334,6 +1340,10 @@ void Unit::CalculateSpellDamageTaken(SpellNonMeleeDamage* damageInfo, int32 dama
                     damageInfo->HitInfo |= SPELL_HIT_TYPE_CRIT;
                     damage = Unit::SpellCriticalDamageBonus(this, spellInfo, damage, victim);
                 }
+
+                // a spell block (SPELL_AURA_ALLOW_BLOCKING_SPELLS, WorldObject::MagicSpellHitResult)
+                if (blocked)
+                    applyBlock();
 
                 if (CanApplyResilience())
                     Unit::ApplyResilience(victim, &damage);
@@ -1355,7 +1365,7 @@ void Unit::CalculateSpellDamageTaken(SpellNonMeleeDamage* damageInfo, int32 dama
     damageInfo->damage = damage;
     damageInfo->originalDamage = damage;
     DamageInfo dmgInfo(*damageInfo, SPELL_DIRECT_DAMAGE, BASE_ATTACK, PROC_HIT_NONE);
-    Unit::CalcAbsorbResist(dmgInfo, spell);
+    Unit::CalcAbsorbResist(dmgInfo, spell, resistRoll);
     damageInfo->absorb = dmgInfo.GetAbsorb();
     damageInfo->resist = dmgInfo.GetResist();
 
@@ -1655,20 +1665,9 @@ void Unit::DealMeleeDamage(CalcDamageInfo* damageInfo, bool durabilityLoss)
         GetTypeId() != TYPEID_PLAYER && !ToCreature()->IsControlledByPlayer() && !victim->HasInArc(float(M_PI), this)
         && (victim->GetTypeId() == TYPEID_PLAYER || !victim->ToCreature()->isWorldBoss())&& !victim->IsVehicle())
     {
-        // 20% base chance
-        float chance = 20.0f;
-
-        // there is a newbie protection, at level 10 just 7% base chance; assuming linear function
-        if (victim->GetLevel() < 30)
-            chance = 0.65f * victim->GetLevelForTarget(this) + 0.5f;
-
-        uint32 const victimDefense = victim->GetMaxSkillValueForLevel(this);
-        uint32 const attackerMeleeSkill = GetMaxSkillValueForLevel();
-
-        chance *= attackerMeleeSkill / float(victimDefense) * 0.16f;
-
-        // -probability is between 0% and 40%
-        RoundToInterval(chance, 0.0f, 40.0f);
+        // Classic 1.60 (vanilla): 20% base, less below level 30, 0.2% per point of attacker skill over the victim's real defense
+        float const chance = ClassicDaze::Chance(uint8(victim->GetLevelForTarget(this)), int32(GetMaxSkillValueForLevel(victim)),
+            victim->GetClassicDefenseSkill(this));
         if (roll_chance(chance))
             CastSpell(victim, SPELL_DAZED, true);
     }
@@ -1833,7 +1832,43 @@ void Unit::HandleEmoteCommand(Emote emoteId, Player* target /*=nullptr*/, Trinit
     return std::max<uint32>(uint32(damage * (1.0f - mitigation) + 0.5f), 1);
 }
 
-/*static*/ uint32 Unit::CalcSpellResistedDamage(Unit const* attacker, Unit* victim, uint32 damage, SpellSchoolMask schoolMask, SpellInfo const* spellInfo)
+// Classic 1.60 (WoW Forever): a periodic tick, a channel's included, meets a tenth of the target's resistance share, where a direct hit
+// meets all of it; a hit or tick at a tenth takes no Spell Piercing bonus. Shadow Word: Pain, Corruption, Flame Shock, Drain Life and Wrack
+// ticks resist at a tenth (Drain Life 23 of 79 ticks with a partial against 25.3 at a tenth and 79 at the full share). Devouring Plague's,
+// Pyroblast's and Starshards' ticks meet the full share (Devouring Plague 262 of 262, Starshards 232 of 237 against 64.2 at a tenth), and
+// no row field tells them apart, so they are named here; Flamestrike's ground ticks are hits at a tenth (ClassicResistRoll::TenthShare).
+// A binary spell takes no partial resist at all (Unit::CalcSpellResistedDamage). Arcane Missiles' missiles are hits and meet the full
+// share (wowsims/forever, MIT, sim/core/spell_resistances.go, docs/evidence EV-0092 and EV-0142).
+/*static*/ float Unit::ClassicTickResistShare(SpellInfo const* spellInfo, bool periodicTick, ClassicResistRoll resistRoll /*= ClassicResistRoll::Spell*/)
+{
+    if (resistRoll == ClassicResistRoll::TenthShare)
+        return 0.1f;
+
+    if (!periodicTick || !spellInfo)
+        return 1.0f;
+
+    switch (spellInfo->Id)
+    {
+        case 2944: case 19276: case 19277: case 19278: case 19279: case 19280:          // Devouring Plague
+        case 11366: case 12505: case 12522: case 12523: case 12524: case 12525: case 12526: case 18809: // Pyroblast
+        case 10797: case 19296: case 19299: case 19302: case 19303: case 19304: case 19305: // Starshards
+            return 1.0f;
+        default:
+            return 0.1f;
+    }
+}
+
+// Classic 1.60 (WoW Forever): a binary spell's hit roll took its whole resist, so a hit or tick of one that lands takes no partial resist
+// and no Spell Piercing bonus (EV-0142: 0 partial resists on the live realms' binary hits and ticks against hundreds expected)
+static bool IsClassicBinaryResistRoll(SpellInfo const* spellInfo, ClassicResistRoll resistRoll)
+{
+    if (resistRoll == ClassicResistRoll::Binary)
+        return true;
+    return resistRoll == ClassicResistRoll::Spell && spellInfo && spellInfo->HasAttribute(SPELL_ATTR0_CU_BINARY_SPELL);
+}
+
+/*static*/ uint32 Unit::CalcSpellResistedDamage(Unit const* attacker, Unit* victim, uint32 damage, SpellSchoolMask schoolMask, SpellInfo const* spellInfo, bool periodicTick /*= false*/,
+    ClassicResistRoll resistRoll /*= ClassicResistRoll::Spell*/)
 {
     // Magic damage, check for resists
     if (!(schoolMask & SPELL_SCHOOL_MASK_MAGIC))
@@ -1844,11 +1879,11 @@ void Unit::HandleEmoteCommand(Emote emoteId, Player* target /*=nullptr*/, Trinit
         return 0;
 
     // Classic 1.60 (vanilla): binary spells (Frostbolt, Frost Nova, crowd control...) are resisted completely or not at all
-    // (WorldObject::MagicSpellHitResult), never partially
-    if (spellInfo && spellInfo->HasAttribute(SPELL_ATTR0_CU_BINARY_SPELL))
+    // (WorldObject::MagicSpellHitResult), never partially; the live realms agree (EV-0142)
+    if (IsClassicBinaryResistRoll(spellInfo, resistRoll))
         return 0;
 
-    float const averageResist = Unit::CalculateAverageResistReduction(attacker, schoolMask, victim, spellInfo);
+    float const averageResist = Unit::CalculateAverageResistReduction(attacker, schoolMask, victim, spellInfo) * ClassicTickResistShare(spellInfo, periodicTick, resistRoll);
     float discreteResistProbability[11] = { };
     if (averageResist <= 0.1f)
     {
@@ -1870,7 +1905,9 @@ void Unit::HandleEmoteCommand(Emote emoteId, Player* target /*=nullptr*/, Trinit
         if (roll < (probabilitySum += discreteResistProbability[resistance]))
             break;
 
-    float damageResisted = damage * resistance / 10.f;
+    // Classic 1.60 (WoW Forever): a partial resist never takes more than 75% of a hit; the roll's 80, 90 and 100% steps land on 75%, so a
+    // damage spell is never resisted whole by this roll (EV-0142: no live-realm hit lost more than 75%, 61 lost exactly 75%)
+    float damageResisted = damage * std::min(resistance / 10.f, 0.75f);
     if (damageResisted > 0.0f) // if any damage was resisted
     {
         float ignoredResistance = 0.0f;
@@ -1898,7 +1935,40 @@ void Unit::HandleEmoteCommand(Emote emoteId, Player* target /*=nullptr*/, Trinit
 
 /*static*/ float Unit::CalculateAverageResistReduction(WorldObject const* caster, SpellSchoolMask schoolMask, Unit const* victim, SpellInfo const* spellInfo /*= nullptr*/)
 {
-    float victimResistance = float(victim->GetResistance(schoolMask));
+    return std::max(CalculateSignedAverageResist(caster, schoolMask, victim, spellInfo), 0.0f);
+}
+
+/*static*/ float Unit::CalculateSignedAverageResist(WorldObject const* caster, SpellSchoolMask schoolMask, Unit const* victim, SpellInfo const* spellInfo /*= nullptr*/)
+{
+    // holy resistance exists in pve and comes from level difference, ignore template values
+    if (schoolMask & SPELL_SCHOOL_MASK_HOLY)
+        return 0.0f;
+
+    // Chaos Bolt exception, ignore all target resistances (unknown attribute?)
+    if (spellInfo && spellInfo->SpellFamilyName == SPELLFAMILY_WARLOCK && spellInfo->Id == 116858)
+        return 0.0f;
+
+    // Classic 1.60 (WoW Forever): the target's own resistance stops at 0, so a debuff that lowers it below 0 adds nothing; the caster's
+    // Spell Piercing is taken off after that and may take the total below 0 (wowsims/forever, MIT, sim/core/spell_resistances.go).
+    float victimResistance = std::max(float(victim->GetResistance(schoolMask)), 0.0f);
+
+    // Classic 1.60: the caller (CalcSpellResistedDamage) wants the average resisted fraction, retail returns the raw resistance
+    // (creatures have none there): with 1 point of resistance every spell was fully resisted. WoW Forever formula: resistance
+    // / (|resistance| + 8 * caster level + 19), fitted to Forever logs at levels 20 to 50 (Spell Piercing bonus rates and mobs casting at
+    // players of known resistance; wowsims/forever, MIT, docs/evidence EV-0091). Vanilla's resistance * 0.75 / (5 * caster level) gave
+    // 75% at 315 resistance against a level 63 caster where Forever gives about 38%. The 75% cap stays as a guard only (it needs about
+    // three times the constant). Creatures above the caster's level resist 8 more per level (not binary spells),
+    // scaled by caster level / 63 and rounded down as in VMaNGOS (SpellCaster::GetSpellResistChance). Unscaled, a level 1 caster
+    // lost 75% of every spell on a level 2 creature (8 * 0.75 / 5 = 1.2).
+    uint32 casterLevel = 1;
+    if (caster && caster->ToUnit())
+    {
+        casterLevel = std::max<uint32>(caster->ToUnit()->GetLevelForTarget(victim), 1);
+        int32 levelDiff = int32(victim->GetLevelForTarget(caster)) - int32(casterLevel);
+        if (levelDiff > 0 && victim->GetTypeId() == TYPEID_UNIT && !(spellInfo && spellInfo->HasAttribute(SPELL_ATTR0_CU_BINARY_SPELL)))
+            victimResistance += float(int32(8.0f * levelDiff * casterLevel / 63.0f));
+    }
+
     if (caster)
     {
         // pets inherit 100% of masters penetration
@@ -1912,39 +1982,47 @@ void Unit::HandleEmoteCommand(Emote emoteId, Player* target /*=nullptr*/, Trinit
             victimResistance += float(unitCaster->GetTotalAuraModifierByMiscMask(SPELL_AURA_MOD_TARGET_RESISTANCE, schoolMask));
     }
 
-    // holy resistance exists in pve and comes from level difference, ignore template values
-    if (schoolMask & SPELL_SCHOOL_MASK_HOLY)
-        victimResistance = 0.0f;
-
-    // Chaos Bolt exception, ignore all target resistances (unknown attribute?)
-    if (spellInfo && spellInfo->SpellFamilyName == SPELLFAMILY_WARLOCK && spellInfo->Id == 116858)
-        victimResistance = 0.0f;
-
-    victimResistance = std::max(victimResistance, 0.0f);
-
-    // Classic 1.60: the caller (CalcSpellResistedDamage) wants the average resisted fraction, retail returns the raw resistance
-    // (creatures have none there): with 1 point of resistance every spell was fully resisted. Vanilla formula: resistance
-    // * 0.75 / (5 * caster level), at most 75%; creatures above the caster's level resist 8 more per level (not binary spells),
-    // scaled by caster level / 63 and rounded down as in VMaNGOS (SpellCaster::GetSpellResistChance). Unscaled, a level 1 caster
-    // lost 75% of every spell on a level 2 creature (8 * 0.75 / 5 = 1.2).
-    uint32 casterLevel = 1;
-    if (caster && caster->ToUnit())
-    {
-        casterLevel = std::max<uint32>(caster->ToUnit()->GetLevelForTarget(victim), 1);
-        int32 levelDiff = int32(victim->GetLevelForTarget(caster)) - int32(casterLevel);
-        if (levelDiff > 0 && victim->GetTypeId() == TYPEID_UNIT && !(spellInfo && spellInfo->HasAttribute(SPELL_ATTR0_CU_BINARY_SPELL)))
-            victimResistance += float(int32(8.0f * levelDiff * casterLevel / 63.0f));
-    }
-
-    return std::min(victimResistance * 0.75f / (5.0f * casterLevel), 0.75f);
+    return std::min(victimResistance / (std::fabs(victimResistance) + 8.0f * casterLevel + 19.0f), 0.75f);
 }
 
-/*static*/ void Unit::CalcAbsorbResist(DamageInfo& damageInfo, Spell* spell /*= nullptr*/)
+// Classic 1.60 (WoW Forever): Spell Piercing beyond the target's resistance makes the average resist negative, and the partial resist roll
+// on its size pays out bonus damage in tenths instead: a hit gains 10% or 20% (wowsims/forever, MIT, docs/evidence EV-0091 and EV-0092:
+// pierced hits carry a negative resisted amount of exactly 10% or 20%, about 2:1, at the caster's piercing rate). A tick at a tenth
+// of the share (ClassicTickResistShare) and a binary spell take none (Shadow Word: Pain 0 of 515 at 8 piercing, Flamestrike's ground
+// ticks 0 of 4,177, Frostbolt 0 of 425, Frost Nova 0 of 1,258, Mind Flay ticks 0 of 320), while Fire Blast, Blizzard's ticks and Devouring
+// Plague's, Pyroblast's and Starshards' ticks take it in full (EV-0092, EV-0142).
+/*static*/ uint32 Unit::CalcSpellPiercingBonusDamage(Unit const* attacker, Unit* victim, uint32 damage, SpellSchoolMask schoolMask, SpellInfo const* spellInfo, bool periodicTick /*= false*/,
+    ClassicResistRoll resistRoll /*= ClassicResistRoll::Spell*/)
+{
+    if (!attacker || !(schoolMask & SPELL_SCHOOL_MASK_MAGIC))
+        return 0;
+
+    if (IsClassicBinaryResistRoll(spellInfo, resistRoll) || ClassicTickResistShare(spellInfo, periodicTick, resistRoll) < 1.0f)
+        return 0;
+
+    float const averageResist = Unit::CalculateSignedAverageResist(attacker, schoolMask, victim, spellInfo);
+    if (averageResist >= 0.0f)
+        return 0;
+
+    // the same tenths roll as CalcSpellResistedDamage, on the size of the negative share (always under 10% in practice)
+    float const a = std::min(-averageResist, 0.1f);
+    float const roll = rand_norm();
+    uint32 tenths = 0;
+    if (roll >= 1.0f - 2.5f * a)
+        tenths = 2;
+    else if (roll >= 1.0f - 7.5f * a)
+        tenths = 1;
+
+    return uint32(damage * tenths / 10.0f);
+}
+
+/*static*/ void Unit::CalcAbsorbResist(DamageInfo& damageInfo, Spell* spell /*= nullptr*/, ClassicResistRoll resistRoll /*= ClassicResistRoll::Spell*/)
 {
     if (!damageInfo.GetVictim() || !damageInfo.GetVictim()->IsAlive() || !damageInfo.GetDamage())
         return;
 
-    uint32 resistedDamage = Unit::CalcSpellResistedDamage(damageInfo.GetAttacker(), damageInfo.GetVictim(), damageInfo.GetDamage(), damageInfo.GetSchoolMask(), damageInfo.GetSpellInfo());
+    bool const periodicTick = damageInfo.GetDamageType() == DOT;
+    uint32 resistedDamage = Unit::CalcSpellResistedDamage(damageInfo.GetAttacker(), damageInfo.GetVictim(), damageInfo.GetDamage(), damageInfo.GetSchoolMask(), damageInfo.GetSpellInfo(), periodicTick, resistRoll);
 
     // Ignore Absorption Auras
     float auraAbsorbMod = 0.f;
@@ -1959,6 +2037,11 @@ void Unit::HandleEmoteCommand(Emote emoteId, Player* target /*=nullptr*/, Trinit
         spell->CallScriptOnResistAbsorbCalculateHandlers(damageInfo, resistedDamage, absorbIgnoringDamage);
 
     damageInfo.ResistDamage(resistedDamage);
+
+    // Classic 1.60 (WoW Forever): Spell Piercing past the target's resistance adds damage on hits and ticks at the full share
+    if (!resistedDamage)
+        if (uint32 piercingBonus = Unit::CalcSpellPiercingBonusDamage(damageInfo.GetAttacker(), damageInfo.GetVictim(), damageInfo.GetDamage(), damageInfo.GetSchoolMask(), damageInfo.GetSpellInfo(), periodicTick, resistRoll))
+            damageInfo.ModifyDamage(int32(piercingBonus));
 
     // We're going to call functions which can modify content of the list during iteration over it's elements
     // Let's copy the list so we can prevent iterator invalidation
@@ -2243,6 +2326,17 @@ void Unit::HandleEmoteCommand(Emote emoteId, Player* target /*=nullptr*/, Trinit
     }
 }
 
+// Classic 1.60: the only spell being cast is one thrown from an explosive item (trade goods, explosives: dynamite, bombs, grenades)
+bool Unit::IsClassicExplosiveCast() const
+{
+    Spell const* generic = GetCurrentSpell(CURRENT_GENERIC_SPELL);
+    if (!generic || GetCurrentSpell(CURRENT_CHANNELED_SPELL) || !generic->m_castItemEntry)
+        return false;
+
+    ItemTemplate const* itemTemplate = sObjectMgr->GetItemTemplate(generic->m_castItemEntry);
+    return itemTemplate && itemTemplate->GetClass() == ITEM_CLASS_TRADE_GOODS && itemTemplate->GetSubClass() == ITEM_SUBCLASS_EXPLOSIVES;
+}
+
 void Unit::DoMeleeAttackIfReady()
 {
     if (!HasUnitState(UNIT_STATE_MELEE_ATTACKING))
@@ -2254,8 +2348,17 @@ void Unit::DoMeleeAttackIfReady()
     if (IsCreature() && !ToCreature()->CanMelee())
         return;
 
+    // Classic 1.60 (WoW Forever): throwing an explosive (dynamite, bombs, grenades: trade goods, explosives) does not hold the swing; a swing
+    // due during the 1 s cast lands in it as a plain white swing. Six Forever throws by meleeing players had one land inside the cast, and
+    // none of 271 swings inside an explosive's cast in Classic Era logs was a queued Heroic Strike or Cleave, so the cast drops the queued
+    // attack (wowsims/forever, MIT, docs/evidence EV-0088).
     if (HasUnitState(UNIT_STATE_CASTING))
-        return;
+    {
+        if (!IsClassicExplosiveCast())
+            return;
+        if (GetCurrentSpell(CURRENT_MELEE_SPELL))
+            InterruptSpell(CURRENT_MELEE_SPELL);
+    }
 
     Unit* victim = GetVictim();
     if (!victim)
@@ -3336,6 +3439,14 @@ void Unit::SetCurrentCastSpell(Spell* pSpell)
                     InterruptSpell(CURRENT_CHANNELED_SPELL, false);
             }
 
+            break;
+        }
+        case CURRENT_MELEE_SPELL:
+        {
+            // a new on-next-swing ability replaces the queued one. The queued one must end with a failure packet, or the client
+            // keeps its cast visual on the caster forever and the old spell is never finished (Felmusk Rogue: Overwhelming Stench
+            // queued, Shred cast over it in the same tick). DONT_REPORT: a player swapping Heroic Strike for Cleave sees no error.
+            InterruptSpell(CURRENT_MELEE_SPELL, true, true, SPELL_FAILED_DONT_REPORT);
             break;
         }
         default:
@@ -7101,6 +7212,13 @@ void Unit::SendEnergizeSpellLog(Unit* victim, uint32 spellID, int32 damage, int3
     SendCombatLogMessage(&data);
 }
 
+// Classic 1.60 (WoW Forever): druid Enrage 5229's rage, the instant part and every tick, threatens with the threat modifiers (the bear forms'
+// +115%): about 21.5 threat a 2 rage tick in Bear Form, 2 x 5 x 2.15 (wowsims/forever, MIT, docs/evidence EV-0037).
+bool Unit::ClassicRageThreatTakesModifiers(SpellInfo const* spellInfo)
+{
+    return spellInfo && spellInfo->Id == 5229;
+}
+
 void Unit::EnergizeBySpell(Unit* victim, SpellInfo const* spellInfo, int32 damage, Powers powerType)
 {
     // Classic 1.60 (vanilla): only paying mana starts the five second rule (Spell::TakePower); receiving it does not (Judgement of
@@ -7113,16 +7231,19 @@ void Unit::EnergizeBySpell(Unit* victim, SpellInfo const* spellInfo, int32 damag
 
     int32 gain = victim->ModifyPower(powerType, damage, false);
     int32 overEnergize = damage - gain;
-    victim->GetThreatManager().ForwardThreatForAssistingMe(this, float(damage) / 2, spellInfo, true);
+    // Classic 1.60 (WoW Forever): Enrage's rage threatens with the bear form's threat multiplier; other rage gains (Blood Frenzy, Shifting
+    // Power) stay unscaled (wowsims/forever, MIT, docs/evidence EV-0035, EV-0037)
+    victim->GetThreatManager().ForwardThreatForAssistingMe(this, float(damage) / 2, spellInfo, !ClassicRageThreatTakesModifiers(spellInfo));
     SendEnergizeSpellLog(victim, spellInfo->Id, gain, overEnergize, powerType);
 }
 
 // Classic 1.60: the VMaNGOS spell power / healing power factor of a legacy spell effect, when the vanilla table has one (classic_spell_value.bonus_coeff)
 static ClassicSpellValue::Value const* ClassicCoefficientRow(SpellInfo const* spellInfo, SpellEffectInfo const& effectInfo)
 {
-    if (!ClassicSpellValue::AppliesToSpell(spellInfo->Id))
+    uint32 const valueSpellId = sSpellMgr->GetClassicValueSpellId(spellInfo->Id);   // a Forever copy takes the legacy spell's row
+    if (!ClassicSpellValue::AppliesToSpell(valueSpellId))
         return nullptr;
-    return sSpellMgr->GetClassicSpellValue(spellInfo->Id, uint32(effectInfo.EffectIndex));
+    return sSpellMgr->GetClassicSpellValue(valueSpellId, uint32(effectInfo.EffectIndex));
 }
 
 // Classic 1.60: the spell power / healing power factor of an effect with the vanilla level penalty in. A vanilla table row is
@@ -7135,7 +7256,9 @@ static float ClassicBonusCoefficient(SpellInfo const* spellProto, SpellEffectInf
 
 int32 Unit::SpellDamageBonusDone(Unit* victim, SpellInfo const* spellProto, int32 pdamage, DamageEffectType damagetype, SpellEffectInfo const& spellEffectInfo, uint32 stack /*= 1*/, Spell* spell /*= nullptr*/, AuraEffect const* aurEff /*= nullptr*/) const
 {
-    return int32(SpellDamageBonusDoneExact(victim, spellProto, float(pdamage), damagetype, spellEffectInfo, stack, spell, aurEff));
+    // Classic 1.60: a hit's amount rounds up with a chance equal to its fraction (ClassicRounding.h, EV-0095); a periodic damage tick
+    // calls the exact form and carries its fraction instead (AuraEffect::HandlePeriodicDamageAurasTick), which averages the same.
+    return ClassicRounding::RoundByFraction(SpellDamageBonusDoneExact(victim, spellProto, float(pdamage), damagetype, spellEffectInfo, stack, spell, aurEff), rand_norm());
 }
 
 float Unit::SpellDamageBonusDoneExact(Unit* victim, SpellInfo const* spellProto, float pdamage, DamageEffectType damagetype, SpellEffectInfo const& spellEffectInfo, uint32 stack /*= 1*/, Spell* spell /*= nullptr*/, AuraEffect const* aurEff /*= nullptr*/) const
@@ -7183,11 +7306,24 @@ float Unit::SpellDamageBonusDoneExact(Unit* victim, SpellInfo const* spellProto,
 
     // Done fixed damage bonus auras
     int32 DoneAdvertisedBenefit  = SpellBaseDamageBonusDone(spellProto->GetSchoolMask());
-    // modify spell power by victim's SPELL_AURA_MOD_DAMAGE_TAKEN auras (eg Amplify/Dampen Magic)
-    DoneAdvertisedBenefit += victim->GetTotalAuraModifierByMiscMask(SPELL_AURA_MOD_DAMAGE_TAKEN, spellProto->GetSchoolMask());
-    // Classic 1.60 item stats: spell damage versus a creature type
+    // Classic 1.60 (WoW Forever): the victim's SPELL_AURA_MOD_DAMAGE_TAKEN (Judgement of the Crusader, Amplify / Dampen Magic) adds at the
+    // spell's coefficient after the done multipliers, which do not scale it (Seal of Fury, Judgement of Fury and Consecration's marked tick;
+    // wowsims/forever, MIT, docs/evidence EV-0143). Retail folded it into the spell power before them.
+    int32 const takenBenefit = victim->GetTotalAuraModifierByMiscMask(SPELL_AURA_MOD_DAMAGE_TAKEN, spellProto->GetSchoolMask());
+    // Classic 1.60 item stats: spell damage versus a creature type. WoW Forever: Seal of Fury's hit and Judgement of Fury take none of it
+    // (Courier's Clasp +10 against Humanoids: Seal of Fury fit +10 on 0 of 437 hits, Consecration's marked tick on 266 of 266; EV-0143)
     if (Player const* thisPlayer = ToPlayer())
-        DoneAdvertisedBenefit += thisPlayer->GetClassicSpellDamageVersus(victim->GetCreatureTypeMask());
+    {
+        switch (spellProto->Id)
+        {
+            case 20163: case 20231: case 20415: case 20416: case 20417: case 20418: case 20419: case 20421: case 20422: case 1311647: // Seal of Fury
+            case 20183: case 20232: case 20411: case 20412: case 20413: case 20414: case 1311650: case 1311655:                     // Judgement of Fury
+                break;
+            default:
+                DoneAdvertisedBenefit += thisPlayer->GetClassicSpellDamageVersus(victim->GetCreatureTypeMask());
+                break;
+        }
+    }
 
     // Pets just add their bonus damage to their spell damage
     // note that their spell damage is just gain of their own auras
@@ -7221,7 +7357,8 @@ float Unit::SpellDamageBonusDoneExact(Unit* victim, SpellInfo const* spellProto,
     }
 
     // Default calculation
-    if (DoneAdvertisedBenefit)
+    float takenTotal = 0.0f;
+    if (DoneAdvertisedBenefit || takenBenefit)
     {
         float coeff = ClassicBonusCoefficient(spellProto, spellEffectInfo);
         if (Player* modOwner = GetSpellModOwner())
@@ -7232,11 +7369,12 @@ float Unit::SpellDamageBonusDoneExact(Unit* victim, SpellInfo const* spellProto,
         }
 
         DoneTotal += float(DoneAdvertisedBenefit) * coeff * float(stack);
+        takenTotal = float(takenBenefit) * coeff * float(stack);
     }
 
     callDamageScript(pdamage, DoneTotal, DoneTotalMod);
 
-    float tmpDamage = (pdamage + DoneTotal) * DoneTotalMod;
+    float tmpDamage = (pdamage + DoneTotal) * DoneTotalMod + takenTotal;
 
     // apply spellmod to Done damage (flat and pct)
     if (Player* modOwner = GetSpellModOwner())
@@ -7428,7 +7566,7 @@ int32 Unit::SpellDamageBonusTaken(Unit* caster, SpellInfo const* spellProto, int
     }
 
     float tmpDamage = pdamage * TakenTotalMod;
-    return int32(std::max(tmpDamage, 0.0f));
+    return ClassicRounding::RoundByFraction(tmpDamage, rand_norm());   // Classic 1.60: EV-0095
 }
 
 int32 Unit::SpellBaseDamageBonusDone(SpellSchoolMask schoolMask) const
@@ -7691,6 +7829,7 @@ int32 Unit::SpellHealingBonusDone(Unit* victim, SpellInfo const* spellProto, int
         return healamount;
 
     int32 DoneTotal = 0;
+    float DoneFraction = 0.0f;  // Classic 1.60: the fractions of the power bonuses, kept to the end (ClassicRounding.h, EV-0095)
     float DoneTotalMod = SpellHealingPctDone(victim, spellProto);
 
     // done scripted mod (take it from owner)
@@ -7744,7 +7883,9 @@ int32 Unit::SpellHealingBonusDone(Unit* victim, SpellInfo const* spellProto, int
         }();
         float attackPowerBonus = float(victim->GetTotalAuraModifier(attType != RANGED_ATTACK ? SPELL_AURA_MELEE_ATTACK_POWER_ATTACKER_BONUS : SPELL_AURA_RANGED_ATTACK_POWER_ATTACKER_BONUS));
         attackPowerBonus += GetTotalAttackPowerValue(attType);
-        DoneTotal += int32(stack * attackPowerCoeff * attackPowerBonus);
+        float const attackPowerDone = stack * attackPowerCoeff * attackPowerBonus;
+        DoneTotal += int32(attackPowerDone);
+        DoneFraction += attackPowerDone - float(int32(attackPowerDone));
     }
 
     // Default calculation
@@ -7758,7 +7899,9 @@ int32 Unit::SpellHealingBonusDone(Unit* victim, SpellInfo const* spellProto, int
             coeff /= 100.0f;
         }
 
-        DoneTotal += int32(DoneAdvertisedBenefit * coeff * stack);
+        float const spellPowerDone = DoneAdvertisedBenefit * coeff * stack;
+        DoneTotal += int32(spellPowerDone);
+        DoneFraction += spellPowerDone - float(int32(spellPowerDone));
     }
 
     for (SpellEffectInfo const& otherSpellEffect : spellProto->GetEffects())
@@ -7782,13 +7925,13 @@ int32 Unit::SpellHealingBonusDone(Unit* victim, SpellInfo const* spellProto, int
     else if (aurEff)
         aurEff->GetBase()->CallScriptCalcDamageAndHealingHandlers(aurEff, aurEff->GetBase()->GetApplicationOfTarget(victim->GetGUID()), victim, healamount, DoneTotal, DoneTotalMod);
 
-    float heal = float(healamount + DoneTotal) * DoneTotalMod;
+    float heal = (float(healamount + DoneTotal) + DoneFraction) * DoneTotalMod;
 
     // apply spellmod to Done amount
     if (Player* modOwner = GetSpellModOwner())
         modOwner->ApplySpellMod(spellProto, damagetype == DOT ? SpellModOp::PeriodicHealingAndDamage : SpellModOp::HealingAndDamage, heal);
 
-    return int32(std::max(heal, 0.0f));
+    return ClassicRounding::RoundByFraction(heal, rand_norm());   // Classic 1.60: EV-0095
 }
 
 float Unit::SpellHealingPctDone(Unit* victim, SpellInfo const* spellProto) const
@@ -7931,7 +8074,7 @@ int32 Unit::SpellHealingBonusTaken(Unit* caster, SpellInfo const* spellProto, in
     }
 
     float heal = healamount * TakenTotalMod;
-    return int32(std::max(heal, 0.0f));
+    return ClassicRounding::RoundByFraction(heal, rand_norm());   // Classic 1.60: EV-0095
 }
 
 int32 Unit::SpellBaseHealingBonusDone(SpellSchoolMask schoolMask) const
@@ -8512,8 +8655,11 @@ int32 Unit::MeleeDamageBonusTaken(Unit* attacker, int32 pdamage, WeaponAttackTyp
     else
         TakenFlatBenefit += GetTotalAuraModifier(SPELL_AURA_MOD_RANGED_DAMAGE_TAKEN);
 
-    if ((TakenFlatBenefit < 0) && (pdamage < -TakenFlatBenefit))
-        return 0;
+    // Classic 1.60: a flat reduction (Force of Will, Stoneskin Totem, Gold-plated) takes at most half of the hit, one cap for every flat
+    // amount on the target together; before, a hit smaller than the reduction did nothing (wowsims EV-0154, Warcraft Logs: a swing under
+    // twice Force of Will's 51 lands at half). A flat bonus is not capped.
+    if (TakenFlatBenefit < 0)
+        TakenFlatBenefit = std::max(TakenFlatBenefit, -(pdamage / 2));
 
     // Taken total percent damage auras
     float TakenTotalMod = 1.0f;
@@ -11001,6 +11147,9 @@ void Unit::ProcSkillsAndReactives(bool isVictim, Unit* procTarget, ProcFlagsInit
         // If exist crit/parry/dodge/block need update aura state (for victim and attacker)
         if (hitMask & (PROC_HIT_CRITICAL | PROC_HIT_PARRY | PROC_HIT_DODGE | PROC_HIT_BLOCK))
         {
+            // Classic 1.60: the Riposte and Revenge window lasts as long as the client's Defensive State 5302 (5000 ms), not the stock 4 s
+            static constexpr uint32 CLASSIC_DEFENSIVE_STATE_MS = 5000;
+
             // for victim
             if (isVictim)
             {
@@ -11011,7 +11160,7 @@ void Unit::ProcSkillsAndReactives(bool isVictim, Unit* procTarget, ProcFlagsInit
                     if (GetClass() != CLASS_ROGUE) // skip Rogue Riposte
                     {
                         ModifyAuraState(AURA_STATE_DEFENSIVE, true);
-                        StartReactiveTimer(REACTIVE_DEFENSE);
+                        StartReactiveTimer(REACTIVE_DEFENSE, CLASSIC_DEFENSIVE_STATE_MS);
                     }
                 }
                 // if victim and parry attack
@@ -11025,14 +11174,14 @@ void Unit::ProcSkillsAndReactives(bool isVictim, Unit* procTarget, ProcFlagsInit
                     else
                     {
                         ModifyAuraState(AURA_STATE_DEFENSIVE, true);
-                        StartReactiveTimer(REACTIVE_DEFENSE);
+                        StartReactiveTimer(REACTIVE_DEFENSE, CLASSIC_DEFENSIVE_STATE_MS);
                     }
                 }
                 // if and victim block attack
                 if (hitMask & PROC_HIT_BLOCK)
                 {
                     ModifyAuraState(AURA_STATE_DEFENSIVE, true);
-                    StartReactiveTimer(REACTIVE_DEFENSE);
+                    StartReactiveTimer(REACTIVE_DEFENSE, CLASSIC_DEFENSIVE_STATE_MS);
                 }
             }
             // for attacker: a warrior whose target dodges gets the combo point Overpower costs from the client's own proc aura 1282735
@@ -11605,7 +11754,9 @@ void Unit::SetCantProc(bool apply)
 
 float Unit::GetAPMultiplier(WeaponAttackType attType, bool normalized) const
 {
-    if (GetTypeId() != TYPEID_PLAYER || (IsInFeralForm() && !normalized))
+    // Classic 1.60 (WoW Forever): in a form the normalized speed is the form's own swing time too (1 s Cat, 2.5 s Bear), not the held
+    // weapon's normalization (a staff's 3.3 s) (wowsims/forever, MIT, sim/druid/forms.go NormalizedSwingSpeed)
+    if (GetTypeId() != TYPEID_PLAYER || IsInFeralForm())
         return GetBaseAttackTime(attType) / 1000.0f;
 
     Item* weapon = ToPlayer()->GetWeaponForAttack(attType, true);
@@ -11894,12 +12045,21 @@ void Unit::SetMeleeAnimKitId(uint16 animKitId)
             if (InstanceScript const* instance = creature->GetInstanceScript())
                 dungeonEncounter = instance->GetBossDungeonEncounter(creature);
 
-            // vanilla: a grouped kill in a dungeon leaves one shared corpse under the group's loot method, bosses and trash alike;
-            // trash kept in the round robin looter's personal loot hid the corpse from the master looter and the rest of the raid
+            // vanilla: a grouped kill leaves one shared corpse under the group's loot method, bosses and trash alike. In a dungeon,
+            // trash kept in the round robin looter's personal loot hid the corpse from the master looter and the rest of the raid.
+            // In the open world every tapper got a whole loot table and money roll of their own, so a party of five took five times
+            // the drops and gold of one kill. There the corpse is shared only when every tapper is in the same group: a solo player
+            // or a second party on the tap list (shared tagging) keeps its own loot rather than getting nothing.
             bool sharedCorpse = false;
             if (!tappers.empty() && sWorld->getBoolConfig(CONFIG_LOOT_SHARED_ENCOUNTER_LOOT))
-                sharedCorpse = dungeonEncounter || (creature->GetMap()->IsDungeon() &&
-                    std::ranges::any_of(tappers, [](Player const* tapper) { return tapper->GetGroup() != nullptr; }));
+            {
+                if (dungeonEncounter)
+                    sharedCorpse = true;
+                else if (creature->GetMap()->IsDungeon())
+                    sharedCorpse = std::ranges::any_of(tappers, [](Player const* tapper) { return tapper->GetGroup() != nullptr; });
+                else if (Group const* tapGroup = tappers.front()->GetGroup())
+                    sharedCorpse = std::ranges::all_of(tappers, [tapGroup](Player const* tapper) { return tapper->GetGroup() == tapGroup; });
+            }
 
             if (sharedCorpse)
             {

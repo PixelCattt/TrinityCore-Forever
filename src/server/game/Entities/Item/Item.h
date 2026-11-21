@@ -95,6 +95,7 @@ struct BonusData
     bool CanDisenchant;
     bool CanScrap;
     bool CanSalvage;
+    bool ClassicReducedCasterDps;   // Classic 1.60 (WoW Forever): item flag or random suffix bonus, see Item::GetClassicWeaponDPS
     bool CanRecraft;
     bool HasFixedLevel;
     bool CannotTradeBindOnPickup;
@@ -352,6 +353,8 @@ class TC_GAME_API Item : public Object
         bool IsConjuredConsumable() const { return GetTemplate()->IsConjuredConsumable(); }
         uint32 GetQuality() const { return _bonusData.Quality; }
         uint32 GetItemLevel(Player const* owner) const;
+        float GetClassicWeaponDPS(Player const* owner) const;
+        void GetClassicWeaponDamage(Player const* owner, float& minDamage, float& maxDamage) const;
         static uint32 GetItemLevel(ItemTemplate const* itemTemplate, BonusData const& bonusData, uint32 level, uint32 fixedLevel,
             int32 minItemLevel, int32 minItemLevelCutoff, int32 maxItemLevel, bool pvpBonus, uint32 azeriteLevel, uint32 overrideContentTuningId);
         int32 GetRequiredLevel() const;

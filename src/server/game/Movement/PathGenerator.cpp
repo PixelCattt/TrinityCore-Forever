@@ -16,6 +16,7 @@
  */
 
 #include "PathGenerator.h"
+#include "ClosedDoorShape.h"
 #include "Config.h"
 #include "Creature.h"
 #include "DetourCommon.h"
@@ -160,6 +161,7 @@ PathGenerator::~PathGenerator()
 
 PathGenerator::LiquidRouteCheck PathGenerator::_liquidRouteCheck = nullptr;
 PathGenerator::ClosedDoorCheck PathGenerator::_closedDoorCheck = nullptr;
+PathGenerator::WaterRouteAdjust PathGenerator::_waterRouteAdjust = nullptr;
 
 // A source whose paths keep clear of closed doors (the ClosedDoorCheck says so): each leg of the route is tested against the
 // map's closed doors; the corridor polygon under a door is left out and the route searched again. Without a route that misses
@@ -169,11 +171,22 @@ bool PathGenerator::CalculatePath(float srcX, float srcY, float srcZ, float dest
     _avoidedClosedDoor = false;
     _filter.ClearExcludedPolys();
     bool ok = CalculateLiquidAwarePath(srcX, srcY, srcZ, destX, destY, destZ, forceDest);
-    if (!ok || forceDest || (_type & (PATHFIND_NOPATH | PATHFIND_NOT_USING_PATH)) || !_closedDoorCheck || !_closedDoorCheck(_source))
-        return ok;
+    if (!ok || forceDest || (_type & (PATHFIND_NOPATH | PATHFIND_NOT_USING_PATH)) || !_closedDoorCheck)
+        return FinishPath(ok);
+    ClosedDoorTest const doorTest = _closedDoorCheck(_source);
+    if (doorTest == ClosedDoorTest::None)
+        return FinishPath(ok);
+    std::shared_ptr<std::vector<ClosedDoorShape> const> publishedDoors;
+    if (doorTest == ClosedDoorTest::Published)
+    {
+        Map const* map = _source->GetMap();
+        publishedDoors = map ? map->GetPublishedClosedDoors() : nullptr;
+        if (!publishedDoors)
+            return FinishPath(ok);
+    }
 
     G3D::Vector3 hit;
-    for (uint32 detour = 0; FindClosedDoorOnPath(hit); ++detour)
+    for (uint32 detour = 0; FindClosedDoorOnPath(hit, publishedDoors.get()); ++detour)
     {
         _avoidedClosedDoor = true;
         dtPolyRef doorPoly = INVALID_POLYREF;
@@ -198,18 +211,37 @@ bool PathGenerator::CalculatePath(float srcX, float srcY, float srcZ, float dest
             break;
     }
     _filter.ClearExcludedPolys();
+    return FinishPath(ok);
+}
+
+// The last step of every CalculatePath: a route over water polygons goes to the module's WaterRouteAdjust (a bot swims under the
+// surface the polygons lie on). Only a navmesh route: a straight or shortcut line is the caller's own choice of height.
+bool PathGenerator::FinishPath(bool ok)
+{
+    if (!ok || !_waterRouteAdjust || (_type & (PATHFIND_NOPATH | PATHFIND_NOT_USING_PATH)) || _pathPoints.size() < 2 ||
+        !CrossesWaterPolys())
+        return ok;
+    G3D::Vector3 const start = _pathPoints.front();
+    G3D::Vector3 const end = _pathPoints.back();
+    _waterRouteAdjust(_source, _pathPoints);
+    if (_pathPoints.size() < 2)
+        return ok;
+    _pathPoints.front() = start;
+    if (_pathPoints.back() != end)
+        SetActualEndPosition(_pathPoints.back());
     return ok;
 }
 
 // Each leg is tested a yard above the path, the height the source walks through: the floor under the door frame is not the door.
-bool PathGenerator::FindClosedDoorOnPath(G3D::Vector3& hit) const
+bool PathGenerator::FindClosedDoorOnPath(G3D::Vector3& hit, std::vector<ClosedDoorShape> const* publishedDoors) const
 {
     Map const* map = _source->GetMap();
     if (!map)
         return false;
     G3D::Vector3 const lift(0.0f, 0.0f, 1.0f);
     for (std::size_t i = 1; i < _pathPoints.size(); ++i)
-        if (map->FindClosedDoorOnSegment(_source->GetPhaseShift(), _pathPoints[i - 1] + lift, _pathPoints[i] + lift, hit))
+        if (publishedDoors ? FindClosedDoorOnSegment(*publishedDoors, _source->GetPhaseShift(), _pathPoints[i - 1] + lift, _pathPoints[i] + lift, hit)
+                           : map->FindClosedDoorOnSegment(_source->GetPhaseShift(), _pathPoints[i - 1] + lift, _pathPoints[i] + lift, hit))
             return true;
     return false;
 }
@@ -427,6 +459,39 @@ dtPolyRef PathGenerator::GetPolyByLocation(float const* point, float* distance) 
     return INVALID_POLYREF;
 }
 
+// A swim leg from a to b: no model across it, never below the ground, and (underWater) in the water at every yard. A refused leg says
+// why in `why`, a model with its spawn and the point the line hit it.
+static bool SwimLegClear(Map* map, PhaseShift const& phase, G3D::Vector3 const& from, G3D::Vector3 const& to, bool underWater, std::string& why)
+{
+    if ((to - from).magnitude() < 0.1f)
+        return true;
+    if (!map->isInLineOfSight(phase, from.x, from.y, from.z + 0.3f, to.x, to.y, to.z + 0.3f, LINEOFSIGHT_CHECK_VMAP, VMAP::ModelIgnoreFlags::Nothing))
+    {
+        float hx = 0.0f, hy = 0.0f, hz = 0.0f, sx = 0.0f, sy = 0.0f, sz = 0.0f;
+        uint32 spawnId = 0;
+        uint8 spawnFlags = 0;
+        if (VMAP::VMapFactory::createOrGetVMapManager()->getFirstModelHit(
+                PhasingHandler::GetTerrainMapId(phase, map->GetId(), map->GetTerrain(), from.x, from.y), from.x, from.y, from.z + 0.3f,
+                to.x, to.y, to.z + 0.3f, VMAP::ModelIgnoreFlags::Nothing, hx, hy, hz, spawnId, spawnFlags, sx, sy, sz))
+            why = Trinity::StringFormat("a model stands on the way (spawn {} flags 0x{:X} at ({:.1f}, {:.1f}, {:.1f}), hit at ({:.2f}, {:.2f}, "
+                                        "{:.2f}), {:.2f} yd along the {:.2f} yd leg)", spawnId, uint32(spawnFlags), sx, sy, sz, hx, hy, hz, (G3D::Vector3(hx, hy, hz) - from).magnitude(), (to - from).magnitude());
+        else
+            why = "a model stands on the way";
+        return false;
+    }
+    uint32 const steps = std::max<uint32>(1, uint32(std::ceil((to - from).magnitude())));
+    for (uint32 i = 1; i <= steps; ++i)
+    {
+        G3D::Vector3 const q = from + (to - from) * (float(i) / float(steps));
+        float const ground = map->GetGridHeight(phase, q.x, q.y);
+        if (ground > INVALID_HEIGHT && q.z < ground - 0.5f)
+            return why = Trinity::StringFormat("the way runs into the ground at ({:.2f}, {:.2f}, {:.2f}), ground {:.2f}", q.x, q.y, q.z, ground), false;
+        if (underWater && !map->IsInWater(phase, q.x, q.y, q.z))
+            return why = Trinity::StringFormat("the way leaves the water at ({:.2f}, {:.2f}, {:.2f})", q.x, q.y, q.z), false;
+    }
+    return true;
+}
+
 void PathGenerator::BuildPolyPath(G3D::Vector3 const& startPos, G3D::Vector3 const& endPos)
 {
     // *** getting start/end poly logic ***
@@ -463,6 +528,27 @@ void PathGenerator::BuildPolyPath(G3D::Vector3 const& startPos, G3D::Vector3 con
                     break;
                 }
             }
+        }
+
+        // A swimming player goes where the water is, the way a creature that swims does above. The navmesh holds deep water as its
+        // surface: a sea bed deeper than the polygon search under it has no polygon at all, so a path from the surface to a mob on that
+        // bed (Saltscale murlocs on the Vile Reef, 66 yd under the surface) found no end polygon and came back NOPATH. Every bot told
+        // to attack one floated over it and gave up (gefest, Discord 2026-11-16; vile_reef_fight af40 19 Nov: no member reached the
+        // mob in 90 s, chase "no path" for all). The player starts in the water, and the straight swim stays in it, clear of models
+        // and above the ground at every yard (SwimLegClear), as the dive at the end of a polygon path below.
+        if (!path && !waterPath && _source->GetTypeId() == TYPEID_PLAYER && _source->ToUnit()->CanSwim() && _pathPoints.size() == 2)
+        {
+            Map* map = _source->GetMap();
+            PhaseShift const& phase = _source->GetPhaseShift();
+            G3D::Vector3 const& from = _pathPoints[0];
+            G3D::Vector3 const& to = _pathPoints[1];
+            std::string swimWhy;
+            if (!map->IsInWater(phase, from.x, from.y, from.z))
+                swimWhy = "the source is not in the water";
+            else if (SwimLegClear(map, phase, from, to, true, swimWhy))
+                waterPath = true;
+            if (!waterPath)
+                _incompleteReason = "no straight swim: " + swimWhy;
         }
 
         if (path || waterPath)
@@ -933,37 +1019,10 @@ void PathGenerator::BuildPointPath(const float *startPoint, const float *endPoin
         PhaseShift const& phase = _source->GetPhaseShift();
         constexpr float kDiveAcross = 10.0f;   // a short swim; past it the surface polygons should carry the path
         float const across = std::sqrt((end.x - last.x) * (end.x - last.x) + (end.y - last.y) * (end.y - last.y));
-        // A leg from a to b: no model across it, never below the ground, and (underWater) in the water at every yard. A refused leg
-        // says why in `why`, a model with its spawn and the point the line hit it.
+        // A leg from a to b (SwimLegClear).
         auto legClear = [&](G3D::Vector3 const& from, G3D::Vector3 const& to, bool underWater, std::string& why) -> bool
         {
-            if ((to - from).magnitude() < 0.1f)
-                return true;
-            if (!map->isInLineOfSight(phase, from.x, from.y, from.z + 0.3f, to.x, to.y, to.z + 0.3f, LINEOFSIGHT_CHECK_VMAP, VMAP::ModelIgnoreFlags::Nothing))
-            {
-                float hx = 0.0f, hy = 0.0f, hz = 0.0f, sx = 0.0f, sy = 0.0f, sz = 0.0f;
-                uint32 spawnId = 0;
-                uint8 spawnFlags = 0;
-                if (VMAP::VMapFactory::createOrGetVMapManager()->getFirstModelHit(
-                        PhasingHandler::GetTerrainMapId(phase, map->GetId(), map->GetTerrain(), from.x, from.y), from.x, from.y, from.z + 0.3f,
-                        to.x, to.y, to.z + 0.3f, VMAP::ModelIgnoreFlags::Nothing, hx, hy, hz, spawnId, spawnFlags, sx, sy, sz))
-                    why = Trinity::StringFormat("a model stands on the way (spawn {} flags 0x{:X} at ({:.1f}, {:.1f}, {:.1f}), hit at ({:.2f}, {:.2f}, "
-                                                "{:.2f}), {:.2f} yd along the {:.2f} yd leg)", spawnId, uint32(spawnFlags), sx, sy, sz, hx, hy, hz, (G3D::Vector3(hx, hy, hz) - from).magnitude(), (to - from).magnitude());
-                else
-                    why = "a model stands on the way";
-                return false;
-            }
-            uint32 const steps = std::max<uint32>(1, uint32(std::ceil((to - from).magnitude())));
-            for (uint32 i = 1; i <= steps; ++i)
-            {
-                G3D::Vector3 const q = from + (to - from) * (float(i) / float(steps));
-                float const ground = map->GetGridHeight(phase, q.x, q.y);
-                if (ground > INVALID_HEIGHT && q.z < ground - 0.5f)
-                    return why = Trinity::StringFormat("the way runs into the ground at ({:.2f}, {:.2f}, {:.2f}), ground {:.2f}", q.x, q.y, q.z, ground), false;
-                if (underWater && !map->IsInWater(phase, q.x, q.y, q.z))
-                    return why = Trinity::StringFormat("the way leaves the water at ({:.2f}, {:.2f}, {:.2f})", q.x, q.y, q.z), false;
-            }
-            return true;
+            return SwimLegClear(map, phase, from, to, underWater, why);
         };
         // only a destination under the water below the path's end is a dive; anything else is no business of this step
         if (end.z < last.z - 0.5f && map->IsUnderWater(phase, end.x, end.y, end.z))
@@ -1195,6 +1254,15 @@ void PathGenerator::CreateFilter()
         // steep terrain; the exclusion only ever blocked START/END
         // resolution, never improved walk safety.
         includeFlags |= (NAV_GROUND | NAV_GROUND_STEEP | NAV_WATER | NAV_MAGMA_SLIME);
+
+        // A player walking into magma burns (Player::HandleDrowning), so a server-made path for a player (a bot, a charmed or
+        // scripted move) keeps out of it wherever ground goes round: a yard of magma or slime costs as much as kHazardLiquidCost
+        // yards of ground. It stays included, so a path out of it, or one that has no other way, is still found.
+        // The Shaper's Terrace 2026-11-20 (shapers_full af53): the way from the landing to Venomridge runs along the edge of the
+        // Tar Pits; Detour cut the corner across the tar, the steps along that path ended in tar, the bots' move gate refused
+        // every one of them as a hazard and the group stood at the edge for 120 s. The dry way round is about as long.
+        constexpr float kHazardLiquidCost = 10.0f;
+        _filter.setAreaCost(NAV_AREA_MAGMA_SLIME, kHazardLiquidCost);
     }
 
     // Road-aware mmaps: always include NAV_ROAD so road-tagged polygons are

@@ -157,9 +157,14 @@ ByteBuffer& operator<<(ByteBuffer& data, PVPBracketData const& bracket)
 
 ByteBuffer& operator<<(ByteBuffer& data, TraitInspectInfo const& traits)
 {
+    data << int32(traits.Unknown1);
+    data << int32(traits.Unknown2);
     data << int32(traits.PlayerLevel);
     data << int32(traits.SpecID);
     data << traits.ActiveCombatTraits;
+    data << Size<uint32>(traits.ExtraEntries);
+    for (Traits::TraitEntry const& traitEntry : traits.ExtraEntries)
+        data << traitEntry;
 
     return data;
 }

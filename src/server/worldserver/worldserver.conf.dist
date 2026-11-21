@@ -1395,10 +1395,10 @@ Quests.HighLevelHideDiff = 2
 #
 #    Quests.LogSize
 #        Description: How many quests a character can have in the quest log at once.
-#        Default:     35 - (The quest log of the Classic client)
-#                     40 - (The most the server can hold)
+#        Default:     40 - (WoW Forever: 40 quests, double the 20 of vanilla; the most the server can hold)
+#                     35 - (retail)
 
-Quests.LogSize = 35
+Quests.LogSize = 40
 
 #
 #    Quests.IgnoreRaid
@@ -2759,13 +2759,13 @@ Rate.Talent = 1
 
 #
 #    Rate.XP.DungeonKill
-#        Description: Extra experience for killing creatures in 5 player dungeons (raids not included), on top of
-#                     Rate.XP.Kill and the vanilla elite bonus.
-#        Default:     1.8 - (WoW Forever live: +20% from October 8 2026, then +50% from the November 8 2026 hotfix)
-#                     1.2 - (WoW Forever before the November 8 2026 hotfix)
-#                     1   - (Vanilla, no extra dungeon experience)
+#        Description: Experience for killing creatures in 5 player dungeons (raids not included), as a share of the
+#                     Classic Era value (Rate.XP.Kill and the vanilla elite bonus apply on top).
+#        Default:     0.6 - (WoW Forever live: 60% of Classic Era since the November 8 2026 hotfix, Blizzard November 10)
+#                     0.4 - (WoW Forever before the November 8 2026 hotfix)
+#                     1   - (Classic Era / vanilla)
 
-Rate.XP.DungeonKill = 1.8
+Rate.XP.DungeonKill = 0.6
 
 #
 #    Rate.XP.BattlegroundKill
@@ -2777,12 +2777,19 @@ Rate.XP.BattlegroundKill = 1
 
 #
 #    Rate.Quest.Money.Reward
-#    Rate.Quest.Money.Max.Level.Reward
 #        Description: Multiplier for money quest rewards. Can not be below 0.
 #        Default:     1
 
 Rate.Quest.Money.Reward = 1
-Rate.Quest.Money.Max.Level.Reward = 1
+
+#
+#    Rate.Quest.Money.Max.Level.Reward
+#        Description: Multiplier for the gold a quest pays at the level cap in place of its experience. The quest's own
+#                     gold reward is paid either way.
+#        Default:     0 - (WoW Forever live: no gold for quest experience at level 60)
+#                     1 - (Classic Era / vanilla)
+
+Rate.Quest.Money.Max.Level.Reward = 0
 
 #
 #    Rate.RepairCost
@@ -5232,6 +5239,15 @@ Classic.ForeverCreatureHealth = 0
 
 Classic.ForeverKillXp = 0
 
+#    Classic.DungeonCarryXpBlock
+#        Description: No kill experience for anyone in a party in a 5 player dungeon while its highest level member in reward
+#                     range is more than 12 levels above the enemy (WoW Forever hotfixes of November 13 and 14 2026: no
+#                     dungeon carries for experience). Open world and raid kills are not affected.
+#        Default:     1 - (Enabled, WoW Forever live)
+#                     0 - (Disabled, vanilla)
+
+Classic.DungeonCarryXpBlock = 1
+
 #    Classic.CreatureSpellLevelScaling
 #        Description: Vanilla creature spells flagged "scales with creature level" (Fireball 20793, Lightning Bolt 9532,
 #                     Shadow Bolt 9613...) carry the numbers of their spell level. As in vanilla, a creature's level scales
@@ -5288,6 +5304,16 @@ Forever.VanillaAoE = 0
 #                     1 - (Enabled, old behaviour)
 
 Classic.AutoEquipNewBags = 0
+
+#    Classic.FirstTagOwnsMob
+#        Description: Classic mob tagging. The first player or bot to hit a mob owns it, together with their group: only
+#                     they get its loot, experience and quest credit, and the mob shows grey to everyone else. Others can
+#                     still hit it but get nothing (a player who joins the owner's group later shares the tag).
+#                     When off, up to five players or groups that hit a mob all share it (WoW Forever).
+#        Default:     0 - (Disabled, shared tagging)
+#                     1 - (Enabled, the first tag owns the mob)
+
+Classic.FirstTagOwnsMob = 0
 
 #    Classic.ScourgeInvasion
 #        Description: The Scourge Invasion world event (the Naxxramas opening): necropolises attack six zones in turn,

@@ -936,6 +936,11 @@ struct TC_GAME_API ItemTemplate
     std::bitset<MAX_CLASSES * MAX_SPECIALIZATIONS> Specializations[3];  // one set for 1-40 level range and another for 41-109 and one for 110
     uint32 ItemSpecClassMask;
     int32 QuestLogItemId;
+    // Classic 1.60: the vanilla weapon damage (classic_item_damage). The client data only gives an item level, and the item level
+    // tables match vanilla for melee weapons alone: bows, guns, crossbows, wands, thrown and caster weapons were hand-set in vanilla.
+    // 0 = not set, the item level tables apply.
+    float ClassicMinDamage;
+    float ClassicMaxDamage;
 
     // helpers
     bool CanChangeEquipStateInCombat() const;
@@ -991,7 +996,13 @@ struct TC_GAME_API ItemTemplate
     char const* GetDefaultLocaleName() const;
     uint32 GetArmor(uint32 itemLevel) const;
     float GetDPS(uint32 itemLevel) const;
+    float GetClassicDPS(uint32 itemLevel, bool reducedCasterDps) const;
+    float GetClassicBonusArmor() const;
+    float GetTableDPS(uint32 itemLevel) const;
+    float GetClassicDamageScale(uint32 itemLevel) const;
     void GetDamage(uint32 itemLevel, float& minDamage, float& maxDamage) const;
+    // Classic 1.60 (WoW Forever): a caster weapon's implicit spell power (ItemSparse Flags[3] 0x200) or healing and damage (0x400)
+    void GetClassicCasterPower(uint32 itemLevel, int32& spellPower, int32& healing, int32& damage) const;
     bool IsUsableByLootSpecialization(Player const* player, bool alwaysAllowBoundToAccount) const;
     static std::size_t CalculateItemSpecBit(ChrSpecializationEntry const* spec);
     TransmogOutfitSlotOption GetWeaponTransmogOutfitSlotOption() const;

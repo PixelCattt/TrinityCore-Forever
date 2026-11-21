@@ -235,7 +235,10 @@ Check stdout above; usual culprits: CASC init failure, wrong client path, antivi
     if (Test-Done 'vmaps') { Write-Host "Already done (resuming)." }
     else {
     if ($Resume) { foreach ($junk in 'Buildings', 'dir_bin') { Remove-Item (Join-Path $OutputPath $junk) -Recurse -Force -ErrorAction SilentlyContinue } }   # a half-finished earlier run
-    $vmapArgs = @("-d", "$ClientPath") + $productArgs
+    # The same language as mapextractor: without -dl it takes the first locale CASC lists (enUS), and a client that only has zhTW
+    # downloaded then can't read Map.db2 (FILE_OFFLINE, exit code 1; Discord 2026-11-19).
+    $localeArgs = @("-dl", $Locale)
+    $vmapArgs = @("-d", "$ClientPath") + $productArgs + $localeArgs
     if ($Threads -gt 0) { $vmapArgs += @("--threads", "$Threads") }
     & ".\vmap4extractor.exe" @vmapArgs
     $vmapExit = $LASTEXITCODE
@@ -244,7 +247,7 @@ Check stdout above; usual culprits: CASC init failure, wrong client path, antivi
         # The first exit code stays in the log so the crash itself can be looked into.
         Write-Warning ("vmap4extractor stopped with exit code $vmapExit ({0}). Trying again on one thread (slower)..." -f ('0x{0:X8}' -f $vmapExit))
         foreach ($junk in 'Buildings', 'dir_bin') { Remove-Item (Join-Path $OutputPath $junk) -Recurse -Force -ErrorAction SilentlyContinue }
-        & ".\vmap4extractor.exe" (@("-d", "$ClientPath") + $productArgs + @("--threads", "1"))
+        & ".\vmap4extractor.exe" (@("-d", "$ClientPath") + $productArgs + $localeArgs + @("--threads", "1"))
         $vmapExit = $LASTEXITCODE
     }
     if ($vmapExit -ne 0) {

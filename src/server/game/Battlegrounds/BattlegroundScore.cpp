@@ -82,11 +82,11 @@ void BattlegroundScore::UpdatePvpStat(uint32 pvpStatID, uint32 value)
 
 uint32 BattlegroundScore::GetAttr(uint8 index) const
 {
-    auto const& itr = std::next(PvpStats.begin(), index);
-    if (itr == PvpStats.end())
+    // the statistics row asks for 5 values; a map with fewer pvp stats must not step past the end of the list
+    if (index >= PvpStats.size())
         return 0;
 
-    return itr->second;
+    return std::next(PvpStats.begin(), index)->second;
 }
 
 void BattlegroundScore::BuildPvPLogPlayerDataPacket(WorldPackets::Battleground::PVPMatchStatistics::PVPMatchPlayerStatistics& playerData) const

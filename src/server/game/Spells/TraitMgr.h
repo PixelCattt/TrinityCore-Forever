@@ -70,6 +70,7 @@ struct PlayerDataAccessor
     int32 GetClassicTalentedStartLevel() const;
     bool IsQuestRewarded(int32 questId) const;
     bool HasAchieved(int32 achievementId) const;
+    bool HasAchievedOnAccount(int32 achievementId) const;   // Classic 1.60 Legacy Points challenges count for the account
     uint32 GetPrimarySpecialization() const;
     std::variant<int64, float> GetDataElementAccount(uint32 dataElementId) const;
     std::variant<int64, float> GetDataElementCharacter(uint32 dataElementId) const;

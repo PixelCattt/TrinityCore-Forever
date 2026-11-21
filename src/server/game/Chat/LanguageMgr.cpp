@@ -54,21 +54,24 @@ void LanguageMgr::LoadLanguages()
     for (LanguagesEntry const* langEntry : sLanguagesStore)
     {
         auto spellsRange = Trinity::Containers::MapEqualRange(_langsMap, langEntry->ID);
+        // Classic 1.60: a language no spell teaches (Thalassian 10, Titan 9, Kalimag 12, Pandaren 42, Shen'dorei 310 in the 1.60
+        // client) has no skill line a player can rank. It was registered without a skill, which let every player speak it, while
+        // nobody could understand it (CanUnderstandLanguage needs the skill). The official realm gives such a line 0/0 to everyone
+        // (Thalassian 137 for a Dwarf, 70938 login sniffs). It stays a valid language (IsLanguageExist, creature texts) with no
+        // entry here, so the chat check refuses it as not learned.
         if (spellsRange.begin() == spellsRange.end())
-            _langsMap.emplace(langEntry->ID, LanguageDesc());
-        else
-        {
-            std::vector<LanguageDesc> langsWithSkill;
-            for (LanguagesMap::value_type const& spellItr : spellsRange)
-                for (SkillLineAbilityMap::value_type const& skillPair : Trinity::Containers::MakeIteratorPair(sSpellMgr->GetSkillLineAbilityMapBounds(spellItr.second.SpellId)))
-                    langsWithSkill.emplace_back(LanguageDesc{ spellItr.second.SpellId, uint32(skillPair.second->SkillLine) });
+            continue;
 
-            for (LanguageDesc const& langDesc : langsWithSkill)
-            {
-                // erase temporary assignment that lacked skill
-                Trinity::Containers::MultimapErasePair(_langsMap, langEntry->ID, { langDesc.SpellId, 0 });
-                _langsMap.emplace(langEntry->ID, langDesc);
-            }
+        std::vector<LanguageDesc> langsWithSkill;
+        for (LanguagesMap::value_type const& spellItr : spellsRange)
+            for (SkillLineAbilityMap::value_type const& skillPair : Trinity::Containers::MakeIteratorPair(sSpellMgr->GetSkillLineAbilityMapBounds(spellItr.second.SpellId)))
+                langsWithSkill.emplace_back(LanguageDesc{ spellItr.second.SpellId, uint32(skillPair.second->SkillLine) });
+
+        for (LanguageDesc const& langDesc : langsWithSkill)
+        {
+            // erase temporary assignment that lacked skill
+            Trinity::Containers::MultimapErasePair(_langsMap, langEntry->ID, { langDesc.SpellId, 0 });
+            _langsMap.emplace(langEntry->ID, langDesc);
         }
     }
 

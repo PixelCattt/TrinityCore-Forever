@@ -2321,6 +2321,46 @@ uint32 Item::GetSellPrice(ItemTemplate const* proto, uint32 /*quality*/, uint32 
     return proto->GetSellPrice();
 }
 
+// Classic 1.60 (WoW Forever): a weapon flagged REDUCED_CASTER_DPS (ItemSparse Flags[3] 0x100, 165 caster weapons) or carrying a random
+// suffix with an ItemBonus type 54 row (of the Sorcerer, Physician, Healing...) deals 2/3 (one-hand) or 29/39 (two-hand) of its damage
+// table cell; the game files' caster tables equal the regular ones. These shares reproduce the in-game range of all 165 flagged weapons
+// and of Brutal War Axe of the Physician, 43 - 66 (wowsims/forever, MIT, tools/database/dbc/item_damage.go, docs/evidence EV-0097,
+// EV-0110). Without them Death Speaker Scepter hit for 42 - 78 where the game shows 28 - 52.
+float Item::GetClassicWeaponDPS(Player const* owner) const
+{
+    return GetTemplate()->GetClassicDPS(GetItemLevel(owner), _bonusData.ClassicReducedCasterDps);
+}
+
+// Classic 1.60 (WoW Forever): the equipped damage range, the table DPS spread by the item's damage variance plus the item's
+// QualityModifier per second (a negative one on Benediction and three AQ20 weapons), the low end rounded down, the high end to nearest,
+// a negative end made 1 (wowsims/forever, MIT, tools/database/dbc/item_damage.go WeaponDamage, EV-0097). Retail left QualityModifier out.
+void Item::GetClassicWeaponDamage(Player const* owner, float& minDamage, float& maxDamage) const
+{
+    minDamage = maxDamage = 0.0f;
+    ItemTemplate const* proto = GetTemplate();
+    // a classic_item_damage row is already the in-game range (caster share and QualityModifier included)
+    if (proto->ClassicMinDamage > 0.0f && proto->GetDelay())
+    {
+        proto->GetDamage(GetItemLevel(owner), minDamage, maxDamage);
+        return;
+    }
+
+    float const dps = GetClassicWeaponDPS(owner);
+    if (dps <= 0.0f)
+        return;
+
+    float const speed = proto->GetDelay() * 0.001f;
+    float const qualityModifier = proto->GetQualityModifier() * speed;
+    float low = dps * speed * (1.0f - proto->GetDmgVariance() * 0.5f) + qualityModifier;
+    float high = dps * speed * (1.0f + proto->GetDmgVariance() * 0.5f) + qualityModifier;
+    if (low < 0.0f)
+        low = 1.0f;
+    if (high < 0.0f)
+        high = 1.0f;
+    minDamage = std::floor(low);
+    maxDamage = std::floor(high + 0.5f);
+}
+
 uint32 Item::GetItemLevel(Player const* owner) const
 {
     ItemTemplate const* itemTemplate = GetTemplate();
@@ -3042,6 +3082,7 @@ void BonusData::Initialize(ItemTemplate const* proto)
     CanDisenchant = !proto->HasFlag(ITEM_FLAG_NO_DISENCHANT);
     CanScrap = proto->HasFlag(ITEM_FLAG4_SCRAPABLE);
     CanSalvage = !proto->HasFlag(ITEM_FLAG4_NO_SALVAGE);
+    ClassicReducedCasterDps = proto->HasFlag(ITEM_FLAG4_REGULATED_COMMODITY);   // Forever reuses bit 0x100 as REDUCED_CASTER_DPS
     CanRecraft = proto->HasFlag(ITEM_FLAG4_RECRAFTABLE);
     CannotTradeBindOnPickup = proto->HasFlag(ITEM_FLAG2_NO_TRADE_BIND_ON_ACQUIRE);
     IgnoreSquish = false;
@@ -3103,6 +3144,9 @@ void BonusData::AddBonus(uint32 type, std::array<int32, 4> const& values)
             }
             break;
         }
+        case ITEM_BONUS_CLASSIC_REDUCED_CASTER_DPS:
+            ClassicReducedCasterDps = true;
+            break;
         case ITEM_BONUS_QUALITY:
             if (!_state.HasQualityBonus)
             {

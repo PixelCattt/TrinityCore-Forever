@@ -1187,7 +1187,40 @@ void UnitData::WriteCreate(EnumFlag<UpdateFieldFlag> fieldVisibilityFlags, ByteB
     data << uint8(ViewerDependentValue<PvpFlagsTag>::GetValue(this, receiver, owner));
     data << uint8(PetFlags);
     data << uint8(ShapeshiftForm);
-    if (fieldVisibilityFlags.HasFlag(UpdateFieldFlag::Owner))
+    // Client 70425 and later (official 70959 create of a level 10 hunter, character window Ranged 17 - 23, RAP 62: the floats 17.74 and
+    // 22.74 are 333 bytes after MinDamage, RAP 62 is 40 bytes after AttackPower 57, the weapon attack powers 89 7 50 follow the four
+    // RAP modifiers, LookAtControllerID -1 is 12 fields after HoverHeight): the attack power block has 25 fields before HoverHeight,
+    // five of them unknown and zero between AttackPowerModSupport and RangedAttackPower. The three int32 that were sent after
+    // TaxiNodesID are these (the stream from CurrentAreaID on is unchanged). Sent at the old places, the client read RAP from
+    // RangedAttackPowerModNeg and the ranged damage from the weapon attack powers: the hunter's ranged damage showed as nothing.
+    // The order of the zero fields in the melee part is not proven yet (all zero in that capture).
+    if (ClassicOpcodes::IsBuild70425OrLater() && fieldVisibilityFlags.HasFlag(UpdateFieldFlag::Owner))
+    {
+        data << int32(AttackPower);
+        data << int32(AttackPowerModPos);
+        data << int32(AttackPowerModNeg);
+        data << float(AttackPowerMultiplier);
+        data << int32(AttackPowerModSupport);
+        data << int32(0);
+        data << int32(0);
+        data << int32(0);
+        data << int32(0);
+        data << int32(0);
+        data << int32(RangedAttackPower);
+        data << int32(RangedAttackPowerModPos);
+        data << int32(RangedAttackPowerModNeg);
+        data << float(RangedAttackPowerMultiplier);
+        data << int32(RangedAttackPowerModSupport);
+        data << int32(MainHandWeaponAttackPower);
+        data << int32(OffHandWeaponAttackPower);
+        data << int32(RangedWeaponAttackPower);
+        data << int32(SetAttackSpeedAura);
+        data << float(Lifesteal);
+        data << float(MinRangedDamage);
+        data << float(MaxRangedDamage);
+        data << float(ManaCostMultiplier);
+    }
+    else if (fieldVisibilityFlags.HasFlag(UpdateFieldFlag::Owner))
     {
         data << int32(AttackPower);
         data << int32(AttackPowerModPos);
@@ -1226,14 +1259,8 @@ void UnitData::WriteCreate(EnumFlag<UpdateFieldFlag> fieldVisibilityFlags, ByteB
     data << int32(LookAtControllerID);
     data << int32(PerksVendorItemID);
     data << int32(TaxiNodesID);
-    // client 70425: three int32 after TaxiNodesID, owner only (client UnitData +0x280/+0x284/+0x288, create reader rva 0x37CD0ED;
-    // GuildGUID moved from +0x280 to +0x290). Sent to other viewers they misalign the PlayerData that follows in the create of a player.
-    if (ClassicOpcodes::IsBuild70425OrLater() && fieldVisibilityFlags.HasFlag(UpdateFieldFlag::Owner))
-    {
-        data << int32(0);
-        data << int32(0);
-        data << int32(0);
-    }
+    // client 70425: the three owner-only int32 (client UnitData +0x280/+0x284/+0x288, GuildGUID moved from +0x280 to +0x290) are
+    // in the attack power block of the create, above, not here: the 70959 create has GuildGUID 14 fields after HoverHeight.
     data << *GuildGUID;
     data << uint32(PassiveSpells.size());
     data << uint32(WorldEffects.size());

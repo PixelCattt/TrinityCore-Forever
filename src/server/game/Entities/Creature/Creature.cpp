@@ -1394,7 +1394,11 @@ void Creature::SetTappedBy(Unit const* unit, bool withGroup)
         return;
     }
 
-    if (m_tapList.size() >= CREATURE_TAPPERS_SOFT_CAP)
+    // Classic.FirstTagOwnsMob (off by default; idea from the Everlake core, written as our own code): the first player or bot to hit the
+    // mob owns it with their group. A later hitter gets a share only when its group already holds the tag (it joined the owner's group
+    // after the tag); anyone else gets nothing. The owners are never limited by the soft cap, which is for shared tagging.
+    bool const firstTagOwns = sWorld->getBoolConfig(CONFIG_CLASSIC_FIRST_TAG_OWNS_MOB);
+    if (!firstTagOwns && m_tapList.size() >= CREATURE_TAPPERS_SOFT_CAP)
         return;
 
     if (unit->GetTypeId() != TYPEID_PLAYER && !unit->IsVehicle())
@@ -1403,6 +1407,22 @@ void Creature::SetTappedBy(Unit const* unit, bool withGroup)
     Player* player = unit->GetCharmerOrOwnerPlayerOrPlayerItself();
     if (!player)                                             // normal creature, no player involved
         return;
+
+    if (firstTagOwns && !m_tapList.empty())
+    {
+        if (m_tapList.contains(player->GetGUID()))
+            return;
+        bool ownersGroup = false;
+        if (Group const* group = player->GetGroup())
+            for (GroupReference const& itr : group->GetMembers())
+                if (m_tapList.contains(itr.GetSource()->GetGUID()))
+                {
+                    ownersGroup = true;
+                    break;
+                }
+        if (!ownersGroup)
+            return;
+    }
 
     m_tapList.insert(player->GetGUID());
     if (withGroup)
@@ -1418,7 +1438,8 @@ void Creature::SetTappedBy(Unit const* unit, bool withGroup)
         }
     }
 
-    if (m_tapList.size() >= CREATURE_TAPPERS_SOFT_CAP)
+    // grey for everyone outside the tap list (ViewerDependentValues): at once when the first tag owns the mob, at the cap when shared
+    if (firstTagOwns || m_tapList.size() >= CREATURE_TAPPERS_SOFT_CAP)
         SetDynamicFlag(UNIT_DYNFLAG_TAPPED);
 }
 

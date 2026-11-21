@@ -384,6 +384,28 @@ void PlayerAchievementMgr::SendAllData(Player const* /*receiver*/) const
         }
     }
 
+    // Classic 1.60: the client counts Legacy Points from the challenges it sees as done, and they are the account's, so the ones
+    // another character of the account did are sent too, under that character (Player::_LoadAccountLegacyAchievements)
+    for (auto const& [achievementId, done] : _owner->GetAccountLegacyAchievements())
+    {
+        if (_completedAchievements.contains(achievementId))
+            continue;
+
+        AchievementEntry const* achievement = sAchievementStore.LookupEntry(achievementId);
+        if (!achievement || achievement->Flags & ACHIEVEMENT_FLAG_HIDDEN)
+            continue;
+
+        WorldPackets::Achievement::EarnedAchievement& earned = achievementData.Data.Earned.emplace_back();
+        earned.Id = achievementId;
+        earned.Date.SetUtcTimeFromUnixTime(done.Date);
+        earned.Date += _owner->GetSession()->GetTimezoneOffset();
+        if (!(achievement->Flags & ACHIEVEMENT_FLAG_ACCOUNT))
+        {
+            earned.Owner = done.Owner;
+            earned.VirtualRealmAddress = earned.NativeRealmAddress = _owner->m_playerData->VirtualPlayerRealm;
+        }
+    }
+
     for (std::pair<uint32 const, CriteriaProgress> const& criteriaProgres : _criteriaProgress)
     {
         Criteria const* criteria = sCriteriaMgr->GetCriteria(criteriaProgres.first);

@@ -91,6 +91,8 @@ void PlayerSocial::RemoveFromSocialList(ObjectGuid const& friendGuid, SocialFlag
 
     itr->second.Flags &= ~flag;
 
+    ObjectGuid accountGuid = itr->second.WowAccountGuid;
+
     if (!itr->second.Flags)
     {
         CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_DEL_CHARACTER_SOCIAL);
@@ -100,20 +102,7 @@ void PlayerSocial::RemoveFromSocialList(ObjectGuid const& friendGuid, SocialFlag
 
         CharacterDatabase.Execute(stmt);
 
-        ObjectGuid accountGuid = itr->second.WowAccountGuid;
-
         _playerSocialMap.erase(itr);
-
-        if (flag & SOCIAL_FLAG_IGNORED)
-        {
-            auto otherIgnoreForAccount = std::find_if(_playerSocialMap.begin(), _playerSocialMap.end(), [&](PlayerSocialMap::value_type const& social)
-            {
-                return social.second.Flags & SOCIAL_FLAG_IGNORED && social.second.WowAccountGuid == accountGuid;
-            });
-
-            if (otherIgnoreForAccount == _playerSocialMap.end())
-                _ignoredAccounts.erase(accountGuid);
-        }
     }
     else
     {
@@ -124,6 +113,19 @@ void PlayerSocial::RemoveFromSocialList(ObjectGuid const& friendGuid, SocialFlag
         stmt->setUInt64(2, friendGuid.GetCounter());
 
         CharacterDatabase.Execute(stmt);
+    }
+
+    // the account stays ignored only while another character of it is still ignored. This ran only when the whole entry went,
+    // so taking a friend off the ignore list (the entry stays as a friend) kept the account ignored until the next login.
+    if (flag & SOCIAL_FLAG_IGNORED)
+    {
+        auto otherIgnoreForAccount = std::find_if(_playerSocialMap.begin(), _playerSocialMap.end(), [&](PlayerSocialMap::value_type const& social)
+        {
+            return social.second.Flags & SOCIAL_FLAG_IGNORED && social.second.WowAccountGuid == accountGuid;
+        });
+
+        if (otherIgnoreForAccount == _playerSocialMap.end())
+            _ignoredAccounts.erase(accountGuid);
     }
 }
 

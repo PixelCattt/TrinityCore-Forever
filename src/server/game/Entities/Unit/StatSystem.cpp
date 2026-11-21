@@ -272,6 +272,9 @@ void Player::UpdateResistances(uint32 school)
         UpdateArmor();
 }
 
+static constexpr uint32 CLASSIC_SPELL_DRUID_ENRAGE = 5229;
+static constexpr uint32 CLASSIC_SPELL_DRUID_THICK_HIDE_ARMOR = 9970701;    // serverside: Thick Hide's armor (classic_talents_warlock_druid.cpp)
+
 void Player::UpdateArmor()
 {
     UnitMods unitMod = UNIT_MOD_ARMOR;
@@ -290,9 +293,33 @@ void Player::UpdateArmor()
 
     float baseValue = value;
 
+    // Classic 1.60 (WoW Forever): SPELL_AURA_MOD_BONUS_ARMOR_PCT (Bear Form 180%, Dire Bear Form and Moonkin Form 360%) multiplies the
+    // armor of the equipped items only; the armor from Agility and from buffs (Mark of the Wild, Devotion Aura) stays whole. Druid logs read
+    // 1.8 and 3.6 times the items' armor added and nothing more (wowsims/forever, MIT, docs/evidence EV-0037).
+    // Thick Hide's armor is scaled by the form as well: 30 in Cat Form, 84 in Bear Form at rank 1, level 30 (EV-0039).
+    float itemArmor = std::max(m_classicItemArmor, 0.0f);
+    float thickHideArmor = 0.0f;
+    if (AuraEffect const* thickHide = GetAuraEffect(CLASSIC_SPELL_DRUID_THICK_HIDE_ARMOR, EFFECT_0))
+        thickHideArmor = std::max(float(thickHide->GetAmount()), 0.0f);
+    float const formArmorMultiplier = GetTotalAuraMultiplier(SPELL_AURA_MOD_BONUS_ARMOR_PCT);
     value += GetFlatModifierValue(unitMod, TOTAL_VALUE);        // bonus armor from auras and items
+    value += (itemArmor + thickHideArmor) * (formArmorMultiplier - 1.0f);
+
+    // Classic 1.60 (WoW Forever): Enrage 5229 "reduces base armor by 27% in Bear Form and 16% in Dire Bear Form" (effect 3, a dummy). The
+    // game takes the share of the items' armor after the form's multiplier and of the 2 armor per Agility; buff armor, Thick Hide and
+    // the level stay whole (wowsims/forever, MIT, docs/evidence EV-0032, EV-0109: 1206 -> 962 = 0.27 x 904; EV-0034 for Dire Bear Form).
+    if (HasAura(CLASSIC_SPELL_DRUID_ENRAGE))
+    {
+        float enragePenalty = 0.0f;
+        if (GetShapeshiftForm() == FORM_BEAR_FORM)
+            enragePenalty = 0.27f;
+        else if (GetShapeshiftForm() == FORM_DIRE_BEAR_FORM)
+            enragePenalty = 0.16f;
+        value -= enragePenalty * (itemArmor * formArmorMultiplier + GetStat(STAT_AGILITY) * 2.0f);
+    }
+
     value *= GetPctModifierValue(unitMod, TOTAL_PCT);
-    value *= GetTotalAuraMultiplier(SPELL_AURA_MOD_BONUS_ARMOR_PCT);
+    value = std::max(value, 0.0f);
 
     SetArmor(int32(value), int32(value - baseValue));
 
@@ -617,12 +644,22 @@ void Player::CalculateMinMaxDamage(WeaponAttackType attType, bool normalized, bo
     SpellShapeshiftFormEntry const* shapeshift = sSpellShapeshiftFormStore.LookupEntry(GetShapeshiftForm());
     if (shapeshift && shapeshift->CombatRoundTime)
     {
-        // Classic 1.60 (vanilla, VMaNGOS Player::CalculateMinMaxDamage): in cat and bear form the equipped weapon's damage is ignored; the
-        // range is level * 0.85 .. level * 1.25 (level capped at 60) times the form's speed. Rescaling the weapon kept a Forever staff's
-        // full swing damage in every cat hit (druid 156: about 350 per white swing against 91 from attack power).
-        float const formLevel = float(std::min<uint32>(GetLevel(), 60));
-        weaponMinDamage = formLevel * 0.85f * attackPowerMod;
-        weaponMaxDamage = formLevel * 1.25f * attackPowerMod;
+        // Classic 1.60 (WoW Forever): the paw takes the main-hand weapon's damage table DPS (the item's own damage range and speed left out)
+        // times the form's swing time (1 s Cat, 2.5 s Bear and Dire Bear), spread by the form's DamageVariance (0.4: +-20%), the low end
+        // rounded down and the high end to nearest, at least 1; with no weapon it is 1 - 1 (wowsims/forever, MIT, sim/druid/forms.go,
+        // docs/evidence EV-0041). A 60 DPS staff gives a cat 48 - 72 before attack power. Vanilla (VMaNGOS) ignored the weapon and used
+        // level * 0.85 .. level * 1.25 times the form's speed. Scaling the weapon's own range kept a staff's full swing damage in every
+        // cat hit (druid 156: about 350 per white swing against 91 from attack power).
+        float const formSpeed = shapeshift->CombatRoundTime / 1000.0f;
+        float const halfVariance = shapeshift->DamageVariance * 0.5f;
+        weaponMinDamage = 1.0f;
+        weaponMaxDamage = 1.0f;
+        if (Item const* weapon = GetUseableItemByPos(INVENTORY_SLOT_BAG_0, EQUIPMENT_SLOT_MAINHAND))
+        {
+            float const mean = weapon->GetClassicWeaponDPS(this) * formSpeed;   // a reduced caster weapon's share included (EV-0097)
+            weaponMinDamage = std::max(1.0f, std::floor(mean * (1.0f - halfVariance)));
+            weaponMaxDamage = std::max(1.0f, std::round(mean * (1.0f + halfVariance)));
+        }
     }
     else if (!CanUseAttackType(attType)) // check if player not in form but still can't use (disarm case)
     {
@@ -1062,8 +1099,14 @@ void Player::UpdatePowerRegen(Powers power)
     if (PowerRegenInfo[AsUnderlyingType(power)])
         pct_modifier *= sWorld->getRate(*PowerRegenInfo[AsUnderlyingType(power)]); // Config rate
 
-    pct_modifier                *= GetTotalAuraMultiplierByMiscValue(SPELL_AURA_MOD_POWER_REGEN_PERCENT, AsUnderlyingType(power));
+    float const regenPercentAuras = GetTotalAuraMultiplierByMiscValue(SPELL_AURA_MOD_POWER_REGEN_PERCENT, AsUnderlyingType(power));
+    pct_modifier                *= regenPercentAuras;
     flat_modifier               += GetTotalAuraModifierByMiscValue(SPELL_AURA_MOD_POWER_REGEN, AsUnderlyingType(power)) / 5.f;
+    // Classic 1.60 (WoW Forever): Innervate's +400% (SPELL_AURA_MOD_POWER_REGEN_PERCENT) multiplies MP5 as well as the Spirit regen: the
+    // regen under it reads 5 x (Spirit regen + MP5) on 31 of 31 ledger lines, 10 of 10 with MP5 up. Periodic energize auras (Blessing of
+    // Wisdom, Mana Spring) are not regen and tick the same under it (wowsims/forever, MIT, docs/evidence EV-0114).
+    if (power == POWER_MANA)
+        flat_modifier           *= regenPercentAuras;
 
     result_regen                *= pct_modifier;
     result_regen_interrupted    *= pct_modifier;

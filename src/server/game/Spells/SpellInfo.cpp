@@ -32,6 +32,7 @@
 #include "Pet.h"
 #include "Player.h"
 #include "Random.h"
+#include "ClassicRounding.h"
 #include "Spell.h"
 #include "SpellAuraEffects.h"
 #include "SpellMgr.h"
@@ -548,9 +549,25 @@ static ClassicSpellValue::Value const* GetClassicValue(WorldObject const* caster
 {
     if (!caster)
         return nullptr;
+    spellId = sSpellMgr->GetClassicValueSpellId(spellId);     // a Forever copy of a legacy spell takes the legacy spell's row
     if (!ClassicSpellValue::AppliesToSpell(spellId))
         return nullptr;
     return sSpellMgr->GetClassicSpellValue(spellId, effectIndex);
+}
+
+bool SpellEffectInfo::ClassicRollsWholeAmount() const
+{
+    switch (Effect)
+    {
+        case SPELL_EFFECT_SCHOOL_DAMAGE:
+        case SPELL_EFFECT_POWER_DRAIN:
+        case SPELL_EFFECT_HEAL:
+        case SPELL_EFFECT_HEAL_MECHANICAL:
+        case SPELL_EFFECT_HEALTH_LEECH:
+            return _spellInfo->GetSchoolMask() != SPELL_SCHOOL_MASK_NORMAL;
+        default:
+            return false;
+    }
 }
 
 int32 SpellEffectInfo::CalcValueAsInt(WorldObject const* caster /*= nullptr*/, SpellEffectValue const* basePoints /*= nullptr*/, Unit const* target /*= nullptr*/, float* variance /*= nullptr*/, uint32 castItemId /*= 0*/, int32 itemLevel /*= -1*/) const
@@ -609,7 +626,11 @@ SpellEffectValue SpellEffectInfo::CalcValue(WorldObject const* caster /*= nullpt
     {
         float delta = fabs(scalingVariance * 0.5f);
         float valueVariance = frand(-delta, delta);
-        value += basePoints * valueVariance;
+        // Classic 1.60 (WoW Forever): a spell-school hit or heal rolls its whole amount, power included, once by +-Variance/2; the effect
+        // handler applies that roll after the bonuses (Spell::EffectSchoolDMG, EffectHeal, ...), so the base is not rolled here as well.
+        // A physical effect rolls its base only (wowsims/forever, MIT, docs/evidence EV-0106 and EV-0045, docs/rulings R-0033).
+        if (!variance || !ClassicRollsWholeAmount())
+            value += basePoints * valueVariance;
 
         if (variance)
             *variance = valueVariance;
@@ -666,15 +687,19 @@ SpellEffectValue SpellEffectInfo::CalcValue(WorldObject const* caster /*= nullpt
 
     switch (Effect)
     {
+        // Classic 1.60 (WoW Forever): a hit's or heal's amount rounds up with a chance equal to its fraction (ClassicRounding.h, EV-0095)
         case SPELL_EFFECT_SCHOOL_DAMAGE:
-        case SPELL_EFFECT_ENVIRONMENTAL_DAMAGE:
         case SPELL_EFFECT_HEALTH_LEECH:
         case SPELL_EFFECT_HEAL:
+        case SPELL_EFFECT_HEAL_MECHANICAL:
+            // a negative amount (a script's or row's deliberate one) keeps its sign: RoundByFraction answers 0 for anything below 1
+            value = value < 0.0 ? std::round(value) : ClassicRounding::RoundByFraction(value, rand_norm());
+            break;
+        case SPELL_EFFECT_ENVIRONMENTAL_DAMAGE:
         case SPELL_EFFECT_WEAPON_DAMAGE_NOSCHOOL:
         case SPELL_EFFECT_WEAPON_PERCENT_DAMAGE:
         case SPELL_EFFECT_WEAPON_DAMAGE:
         case SPELL_EFFECT_HEAL_MAX_HEALTH:
-        case SPELL_EFFECT_HEAL_MECHANICAL:
         case SPELL_EFFECT_NORMALIZED_WEAPON_DMG:
         case SPELL_EFFECT_POWER_DRAIN:
         case SPELL_EFFECT_ENERGIZE:
@@ -693,9 +718,12 @@ SpellEffectValue SpellEffectInfo::CalcValue(WorldObject const* caster /*= nullpt
         case SPELL_EFFECT_APPLY_AREA_AURA_SUMMONS:
             switch (ApplyAuraName)
             {
+                // Classic 1.60 (WoW Forever): a tick's amount keeps its fraction; each tick rounds it by the fraction
+                // (AuraEffect::HandlePeriodic*Tick, ClassicRounding.h, EV-0095)
                 case SPELL_AURA_PERIODIC_DAMAGE:
                 case SPELL_AURA_PERIODIC_HEAL:
                 case SPELL_AURA_PERIODIC_LEECH:
+                    break;
                 case SPELL_AURA_PERIODIC_HEALTH_FUNNEL:
                 case SPELL_AURA_PERIODIC_WEAPON_PERCENT_DAMAGE:
                 case SPELL_AURA_DAMAGE_SHIELD:
@@ -730,12 +758,20 @@ bool SpellEffectInfo::UsesClassicFlatBasePoints(WorldObject const* caster) const
     if (caster && caster->GetAffectingPlayer())
         return true;
 
+    // Mana amounts are flat in the Forever data, new spells too: Debilitate 1240750 burns 200 mana and deals twice that, Drain
+    // Mana 1216501 takes 200, Arcane Megabomb 1213924 and EZ-Thro Mana Bomb 1269337 burn 1300 and 900, Mana Infusion 1219506
+    // gives 6000. Read as a percentage of the expected player mana, Debilitate burnt 4330 at level 31 and hit for up to 8660,
+    // many times a player's health (cod_full af53: one cast killed a level 33 priest for 7197).
+    if (GetScalingExpectedStat() == ExpectedStatType::PlayerMana)
+        return true;
+
     // Some legacy creature spells were re-tuned to percentages in the Forever data: Vile Familiar Fireball 11921 carries
     // 327.43 (~7 damage at level 4) and hit level 3 players for 300+ as a flat value. Vanilla flat values are whole numbers.
     if (BasePoints != std::trunc(BasePoints))
         return false;
 
-    return _spellInfo->Id < CLASSIC_FIRST_SCALED_SPELL_ID;
+    // a Forever copy of a legacy spell carries the legacy spell's numbers (SpellMgr::LoadClassicCreatureSpellTwins)
+    return sSpellMgr->GetClassicValueSpellId(_spellInfo->Id) < CLASSIC_FIRST_SCALED_SPELL_ID;
 }
 
 // Vanilla melee damage of a warrior-class creature at levels 1..63 (VMaNGOS creature_classlevelstats, class 1)

@@ -123,6 +123,7 @@
 #include "QuestPackets.h"
 #include "RealmList.h"
 #include "RecentAllies.h"
+#include "ReputationDiscount.h"
 #include "ReputationMgr.h"
 #include "RestMgr.h"
 #include "Scenario.h"
@@ -711,7 +712,9 @@ int32 Player::getMaxTimer(MirrorTimerType timer) const
             if (!IsAlive() || HasAuraType(SPELL_AURA_WATER_BREATHING) || GetSession()->GetSecurity() >= AccountTypes(sWorld->getIntConfig(CONFIG_DISABLE_BREATHING)))
                 return DISABLED_MIRROR_TIMER;
 
-            int32 UnderWaterTime = 3 * MINUTE * IN_MILLISECONDS;
+            // Classic 1.60 (vanilla, Classic Era): 1 minute of breath; 3 minutes came with patch 3.0.2. The Forever client's Undead
+            // Underwater Breathing 5227 is still "300% longer than normal", the vanilla 4 minutes.
+            int32 UnderWaterTime = MINUTE * IN_MILLISECONDS;
             UnderWaterTime *= GetTotalAuraMultiplier(SPELL_AURA_MOD_WATER_BREATHING);
             return UnderWaterTime;
         }
@@ -1845,18 +1848,19 @@ void Player::RegenerateHealth()
     // normal regen case (maybe partly in combat case)
     else if (!IsInCombat() || HasAuraType(SPELL_AURA_MOD_REGEN_DURING_COMBAT))
     {
-        addValue = HealthIncreaseRate;
+        // Classic 1.60 (vanilla): health per tick from spirit (retail: 1.5% of max health)
+        addValue = OCTRegenHPPerSpirit() * HealthIncreaseRate;
 
         if (!IsInCombat())
         {
-            // Classic 1.60 (vanilla): health per tick from spirit (retail: 1.5% of max health)
-            addValue = OCTRegenHPPerSpirit() * HealthIncreaseRate;
-
             addValue *= GetTotalAuraMultiplier(SPELL_AURA_MOD_HEALTH_REGEN_PERCENT);
 
             addValue += GetTotalAuraModifier(SPELL_AURA_MOD_REGEN) * 0.4f;
         }
-        else if (HasAuraType(SPELL_AURA_MOD_REGEN_DURING_COMBAT))
+        else
+            // a share of the spirit regen goes on in combat (Troll Regeneration 20555: "20% of total Health regeneration will continue
+            // during combat"; VMaNGOS Player::RegenerateHealth). The retail rule took the share of Rate.Health alone, a fraction of
+            // one health per tick.
             ApplyPct(addValue, GetTotalAuraModifier(SPELL_AURA_MOD_REGEN_DURING_COMBAT));
 
         if (!IsStandState())
@@ -2450,9 +2454,10 @@ void Player::UpdateClassicLegacyUnlock()
     // Renown on the Legacy reward track = Legacy Points earned: the challenges ("Reach level 25/45/60 for the first time on <class>")
     // are TraitCurrencySource rows of currency 4225. Rows still tied to another ruleset (SuperDistrictSetID != 0 after the
     // 2026_09_30_00 hotfix) belong to the other copy of each challenge and are not counted. The first point comes at level 25.
+    // The points are the account's: a challenge any of its characters did counts ("Points are shared across your whole account").
     int32 earnedLegacyPoints = 0;
     for (TraitCurrencySourceEntry const* source : sTraitCurrencySourceStore)
-        if (source->TraitCurrencyID == LegacyPointsTraitCurrencyID && !source->SuperDistrictSetID && source->AchievementID && HasAchieved(source->AchievementID))
+        if (source->TraitCurrencyID == LegacyPointsTraitCurrencyID && !source->SuperDistrictSetID && source->AchievementID && HasAchievedOnAccount(source->AchievementID))
             earnedLegacyPoints += source->Amount;
 
     int32 renown = int32(GetCurrencyQuantity(LegacyRenownCurrencyID));
@@ -3382,6 +3387,17 @@ bool Player::AddSpell(uint32 spellId, bool active, bool learning, bool dependent
     }
     else
     {
+        // Classic 1.60: a spell listed under several skill lines is one ability those lines share, so learning it does not open
+        // the lines the player lacks. Languages 1293657 sits under Common 98 and Orcish 109 (AutomaticCharLevel in both): every
+        // character learns it from its own language and was then given the other faction's language at 1/300 through
+        // SkillRaceClassInfo 49 (Orcish for Alliance) or 41 (Common for Horde), both Availability 0. On the official realm
+        // those lines show 0/0 (70938 login sniffs, 18 and 19 Nov 2026). The other such spells are pet abilities.
+        bool const sharedBySkillLines = skill_bounds.first != skill_bounds.second
+            && std::any_of(skill_bounds.first, skill_bounds.second, [first = skill_bounds.first->second->SkillLine](SkillLineAbilityMap::value_type const& ability)
+            {
+                return ability.second->SkillLine != first;
+            });
+
         // not ranked skills
         for (SkillLineAbilityMap::const_iterator _spell_idx = skill_bounds.first; _spell_idx != skill_bounds.second; ++_spell_idx)
         {
@@ -3393,7 +3409,8 @@ bool Player::AddSpell(uint32 spellId, bool active, bool learning, bool dependent
                 continue;
 
             // Runeforging special case
-            if ((_spell_idx->second->GetAcquireMethod() == SkillLineAbilityAcquireMethod::AutomaticCharLevel && !HasSkill(_spell_idx->second->SkillLine)) || ((_spell_idx->second->SkillLine == SKILL_RUNEFORGING) && _spell_idx->second->TrivialSkillLineRankHigh == 0))
+            if ((_spell_idx->second->GetAcquireMethod() == SkillLineAbilityAcquireMethod::AutomaticCharLevel && !sharedBySkillLines && !HasSkill(_spell_idx->second->SkillLine))
+                || ((_spell_idx->second->SkillLine == SKILL_RUNEFORGING) && _spell_idx->second->TrivialSkillLineRankHigh == 0))
             {
                 if (SkillRaceClassInfoEntry const* rcInfo = sDB2Manager.GetSkillRaceClassInfo(_spell_idx->second->SkillLine, GetRace(), GetClass()))
                     LearnDefaultSkill(rcInfo);
@@ -5102,6 +5119,7 @@ void Player::DurabilityRepairAll(bool takeCost, float discountMod, bool guildBan
 
         // We must calculate total repair cost and take money once to avoid spam in the guild bank log and reduce number of transactions in the database
         uint64 totalCost = 0;
+        std::vector<Item*> paidFor;
 
         for (auto const& [item, cost] : itemRepairCostStore)
         {
@@ -5110,13 +5128,16 @@ void Player::DurabilityRepairAll(bool takeCost, float discountMod, bool guildBan
                 break;
 
             totalCost = newTotalCost;
-
-            // Repair item without taking cost. We'll do it later.
-            DurabilityRepair(item->GetPos(), false, 0.f);
+            paidFor.push_back(item);
         }
 
-        // Take money for repairs from the guild bank
-        guild->HandleMemberWithdrawMoney(GetSession(), totalCost, true);
+        // Take the money from the guild bank first and repair only when it was taken. The items were repaired before and the withdraw's
+        // result was not looked at, so a refused withdraw (no repair right, the bank emptied meanwhile) left the repair free.
+        if (paidFor.empty() || !guild->HandleMemberWithdrawMoney(GetSession(), totalCost, true))
+            return;
+
+        for (Item* item : paidFor)
+            DurabilityRepair(item->GetPos(), false, 0.f);
     }
     else
     {
@@ -5534,19 +5555,24 @@ float Player::GetTotalBaseModValue(BaseModGroup modGroup) const
     return m_auraBaseFlatMod[modGroup] * m_auraBasePctMod[modGroup];
 }
 
-// Classic 1.60 (vanilla, VMaNGOS / TrinityCoreClassic): agility per 1% of crit and dodge, between the class rates of level 1 and 60
+// Classic 1.60 (vanilla, VMaNGOS / TrinityCoreClassic): agility per 1% of crit and dodge, between the class rates of level 1 and 60.
+// WoW Forever: the level 60 rates are the client's PlayerExpectedStat CritPerAgility (rogue 0.000345, hunter 0.000189,
+// paladin 0.000506, shaman 0.000508, mage 0.000514, others 0.0005 per point), dodge per agility equal to crit, rogue and hunter twice
+// (wowsims/forever, MIT, sim/core/base_stats_auto_gen.go). The level 1 rates stay vanilla's; the table's lower levels are not checked.
 static float ClassicAgilityRate(Player const* player, bool dodge)
 {
     float level1, level60;
     switch (player->GetClass())
     {
-        case CLASS_ROGUE:   level1 = dodge ? 1.1f : 2.2f;  level60 = dodge ? 14.5f : 29.0f; break;
-        case CLASS_HUNTER:  level1 = dodge ? 1.8f : 3.5f;  level60 = dodge ? 26.5f : 53.0f; break;
-        case CLASS_MAGE:    level1 = 12.9f; level60 = 20.0f; break;
+        case CLASS_ROGUE:   level1 = dodge ? 1.1f : 2.2f;  level60 = (dodge ? 0.5f : 1.0f) / 0.0345f; break;
+        case CLASS_HUNTER:  level1 = dodge ? 1.8f : 3.5f;  level60 = (dodge ? 0.5f : 1.0f) / 0.0189f; break;
+        case CLASS_MAGE:    level1 = 12.9f; level60 = 1.0f / 0.0514f; break;
         case CLASS_PRIEST:  level1 = 11.0f; level60 = 20.0f; break;
         case CLASS_WARLOCK: level1 = 8.4f;  level60 = 20.0f; break;
         case CLASS_WARRIOR: level1 = 3.9f;  level60 = 20.0f; break;
-        default:            level1 = 4.6f;  level60 = 20.0f; break;  // paladin, shaman, druid
+        case CLASS_PALADIN: level1 = 4.6f;  level60 = 1.0f / 0.0506f; break;
+        case CLASS_SHAMAN:  level1 = 4.6f;  level60 = 1.0f / 0.0508f; break;
+        default:            level1 = 4.6f;  level60 = 20.0f; break;  // druid
     }
     float level = float(std::min<uint8>(player->GetLevel(), 60));
     return level1 * (60.0f - level) / 59.0f + level60 * (level - 1.0f) / 59.0f;
@@ -5563,19 +5589,22 @@ void Player::GetDodgeFromAgility(float& diminishing, float& nondiminishing) cons
     nondiminishing = std::max(0.0f, GetStat(STAT_AGILITY)) / ClassicAgilityRate(this, true);
 }
 
-// Classic 1.60 (vanilla): base spell crit and intellect per 1% of spell crit at level 60 per class; lower levels need less
+// Classic 1.60 (vanilla): base spell crit and intellect per 1% of spell crit at level 60 per class; lower levels need less.
+// WoW Forever: the level 60 rates are the client's PlayerExpectedStat SpellCritPerIntellect (mage and priest 0.000168,
+// shaman 0.000169, paladin and druid 0.000167, warlock and hunter 0.000165 per point; wowsims/forever, MIT,
+// sim/core/base_stats_auto_gen.go). Paladins needed 54 (vanilla), now 59.9. The base crit already matched.
 float Player::GetSpellCritFromIntellect() const
 {
     float base, rate60;
     switch (GetClass())
     {
-        case CLASS_MAGE:    base = 0.2f; rate60 = 59.5f; break;
-        case CLASS_PRIEST:  base = 0.8f; rate60 = 59.2f; break;
-        case CLASS_WARLOCK: base = 1.7f; rate60 = 60.6f; break;
-        case CLASS_DRUID:   base = 1.8f; rate60 = 60.0f; break;
-        case CLASS_SHAMAN:  base = 2.3f; rate60 = 59.5f; break;
-        case CLASS_PALADIN: base = 3.5f; rate60 = 54.0f; break;
-        case CLASS_HUNTER:  base = 3.6f; rate60 = 60.0f; break;
+        case CLASS_MAGE:    base = 0.2f; rate60 = 1.0f / 0.0168f; break;
+        case CLASS_PRIEST:  base = 0.8f; rate60 = 1.0f / 0.0168f; break;
+        case CLASS_WARLOCK: base = 1.7f; rate60 = 1.0f / 0.0165f; break;
+        case CLASS_DRUID:   base = 1.8f; rate60 = 1.0f / 0.0167f; break;
+        case CLASS_SHAMAN:  base = 2.3f; rate60 = 1.0f / 0.0169f; break;
+        case CLASS_PALADIN: base = 3.5f; rate60 = 1.0f / 0.0167f; break;
+        case CLASS_HUNTER:  base = 3.6f; rate60 = 1.0f / 0.0165f; break;
         default:            return 0.0f;                    // warrior, rogue
     }
     float level = float(std::min<uint8>(GetLevel(), 60));
@@ -8595,6 +8624,8 @@ void Player::_ApplyItemMods(Item* item, uint8 slot, bool apply, bool updateItemA
     TC_LOG_DEBUG("entities.player.items", "Player::_ApplyItemMods: completed");
 }
 
+static bool ClassicEquipSpellGivesItemModSkill(Item const* item, int32 statType);
+
 void Player::_ApplyItemBonuses(Item* item, uint8 slot, bool apply)
 {
     ItemTemplate const* proto = item->GetTemplate();
@@ -8802,6 +8833,7 @@ void Player::_ApplyItemBonuses(Item* item, uint8 slot, bool apply)
                 break;
             case ITEM_MOD_EXTRA_ARMOR:
                 HandleStatFlatModifier(UNIT_MOD_ARMOR, TOTAL_VALUE, float(val), apply);
+                m_classicItemArmor += apply ? float(val) : -float(val);
                 break;
             case ITEM_MOD_FIRE_RESISTANCE:
                 HandleStatFlatModifier(UNIT_MOD_RESISTANCE_FIRE, BASE_VALUE, float(val), apply);
@@ -8876,7 +8908,8 @@ void Player::_ApplyItemBonuses(Item* item, uint8 slot, bool apply)
                 _ApplyClassicSpellHealingOrDamageMod(statType, int32(val), apply);
                 break;
             default:
-                if (statType >= ITEM_MOD_CLASSIC_PHYSICAL_DAMAGE_DONE && statType < ITEM_MOD_CLASSIC_END)
+                if (statType >= ITEM_MOD_CLASSIC_PHYSICAL_DAMAGE_DONE && statType < ITEM_MOD_CLASSIC_END
+                    && !ClassicEquipSpellGivesItemModSkill(item, statType))
                     _ApplyClassicItemMod(statType, int32(val), apply);
                 break;
         }
@@ -8885,8 +8918,32 @@ void Player::_ApplyItemBonuses(Item* item, uint8 slot, bool apply)
     if (uint32 armor = proto->GetArmor(itemLevel))
     {
         HandleStatFlatModifier(UNIT_MOD_ARMOR, TOTAL_VALUE, float(armor), apply);
+        m_classicItemArmor += apply ? float(armor) : -float(armor);
         if (proto->GetClass() == ITEM_CLASS_ARMOR && proto->GetSubClass() == ITEM_SUBCLASS_ARMOR_SHIELD)
             SetUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::ShieldBlock), apply ? int32(GetClassicShieldBlockValue()) : 0);
+    }
+
+    // Classic 1.60 (WoW Forever): an armor item's ItemSparse QualityModifier is its green bonus armor, the "+60 Armor" line under Tree Bark
+    // Jacket's "44 Armor" (44 + 60 = its vanilla 104). The core read only the table armor, so 491 items in wowsims' item list lost it
+    // (Heavy Mithril Breastplate +90, Green Iron Hauberk +120). It counts as item armor, as ITEM_MOD_EXTRA_ARMOR does (wowsims/forever, MIT,
+    // tools/database/dbc/item.go GetStats; the tooltip of item 1486)
+    if (float const bonusArmor = proto->GetClassicBonusArmor())
+    {
+        HandleStatFlatModifier(UNIT_MOD_ARMOR, TOTAL_VALUE, bonusArmor, apply);
+        m_classicItemArmor += apply ? bonusArmor : -bonusArmor;
+    }
+
+    // Classic 1.60 (WoW Forever): a caster weapon's implicit spell power, or healing and damage (ItemTemplate::GetClassicCasterPower,
+    // EV-0112); the client's tooltip shows it, the server never gave it
+    {
+        int32 spellPower = 0, healing = 0, damage = 0;
+        proto->GetClassicCasterPower(itemLevel, spellPower, healing, damage);
+        if (spellPower)
+            ApplySpellPowerBonus(spellPower, apply);
+        if (healing)
+            _ApplyClassicSpellHealingOrDamageMod(ITEM_MOD_SPELL_HEALING_DONE, healing, apply);
+        if (damage)
+            _ApplyClassicSpellHealingOrDamageMod(ITEM_MOD_SPELL_DAMAGE_DONE, damage, apply);
     }
 
     WeaponAttackType attType = Player::GetAttackBySlot(slot, proto->GetInventoryType());
@@ -8903,6 +8960,31 @@ static constexpr uint32 ClassicItemModSkills[] =
     SKILL_MINING, SKILL_SKINNING, SKILL_COOKING, 129 /*First Aid*/, SKILL_FISHING, SKILL_TAILORING
 };
 static_assert(std::size(ClassicItemModSkills) == ITEM_MOD_CLASSIC_TAILORING - ITEM_MOD_CLASSIC_TWOHANDED_AXES + 1);
+
+// Classic 1.60 (WoW Forever): an item that states a skill bonus both as an item stat and as an equip spell (Bloody Claws of Attack 280068:
+// stat 98 +1 Fist Weapons and equip spell 1297442 +1 Fist Weapons) gives it once; the in-game tooltip shows one +1 (wowsims/forever,
+// MIT, docs/evidence EV-0104). The equip spell's aura stays and the item stat is left out.
+static bool ClassicEquipSpellGivesItemModSkill(Item const* item, int32 statType)
+{
+    if (statType < ITEM_MOD_CLASSIC_TWOHANDED_AXES || statType > ITEM_MOD_CLASSIC_TAILORING)
+        return false;
+
+    uint32 const skill = ClassicItemModSkills[statType - ITEM_MOD_CLASSIC_TWOHANDED_AXES];
+    for (ItemEffectEntry const* effectData : item->GetEffects())
+    {
+        if (effectData->TriggerType != ITEM_SPELLTRIGGER_ON_EQUIP)
+            continue;
+
+        SpellInfo const* spellInfo = sSpellMgr->GetSpellInfo(effectData->SpellID, DIFFICULTY_NONE);
+        if (!spellInfo)
+            continue;
+
+        for (SpellEffectInfo const& effect : spellInfo->GetEffects())
+            if ((effect.IsAura(SPELL_AURA_MOD_SKILL) || effect.IsAura(SPELL_AURA_MOD_SKILL_2)) && uint32(effect.MiscValue) == skill)
+                return true;
+    }
+    return false;
+}
 
 // Classic 1.60: schools of ITEM_MOD_CLASSIC_FIRE_PENETRATION .. ITEM_MOD_CLASSIC_ARCANE_PENETRATION
 static constexpr SpellSchools ClassicItemModPenetrationSchools[] =
@@ -9003,9 +9085,8 @@ void Player::_ApplyWeaponDamage(uint8 slot, Item* item, bool apply)
         return;
 
     float damage = 0.0f;
-    uint32 itemLevel = item->GetItemLevel(this);
     float minDamage, maxDamage;
-    proto->GetDamage(itemLevel, minDamage, maxDamage);
+    item->GetClassicWeaponDamage(this, minDamage, maxDamage);   // Classic 1.60: caster share and QualityModifier (EV-0097)
 
     if (minDamage > 0)
     {
@@ -9554,6 +9635,12 @@ void Player::CastItemCombatSpell(DamageInfo const& damageInfo, Item* item, ItemT
                 if (effectData->TriggerType != ITEM_SPELLTRIGGER_ON_PROC)
                     continue;
 
+                // Classic 1.60 (WoW Forever): in Cat or Bear Form only the paw's white swings roll the weapon's chance-on-hit spell; Cat Form
+                // specials rolled Rot-Covered Harpoon's Rot 0 times in 196 where 4.7 were expected (wowsims/forever, MIT, docs/evidence
+                // EV-0122)
+                if (damageInfo.GetSpellInfo() && IsInFeralForm())
+                    continue;
+
                 SpellInfo const* spellInfo = sSpellMgr->GetSpellInfo(effectData->SpellID, DIFFICULTY_NONE);
                 if (!spellInfo)
                 {
@@ -9660,8 +9747,17 @@ void Player::CastItemCombatSpell(DamageInfo const& damageInfo, Item* item, ItemT
             if (FindCurrentSpellBySpellId(5938) && e_slot == TEMP_ENCHANTMENT_SLOT)
                 chance = 100.0f;
 
+            // Classic 1.60 (WoW Forever): Shadow Oil (enchant 25, Shadow Bolt 350026) procs at its 15% at most once every 10 s, a cooldown
+            // the client states nowhere (wowsims/forever, MIT, docs/evidence EV-0016)
+            Milliseconds const classicEnchantCooldown = pEnchant->ID == 25 ? 10s : 0ms;
+            if (classicEnchantCooldown > 0ms && GetSpellHistory()->HasCooldown(spellInfo->Id))
+                continue;
+
             CombatEnchantProc::Dispatch(chance, [](float procChance) { return roll_chance(procChance); }, [&]
             {
+                if (classicEnchantCooldown > 0ms)
+                    GetSpellHistory()->AddCooldown(spellInfo->Id, 0, classicEnchantCooldown);
+
                 Unit* target = spellInfo->IsPositive() ? this : damageInfo.GetVictim();
 
                 CastSpellExtraArgs args(item);
@@ -16341,6 +16437,7 @@ void Player::RewardQuest(Quest const* quest, LootItemType rewardType, uint32 rew
 
     SetQuestCompletedBit(quest_id, true);
 
+    uint64 objectiveMoneyPaid = 0;
     for (QuestObjective const& obj : quest->GetObjectives())
     {
         switch (obj.Type)
@@ -16355,6 +16452,10 @@ void Player::RewardQuest(Quest const* quest, LootItemType rewardType, uint32 rew
             }
             case QUEST_OBJECTIVE_CURRENCY:
                 RemoveCurrency(obj.ObjectID, obj.Amount, CurrencyDestroyReason::QuestTurnin);
+                break;
+            case QUEST_OBJECTIVE_MONEY:                     // pay-money objective (e.g. quest 97179): the money is spent on turn-in
+                ModifyMoney(-int64(obj.Amount));
+                objectiveMoneyPaid += uint64(obj.Amount);
                 break;
         }
     }
@@ -16485,7 +16586,9 @@ void Player::RewardQuest(Quest const* quest, LootItemType rewardType, uint32 rew
         moneyRew = int32(quest->GetRewMoneyMaxLevel() * sWorld->getRate(RATE_DROP_MONEY));
 
     moneyRew += GetQuestMoneyReward(quest);
-    moneyRew -= int32(quest->GetClassicRequiredMoney());    // Classic 1.60: vanilla quests that cost money
+    // Classic 1.60: vanilla quests that cost money. Not charged twice when the quest also has a money objective.
+    if (uint64 classicCost = quest->GetClassicRequiredMoney(); classicCost > objectiveMoneyPaid)
+        moneyRew -= int32(classicCost - objectiveMoneyPaid);
 
     if (moneyRew)
     {
@@ -19502,6 +19605,8 @@ bool Player::LoadFromDB(ObjectGuid guid, CharacterDatabaseQueryHolder const& hol
 
     // load achievements before anything else to prevent multiple gains for the same achievement/criteria on every loading (as loading does call UpdateCriteria)
     m_achievementMgr->LoadFromDB(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_ACHIEVEMENTS), holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_CRITERIA_PROGRESS));
+    // before the traits: the Legacy trait config counts the Legacy Points of the whole account
+    _LoadAccountLegacyAchievements(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_ACCOUNT_LEGACY_ACHIEVEMENTS));
     m_questObjectiveCriteriaMgr->LoadFromDB(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_QUEST_STATUS_OBJECTIVES_CRITERIA), holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_QUEST_STATUS_OBJECTIVES_CRITERIA_PROGRESS));
 
     SetMoney(std::min(fields.money, MAX_MONEY_AMOUNT));
@@ -19536,6 +19641,15 @@ bool Player::LoadFromDB(ObjectGuid guid, CharacterDatabaseQueryHolder const& hol
     ReplaceAllPlayerFlags(fields.playerFlags);
     ReplaceAllPlayerFlagsEx(fields.playerFlagsEx);
     SetWatchedFactionIndex(fields.watchedFaction);
+
+    // a choice the other choices rule out (Feather Color with Feathers: None, from before the client data paired them) is set to the
+    // allowed one and saved with the character, instead of refusing the login
+    if (GetSession()->NormalizeDependentChoices(Races(GetRace()), Classes(GetClass()), customizations))
+    {
+        TC_LOG_INFO("entities.player.loading", "Player::LoadFromDB: Player ({}) had customization choices its other choices rule out, set to the allowed ones",
+            guid.ToString());
+        SetCustomizations(Trinity::Containers::MakeIteratorPair(customizations.begin(), customizations.end()));
+    }
 
     if (!GetSession()->ValidateAppearance(Races(GetRace()), Classes(GetClass()), fields.gender, MakeChrCustomizationChoiceRange(customizations)))
     {
@@ -21742,6 +21856,37 @@ void Player::_LoadCharacterBankTabSettings(PreparedQueryResult result)
 void Player::_LoadDayCycle(PreparedQueryResult result)
 {
     m_skyMode = uint8(result ? DayCycle::SkyModeFromDb((*result)[0].GetUInt8()) : DayCycle::SkyMode::Auto);
+}
+
+// Classic 1.60: Legacy Points (trait currency 4225) come from challenges ("Reach level 25 for the first time on a Warrior"), which are
+// character achievements; the official realm counts them for the whole account. Only the achievements that are a source of Legacy
+// Points are kept, so no other achievement turns account-wide. A deleted character no longer counts (its row has no account).
+void Player::_LoadAccountLegacyAchievements(PreparedQueryResult result)
+{
+    static constexpr uint32 LegacyPointsTraitCurrencyID = 4225;
+
+    m_accountLegacyAchievements.clear();
+    if (!result)
+        return;
+
+    std::unordered_set<uint32> legacyChallenges;
+    for (TraitCurrencySourceEntry const* source : sTraitCurrencySourceStore)
+        if (source->TraitCurrencyID == LegacyPointsTraitCurrencyID && source->AchievementID)
+            legacyChallenges.insert(source->AchievementID);
+
+    do
+    {
+        Field* fields = result->Fetch();
+        uint32 const achievementId = fields[0].GetUInt32();
+        if (!legacyChallenges.contains(achievementId))
+            continue;
+
+        ObjectGuid const owner = ObjectGuid::Create<HighGuid::Player>(fields[1].GetUInt64());
+        time_t const date = time_t(fields[2].GetInt64());
+        auto [itr, added] = m_accountLegacyAchievements.try_emplace(achievementId, AccountLegacyAchievement{ owner, date });
+        if (!added && date < itr->second.Date)
+            itr->second = { owner, date };
+    } while (result->NextRow());
 }
 
 /*********************************************************/
@@ -25754,15 +25899,17 @@ void Player::ReportedAfkBy(Player* reporter)
     if (m_bgData.bgAfkReporter.find(reporter->GetGUID()) == m_bgData.bgAfkReporter.end() && !HasAura(43680) && !HasAura(43681) && reporter->CanReportAfkDueToLimit())
     {
         m_bgData.bgAfkReporter.insert(reporter->GetGUID());
+        // every accepted report is a success for the reporter (before, only the one that applied the debuff was, so the
+        // earlier reports were answered as failed), and the marks are counted before the list is cleared
+        reportAfkResult.NumBlackMarksOnOffender = uint8(m_bgData.bgAfkReporter.size());
+        reportAfkResult.NumPlayersIHaveReported = reporter->m_bgData.bgAfkReportedCount;
+        reportAfkResult.Result = WorldPackets::Battleground::ReportPvPPlayerAFKResult::PVP_REPORT_AFK_SUCCESS;
         // by default 3 players have to complain to apply debuff
         if (m_bgData.bgAfkReporter.size() >= sWorld->getIntConfig(CONFIG_BATTLEGROUND_REPORT_AFK))
         {
             // cast 'Idle' spell
             CastSpell(this, 43680, true);
             m_bgData.bgAfkReporter.clear();
-            reportAfkResult.NumBlackMarksOnOffender = m_bgData.bgAfkReporter.size();
-            reportAfkResult.NumPlayersIHaveReported = reporter->m_bgData.bgAfkReportedCount;
-            reportAfkResult.Result = WorldPackets::Battleground::ReportPvPPlayerAFKResult::PVP_REPORT_AFK_SUCCESS;
         }
     }
 
@@ -27435,11 +27582,7 @@ float Player::GetReputationPriceDiscount(FactionTemplateEntry const* factionTemp
     if (!factionTemplate || !factionTemplate->Faction)
         return 1.0f;
 
-    ReputationRank rank = GetReputationRank(factionTemplate->Faction);
-    if (rank <= REP_NEUTRAL)
-        return 1.0f;
-
-    return 1.0f - 0.05f* (rank - REP_NEUTRAL);
+    return Trinity::Reputation::PriceFactor(GetReputationRank(factionTemplate->Faction));
 }
 
 Player* Player::GetTrader() const
@@ -29236,6 +29379,11 @@ std::vector<uint32> Player::GetCompletedAchievementIds() const
 bool Player::HasAchieved(uint32 achievementId) const
 {
     return m_achievementMgr->HasAchieved(achievementId);
+}
+
+bool Player::HasAchievedOnAccount(uint32 achievementId) const
+{
+    return HasAchieved(achievementId) || m_accountLegacyAchievements.contains(achievementId);
 }
 
 void Player::StartCriteria(CriteriaStartEvent startEvent, uint32 entry, Milliseconds timeLost/* = Milliseconds::zero()*/)
@@ -33588,6 +33736,11 @@ bool TraitMgr::PlayerDataAccessor::IsQuestRewarded(int32 questId) const
 bool TraitMgr::PlayerDataAccessor::HasAchieved(int32 achievementId) const
 {
     return _player->HasAchieved(achievementId);
+}
+
+bool TraitMgr::PlayerDataAccessor::HasAchievedOnAccount(int32 achievementId) const
+{
+    return _player->HasAchievedOnAccount(achievementId);
 }
 
 uint32 TraitMgr::PlayerDataAccessor::GetPrimarySpecialization() const

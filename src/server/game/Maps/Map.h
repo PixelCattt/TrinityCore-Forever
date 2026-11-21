@@ -42,8 +42,10 @@
 #include <list>
 #include <map>
 #include <memory>
+#include <mutex>
 #include <set>
 #include <unordered_set>
+#include <vector>
 
 class BaseEntity;
 class Battleground;
@@ -51,6 +53,7 @@ class BattlegroundMap;
 class BattlegroundScript;
 class CreatureGroup;
 class GameObjectModel;
+struct ClosedDoorShape;
 class Group;
 class InstanceLock;
 class InstanceMap;
@@ -511,6 +514,16 @@ class TC_GAME_API Map : public GridRefManager<NGridType>
         // phase: true with `hit` set to where it meets it. The navmesh is baked without doors, so a path can cross one.
         // Map or world thread only: the door models change in Map::Update.
         bool FindClosedDoorOnSegment(PhaseShift const& phaseShift, G3D::Vector3 const& from, G3D::Vector3 const& to, G3D::Vector3& hit) const;
+        // The closed doors as Map::Update last published them, for a path searched off the map thread (PathGenerator::ClosedDoorTest::
+        // Published), null when there are none. Any thread. Published again when a door opens, closes, comes or goes, and every second.
+        std::shared_ptr<std::vector<ClosedDoorShape> const> GetPublishedClosedDoors() const;
+        void AddDoor(GameObject* door);
+        void RemoveDoor(GameObject* door);
+        void MarkClosedDoorsChanged() { _closedDoorsChanged = true; }
+        // Optional check (set by a module): true for a door those who plan off the map thread open themselves when they reach it
+        // (ClosedDoorShape::PlanThrough). Called on the map thread while the doors are published.
+        using ClosedDoorPlanThroughCheck = bool(*)(GameObject const* door);
+        static void SetClosedDoorPlanThroughCheck(ClosedDoorPlanThroughCheck check) { _closedDoorPlanThroughCheck = check; }
         void Balance() { _dynamicTree.balance(); }
         void RemoveGameObjectModel(GameObjectModel const& model) { _dynamicTree.remove(model); }
         void InsertGameObjectModel(GameObjectModel const& model) { _dynamicTree.insert(model); }
@@ -672,6 +685,13 @@ class TC_GAME_API Map : public GridRefManager<NGridType>
         uint32 m_unloadTimer;
         float m_VisibleDistance;
         DynamicMapTree _dynamicTree;
+        void PublishClosedDoors(uint32 diff);
+        std::unordered_set<GameObject*> _doors;
+        bool _closedDoorsChanged = false;
+        uint32 _closedDoorsRefreshTimer = 0;
+        mutable std::mutex _publishedClosedDoorsLock;
+        std::shared_ptr<std::vector<ClosedDoorShape> const> _publishedClosedDoors;
+        static ClosedDoorPlanThroughCheck _closedDoorPlanThroughCheck;
         std::shared_ptr<MMAP::DynamicTileBuilder> m_mmapTileRebuilder;
 
         MapRefManager m_mapRefManager;
