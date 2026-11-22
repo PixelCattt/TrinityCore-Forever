@@ -1,5 +1,7 @@
 # ForeverCore
 
+Built on [TrinityCore](https://github.com/TrinityCore/TrinityCore). ForeverCore is our own core now, made for the WoW Forever client, the same way other cores use TrinityCore as their base.
+
 ### [Download latest launcher](https://github.com/Karrz1/Karrz-playerbots-wow-forever/releases/latest/download/WoWForeverLauncher.exe)
 
 Built ForeverCore yourself, or joining a friend? Put `WoWForeverLauncher.exe` in any folder, start it, pick join and
@@ -20,7 +22,7 @@ A server for the **WoW Forever client (Classic 1.60.1, build 70938)**, based on 
 ForeverCore is made by the people who play on it. Every bug report, fix and packet capture makes it better for everyone,
 so jump in:
 
-- **Found a bug?** Open an [issue](https://github.com/Karrz1/TrinityCore/issues/new/choose). Say what happens, what
+- **Found a bug?** Open an [issue](https://github.com/Karrz1/ForeverCore/issues/new/choose). Say what happens, what
   should happen, and the ids of the quest, NPC, item or spell if you have them.
 - **Have a fix?** Send a pull request against `forever` (or `forever-bots` for the bots). One fix per pull request,
   and say where the data comes from (sniff, Wowhead, Questie, a video). [CONTRIBUTING.md](CONTRIBUTING.md) has the
