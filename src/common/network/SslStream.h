@@ -140,6 +140,14 @@ public:
         return _sslSocket.next_layer().remote_endpoint();
     }
 
+    auto& tcp_socket()
+    {
+        if constexpr (requires { _sslSocket.next_layer().tcp_socket(); })
+            return _sslSocket.next_layer().tcp_socket();
+        else
+            return _sslSocket.next_layer();
+    }
+
     // ssl api
     template<typename HandshakeHandlerType>
     decltype(auto) async_handshake(boost::asio::ssl::stream_base::handshake_type type, HandshakeHandlerType&& handler)

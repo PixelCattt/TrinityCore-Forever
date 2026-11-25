@@ -41,6 +41,7 @@
 #include "OpenSSLCrypto.h"
 #include "OutdoorPvP/OutdoorPvPMgr.h"
 #include "ProcessPriority.h"
+#include "ProxyProtocol.h"
 #include "RASession.h"
 #include "RealmList.h"
 #include "ScriptLoader.h"
@@ -238,6 +239,9 @@ int main(int argc, char** argv)
     sLog->RegisterAppender<AppenderDB>();
     // If logs are supposed to be handled async then we need to pass the IoContext into the Log singleton
     sLog->Initialize(sConfigMgr->GetBoolDefault("Log.Async.Enable", false) ? ioContext.get() : nullptr);
+
+    if (!Trinity::Net::InitializeProxyProtocolSettings())
+        return 1;
 
     Trinity::Banner::Show("worldserver-daemon",
         [](char const* text)

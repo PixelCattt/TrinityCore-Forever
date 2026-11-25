@@ -21,6 +21,7 @@
 #include "HttpSslSocket.h"
 #include "IpBanCheckConnectionInitializer.h"
 #include "LoginRESTService.h"
+#include "ProxyProtocolConnectionInitializer.h"
 #include "SslContext.h"
 #include "Util.h"
 #include <boost/container/static_vector.hpp>
@@ -81,7 +82,9 @@ public:
     void Start() override
     {
         // build initializer chain
-        boost::container::static_vector<std::shared_ptr<Trinity::Net::SocketConnectionInitializer>, 4> initializers;
+        boost::container::static_vector<std::shared_ptr<Trinity::Net::SocketConnectionInitializer>, 5> initializers;
+
+        initializers.stable_emplace_back(std::make_shared<Trinity::Net::ProxyProtocolConnectionInitializer<BaseSocket>>(this));
 
         initializers.stable_emplace_back(std::make_shared<Trinity::Net::IpBanCheckConnectionInitializer<Battlenet::LoginHttpSession>>(&_owner));
 

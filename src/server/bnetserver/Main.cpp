@@ -39,6 +39,7 @@
 #include "MySQLThreading.h"
 #include "OpenSSLCrypto.h"
 #include "ProcessPriority.h"
+#include "ProxyProtocol.h"
 #include "RealmList.h"
 #include "SecretMgr.h"
 #include "SessionManager.h"
@@ -149,6 +150,9 @@ int main(int argc, char** argv)
 
     sLog->RegisterAppender<AppenderDB>();
     sLog->Initialize(nullptr);
+
+    if (!Trinity::Net::InitializeProxyProtocolSettings())
+        return 1;
 
     Trinity::Banner::Show("bnetserver",
         [](char const* text)

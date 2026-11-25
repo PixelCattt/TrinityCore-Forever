@@ -103,6 +103,7 @@ public:
     WorldSocket& operator=(WorldSocket&& right) = delete;
 
     void Start() override;
+    bool AcquireIpConnectionSlot();
     bool Update() override;
 
     void SendPacket(WorldPacket const& packet);

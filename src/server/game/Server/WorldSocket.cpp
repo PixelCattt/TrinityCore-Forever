@@ -31,6 +31,7 @@
 #include "HMAC.h"
 #include "IPLocation.h"
 #include "IpBanCheckConnectionInitializer.h"
+#include "ProxyProtocolConnectionInitializer.h"
 #include "PacketLog.h"
 #include "ProtobufJSON.h"
 #include "QueryResultStructured.h"
@@ -123,6 +124,24 @@ private:
     MessageBuffer _packetBuffer;
 };
 
+struct WorldConnectionLimitInitializer final : Trinity::Net::SocketConnectionInitializer
+{
+    explicit WorldConnectionLimitInitializer(WorldSocket* socket) : _socket(socket) { }
+
+    void Start() override
+    {
+        if (!_socket->AcquireIpConnectionSlot())
+        {
+            _socket->CloseSocket();
+            return;
+        }
+        InvokeNext();
+    }
+
+private:
+    WorldSocket* _socket;
+};
+
 namespace
 {
 Trinity::Net::IpConnectionLimit WorldConnectionLimit;
@@ -130,29 +149,33 @@ Trinity::Net::IpConnectionLimit WorldConnectionLimit;
 
 void WorldSocket::Start()
 {
-    // connections per address: a player uses two (realm and instance); the server's own PC is never limited
-    boost::asio::ip::address const& address = GetRemoteIpAddress();
-    _ipConnectionSlot = WorldConnectionLimit.TryAcquire(address.to_string(), address.is_loopback(),
-        uint32(std::max(sConfigMgr->GetIntDefault("Network.ConnectionsPerIp", 16), 0)));
-    if (!_ipConnectionSlot)
-    {
-        TC_LOG_ERROR("network", "WorldSocket::Start: {} already has Network.ConnectionsPerIp open connections, refusing another", address.to_string());
-        CloseSocket();
-        return;
-    }
-
     int32 const authTimeout = sConfigMgr->GetIntDefault("Network.AuthTimeout", 60);
     _authDeadline = authTimeout > 0 ? TimePoint::clock::now() + Seconds(authTimeout) : TimePoint::max();
 
     // build initializer chain
-    std::array<std::shared_ptr<Trinity::Net::SocketConnectionInitializer>, 3> initializers =
+    std::array<std::shared_ptr<Trinity::Net::SocketConnectionInitializer>, 5> initializers =
     { {
+        std::make_shared<Trinity::Net::ProxyProtocolConnectionInitializer<WorldSocket>>(this),
+        std::make_shared<WorldConnectionLimitInitializer>(this),
         std::make_shared<Trinity::Net::IpBanCheckConnectionInitializer<WorldSocket>>(this),
         std::make_shared<WorldSocketProtocolInitializer>(this),
         std::make_shared<Trinity::Net::ReadConnectionInitializer<WorldSocket>>(this),
     } };
 
     Trinity::Net::SocketConnectionInitializer::SetupChain(initializers)->Start();
+}
+
+bool WorldSocket::AcquireIpConnectionSlot()
+{
+    // A player uses two connections; the server's own PC is never limited.
+    boost::asio::ip::address const& address = GetRemoteIpAddress();
+    _ipConnectionSlot = WorldConnectionLimit.TryAcquire(address.to_string(), address.is_loopback(),
+        uint32(std::max(sConfigMgr->GetIntDefault("Network.ConnectionsPerIp", 16), 0)));
+    if (_ipConnectionSlot)
+        return true;
+
+    TC_LOG_ERROR("network", "WorldSocket::Start: {} already has Network.ConnectionsPerIp open connections, refusing another", address.to_string());
+    return false;
 }
 
 Trinity::Net::SocketReadCallbackResult WorldSocketProtocolInitializer::ReadHandler()

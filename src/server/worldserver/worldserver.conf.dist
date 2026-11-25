@@ -176,6 +176,19 @@ MaxPingTime = 30
 WorldServerPort = 8085
 
 #
+#    ProxyProtocol.TrustedProxies
+#        Description: Comma-separated trusted proxy IPs/CIDRs. Connections from all
+#                     other addresses are rejected when PROXY protocol is enabled.
+#        Default:     "127.0.0.1,::1"
+#
+#    ProxyProtocol.Version
+#        Description: Require PROXY protocol on the worldserver listener.
+#                     Accepted values: "" (disabled), "v1", "v2".
+
+ProxyProtocol.TrustedProxies = "127.0.0.1,::1"
+ProxyProtocol.Version = ""
+
+#
 #    BindIP
 #        Description: Bind world server to IP/hostname.
 #                     Using IPv6 address (such as "::") will enable both IPv4 and IPv6 connections

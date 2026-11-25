@@ -87,6 +87,19 @@ LoginREST.TicketDuration=3600
 LoginREST.DefaultAccountDomain = "local"
 
 #
+#    ProxyProtocol.TrustedProxies
+#        Description: Comma-separated trusted proxy IPs/CIDRs. Connections from all
+#                     other addresses are rejected when PROXY protocol is enabled.
+#        Default:     "127.0.0.1,::1"
+#
+#    ProxyProtocol.Version
+#        Description: Require PROXY protocol on bnetserver and LoginREST listeners.
+#                     Accepted values: "" (disabled), "v1", "v2".
+
+ProxyProtocol.TrustedProxies = "127.0.0.1,::1"
+ProxyProtocol.Version = ""
+
+#
 #    Realm.AlsoAcceptBuilds
 #        Description: Comma-separated client builds that every realm also lists for and lets in, besides its own
 #                     realmlist.gamebuild. Use it only for builds with the same game data and protocol as the realm's

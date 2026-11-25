@@ -21,6 +21,7 @@
 #include "DatabaseEnv.h"
 #include "Errors.h"
 #include "IpBanCheckConnectionInitializer.h"
+#include "ProxyProtocolConnectionInitializer.h"
 #include "MapUtils.h"
 #include "Memory.h"
 #include "QueryCallback.h"
@@ -109,6 +110,24 @@ private:
     std::weak_ptr<Battlenet::Session> _session;
 };
 
+struct ConnectionLimitInitializer final : Trinity::Net::SocketConnectionInitializer
+{
+    explicit ConnectionLimitInitializer(Battlenet::Session* session) : _session(session) { }
+
+    void Start() override
+    {
+        if (!_session->AcquireIpConnectionSlot())
+        {
+            _session->CloseSocket();
+            return;
+        }
+        InvokeNext();
+    }
+
+private:
+    Battlenet::Session* _session;
+};
+
 int64 SteadyNowMs()
 {
     return std::chrono::duration_cast<std::chrono::milliseconds>(TimePoint::clock::now().time_since_epoch()).count();
@@ -121,28 +140,31 @@ TimePoint DeadlineFromConfig(char const* name, int32 defaultSeconds)
 }
 }
 
+bool Battlenet::Session::AcquireIpConnectionSlot()
+{
+    boost::asio::ip::address const& address = GetRemoteIpAddress();
+    _ipConnectionSlot = BattlenetConnectionLimit.TryAcquire(address.to_string(), address.is_loopback(),
+        uint32(std::max(sConfigMgr->GetIntDefault("Network.ConnectionsPerIp", 16), 0)));
+    if (_ipConnectionSlot)
+        return true;
+
+    TC_LOG_ERROR("session", "{} already has Network.ConnectionsPerIp open connections, refusing another", GetClientInfo());
+    return false;
+}
+
 void Battlenet::Session::Start()
 {
     TC_LOG_TRACE("session", "{} Accepted connection", GetClientInfo());
-
-    // connections per address; the server's own PC is never limited
-    boost::asio::ip::address const& address = _socket->GetRemoteIpAddress();
-    _ipConnectionSlot = BattlenetConnectionLimit.TryAcquire(address.to_string(), address.is_loopback(),
-        uint32(std::max(sConfigMgr->GetIntDefault("Network.ConnectionsPerIp", 16), 0)));
-    if (!_ipConnectionSlot)
-    {
-        TC_LOG_ERROR("session", "{} already has Network.ConnectionsPerIp open connections, refusing another", GetClientInfo());
-        _socket->CloseSocket();
-        return;
-    }
 
     _handshakeDeadline = DeadlineFromConfig("Network.HandshakeTimeout", 30);
     _loginDeadline = DeadlineFromConfig("Network.LoginTimeout", 600);
     _requestRateLimit = Trinity::Net::RequestRateLimit(uint32(std::max(sConfigMgr->GetIntDefault("Network.RequestsPerSecond", 10), 0)), SteadyNowMs());
 
     // build initializer chain
-    std::array<std::shared_ptr<Trinity::Net::SocketConnectionInitializer>, 4> initializers =
+    std::array<std::shared_ptr<Trinity::Net::SocketConnectionInitializer>, 6> initializers =
     { {
+        std::make_shared<Trinity::Net::ProxyProtocolConnectionInitializer<Socket>>(_socket.get()),
+        std::make_shared<ConnectionLimitInitializer>(this),
         std::make_shared<Trinity::Net::IpBanCheckConnectionInitializer<Session>>(this),
         std::make_shared<Trinity::Net::SslHandshakeConnectionInitializer<Socket>>(_socket.get()),
         std::make_shared<HandshakeDoneConnectionInitializer>(weak_from_this()),

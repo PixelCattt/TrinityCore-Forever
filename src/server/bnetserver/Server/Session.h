@@ -100,6 +100,7 @@ namespace Battlenet
         bool TryBeginLogin();
         void EndLogin() { _loginInFlight = false; }
         void SetHandshakeDone() { _handshakeDone = true; }
+        bool AcquireIpConnectionSlot();
 
         uint32 GetSessionId() const { return _sessionId; }
         SystemTimePoint GetCreationTime() const { return _creationTime; }

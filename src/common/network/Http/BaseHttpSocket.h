@@ -69,6 +69,11 @@ public:
     {
         return socket().remote_endpoint();
     }
+
+    IoContextTcpSocket& tcp_socket()
+    {
+        return socket();
+    }
 };
 }
 
