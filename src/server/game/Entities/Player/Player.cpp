@@ -3413,7 +3413,16 @@ bool Player::AddSpell(uint32 spellId, bool active, bool learning, bool dependent
                 || ((_spell_idx->second->SkillLine == SKILL_RUNEFORGING) && _spell_idx->second->TrivialSkillLineRankHigh == 0))
             {
                 if (SkillRaceClassInfoEntry const* rcInfo = sDB2Manager.GetSkillRaceClassInfo(_spell_idx->second->SkillLine, GetRace(), GetClass()))
+                {
+                    // Availability 0 language rows are fake lines, not languages the character speaks. Learning an
+                    // obsolete Common alias (813..817) or an opposing faction language spell would otherwise open
+                    // them through SkillTier 21 and show them at 1/300.
+                    if (SkillLineEntry const* learnSkillLine = sSkillLineStore.LookupEntry(rcInfo->SkillID))
+                        if (learnSkillLine->CategoryID == SKILL_CATEGORY_LANGUAGES && rcInfo->Availability == 0)
+                            continue;
+
                     LearnDefaultSkill(rcInfo);
+                }
             }
             // Classic 1.60: a weapon spell taught by a weapon master (Two-Handed Maces 199, Two-Handed Axes 197 for a shaman) opens its
             // weapon skill when the race and class may have it. These spells carry no skill effect and those skills are not given at
@@ -29116,6 +29125,21 @@ void Player::_LoadSkills(PreparedQueryResult result)
 
                 mSkillStatus.try_emplace(skill, mSkillStatus.size(), SKILL_DELETED);
                 continue;
+            }
+
+            // Classic 1.60: Availability 0 language rows are the opposing faction and obsolete language lines. They still
+            // match the other faction's race mask (or all races for 137..141) and, through SkillTier 21, load as 1/300.
+            // The real language rows use Availability 1 and SkillTier 0 and are always 300/300.
+            if (rcEntry->Availability == 0)
+            {
+                if (SkillLineEntry const* loadedSkillLine = sSkillLineStore.LookupEntry(skill))
+                {
+                    if (loadedSkillLine->CategoryID == SKILL_CATEGORY_LANGUAGES)
+                    {
+                        mSkillStatus.try_emplace(skill, mSkillStatus.size(), SKILL_DELETED);
+                        continue;
+                    }
+                }
             }
 
             uint16 step = 0;

@@ -627,7 +627,7 @@ void CharacterDatabaseConnection::DoPrepareStatements()
     PrepareStatement(CHAR_INS_CHAR_DECLINED_NAME, "INSERT INTO character_declinedname (guid, genitive, dative, accusative, instrumental, prepositional) VALUES (?, ?, ?, ?, ?, ?)", CONNECTION_ASYNC);
     PrepareStatement(CHAR_UPD_CHAR_RACE_AND_GENDER, "UPDATE characters SET race = ?, gender = ?, extra_flags = extra_flags | ? WHERE guid = ?", CONNECTION_ASYNC);
     PrepareStatement(CHAR_UPD_CHAR_GENDER, "UPDATE characters SET gender = ? WHERE guid = ?", CONNECTION_ASYNC);
-    PrepareStatement(CHAR_DEL_CHAR_SKILL_LANGUAGES, "DELETE FROM character_skills WHERE skill IN (98, 113, 759, 111, 313, 109, 115, 315, 673, 137) AND guid = ?", CONNECTION_ASYNC);
+    PrepareStatement(CHAR_DEL_CHAR_SKILL_LANGUAGES, "DELETE FROM character_skills WHERE skill IN (98, 109, 111, 113, 115, 137, 138, 139, 140, 141, 313, 315, 673, 759, 791, 792, 905, 2464, 2776, 2987) AND guid = ?", CONNECTION_ASYNC);
     PrepareStatement(CHAR_INS_CHAR_SKILL_LANGUAGE, "INSERT INTO `character_skills` (guid, skill, value, max) VALUES (?, ?, 300, 300)", CONNECTION_ASYNC);
     PrepareStatement(CHAR_UPD_CHAR_TAXI_PATH, "UPDATE characters SET taxi_path = '' WHERE guid = ?", CONNECTION_ASYNC);
     PrepareStatement(CHAR_UPD_CHAR_TAXIMASK, "UPDATE characters SET taximask = ? WHERE guid = ?", CONNECTION_ASYNC);

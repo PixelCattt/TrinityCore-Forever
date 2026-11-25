@@ -4,7 +4,8 @@
 -- (70938 login sniffs, 18 and 19 Nov 2026) and the server no longer gives them (Player::AddSpell). Take the wrong rank off
 -- existing characters, bots included. Race lists are the playable races of those two SkillRaceClassInfo rows (ChrRaces
 -- PlayableRaceBit, 1.60 client). Own languages are other rows (40, 48) for other races and are not touched. A GM who used
--- ".learn all lang" on such a character loses that one line too; ".learn all lang" gives it back. Safe to run again.
+-- ".learn all lang" on such a character loses that one line too; the command no longer grants opposing faction languages.
+-- Safe to run again.
 
 DELETE `cs` FROM `character_skills` `cs`
 JOIN `characters` `c` ON `c`.`guid` = `cs`.`guid`

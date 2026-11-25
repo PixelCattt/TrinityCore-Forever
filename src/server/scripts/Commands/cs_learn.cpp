@@ -293,11 +293,38 @@ public:
 
     static bool HandleLearnAllLangCommand(ChatHandler* handler)
     {
-        sLanguageMgr->ForEachLanguage([handler](uint32 /*lang*/, LanguageDesc const& languageDesc)
-        {
-            if (languageDesc.SpellId)
-                handler->GetSession()->GetPlayer()->LearnSpell(languageDesc.SpellId, false);
+        Player* player = handler->GetPlayer();
 
+        sLanguageMgr->ForEachLanguage([player](uint32 /*lang*/, LanguageDesc const& languageDesc)
+        {
+            if (!languageDesc.SpellId)
+                return true;
+
+            // Classic 1.60: LanguageMgr has one descriptor per spell that teaches a language. Common also has obsolete
+            // aliases 813..817 under skills 137..141, and the opposing faction rows carry Availability 0 but still match
+            // that faction's race mask. Neither is a language the character can actually speak; learning them opens the
+            // fake 1/300 language lines again through Player::AddSpell.
+            if (languageDesc.SkillId)
+            {
+                bool availableToPlayer = false;
+                for (SkillRaceClassInfoEntry const* info : sDB2Manager.GetSkillRaceClassInfo(languageDesc.SkillId))
+                {
+                    if (info->Availability == 0)
+                        continue;
+                    if (!info->RaceMask.IsEmpty() && !info->RaceMask.HasRace(player->GetRace()))
+                        continue;
+                    if (info->ClassMask && !(info->ClassMask & (1 << (player->GetClass() - 1))))
+                        continue;
+
+                    availableToPlayer = true;
+                    break;
+                }
+
+                if (!availableToPlayer)
+                    return true;
+            }
+
+            player->LearnSpell(languageDesc.SpellId, false);
             return true;
         });
 
